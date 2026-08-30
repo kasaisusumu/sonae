@@ -207,20 +207,27 @@ function EventRow({
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
-    <li className={`rounded-xl bg-surface p-4 ${past ? "opacity-80" : ""}`}>
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <li
+      className={`relative rounded-xl bg-surface p-4 transition-colors hover:bg-surface-muted ${
+        past ? "opacity-80" : ""
+      }`}
+    >
+      {/* カード全体を準備詳細へのタップ領域にする（カテゴリ選択より下のレイヤー） */}
+      <Link
+        href={`/events/${ev.id}`}
+        aria-label={`${ev.title} の準備を開く`}
+        className="absolute inset-0 z-0 rounded-xl"
+      />
+      <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <Link
-            href={`/events/${ev.id}`}
-            className="font-medium text-foreground no-underline hover:text-teal-dark"
-          >
+          <p className="font-medium text-foreground">
             {ev.title}
-          </Link>
-          {warn && (
-            <span className="ml-2 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] text-warn">
-              過去に失敗あり
-            </span>
-          )}
+            {warn && (
+              <span className="ml-2 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] text-warn">
+                過去に失敗あり
+              </span>
+            )}
+          </p>
           <p className="text-xs text-muted">
             {formatDateShort(ev.eventDatetime)}
             {ev.source === "google" ? " ・ Google" : " ・ 手動"}
@@ -238,12 +245,16 @@ function EventRow({
               </span>
             </div>
           )}
+          <p className="mt-1 text-[11px] text-teal-dark">準備を開く →</p>
         </div>
-        <CategorySelect
-          eventId={ev.id}
-          current={ev.category?.name ?? "その他"}
-          options={categoryNames}
-        />
+        {/* z-20 でリンクより手前。タップしても遷移しない */}
+        <div className="relative z-20">
+          <CategorySelect
+            eventId={ev.id}
+            current={ev.category?.name ?? "その他"}
+            options={categoryNames}
+          />
+        </div>
       </div>
     </li>
   );

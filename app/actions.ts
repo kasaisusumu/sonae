@@ -166,13 +166,15 @@ export async function toggleChecklistItemDone(
   const userId = await requireUserId();
   const item = await prisma.checklistItem.findFirst({
     where: { id: itemId, event: { userId } },
-    select: { id: true },
+    select: { id: true, eventId: true },
   });
   if (!item) return;
   await prisma.checklistItem.update({
     where: { id: itemId },
     data: { isDone: Boolean(isDone) },
   });
+  // 完了状態をカレンダー説明欄（取り消し線）にも反映
+  after(() => syncEventDescription(item.eventId));
   revalidatePath("/events");
   revalidatePath("/");
 }

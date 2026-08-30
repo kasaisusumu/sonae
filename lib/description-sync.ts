@@ -20,7 +20,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
       checklistItems: {
         where: { isSuggested: false },
         orderBy: { sortOrder: "asc" },
-        select: { title: true, timingLabel: true },
+        select: { title: true, timingLabel: true, isDone: true },
       },
     },
   });

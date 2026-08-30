@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { extractEventFeature, type EventFeatureData } from "@/lib/features";
-import { generateBaseChecklist } from "@/lib/generate";
+import { generateBaseChecklist, type GeneratedBase } from "@/lib/generate";
+import { recallBaseChecklist } from "@/lib/recall";
 import {
   getApplicableRules,
   norm,
@@ -168,15 +169,33 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
     },
   });
 
-  const [gen, taskRules, belongingRules] = await Promise.all([
-    generateBaseChecklist({
+  // 同名・類似・同カテゴリの過去予定があれば、その確定リストをベースに丸ごと再利用する。
+  // （AI 生成は呼ばない。学習が1回きりでも「前回とほぼ同じ」を素直に出す。）
+  const recalled = await recallBaseChecklist(
+    {
+      id: event.id,
+      userId: event.userId,
+      categoryId: event.categoryId,
       title: event.title,
-      categoryName: event.category?.name ?? "その他",
-      eventDatetime: event.eventDatetime,
-      memo: event.memo,
-      isOverseas: feature.isOverseas,
-      durationNights: feature.durationNights,
-    }),
+    },
+    feature,
+  );
+
+  const [gen, taskRules, belongingRules] = await Promise.all([
+    recalled
+      ? Promise.resolve<GeneratedBase>({
+          tasks: recalled.tasks,
+          belongings: recalled.belongings,
+          source: "recall",
+        })
+      : generateBaseChecklist({
+          title: event.title,
+          categoryName: event.category?.name ?? "その他",
+          eventDatetime: event.eventDatetime,
+          memo: event.memo,
+          isOverseas: feature.isOverseas,
+          durationNights: feature.durationNights,
+        }),
     getApplicableRules(event.categoryId, feature, "task"),
     getApplicableRules(event.categoryId, feature, "belonging"),
   ]);

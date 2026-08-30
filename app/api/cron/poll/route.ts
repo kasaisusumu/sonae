@@ -20,7 +20,16 @@ async function handler(req: NextRequest) {
     ""
   ).trim();
   if (!expected || provided !== expected) {
-    return new NextResponse("forbidden", { status: 403 });
+    // 値は返さず、切り分け用に「設定有無」と「長さ」だけ返す
+    return NextResponse.json(
+      {
+        error: "forbidden",
+        serverSecretConfigured: expected.length > 0,
+        serverSecretLength: expected.length,
+        receivedSecretLength: provided.length,
+      },
+      { status: 403 },
+    );
   }
 
   const accounts = await prisma.userGoogleAccount.findMany({

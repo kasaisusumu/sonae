@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+/* ── そなえ カラーテーマ ──────────────────────────────
+   ティール基調 (#028090) + アクセント (#02C39A)。
+   落ち着いた、責めないやさしいトーン。 */
+:root {
+  --background: #f4f8f7;
+  --surface: #ffffff;
+  --surface-muted: #eef4f3;
+  --foreground: #1f2d2b;
+  --muted: #5c6f6c;
+  --border: #dbe6e4;
+
+  --teal: #028090;
+  --teal-dark: #026776;
+  --teal-soft: #e2f0f1;
+  --accent: #02c39a;
+  --accent-soft: #e0f7f0;
+
+  --warn: #b5793a;
+  --warn-soft: #fbefe3;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-teal: var(--teal);
+  --color-teal-dark: var(--teal-dark);
+  --color-teal-soft: var(--teal-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+
+  --font-sans: var(--font-geist-sans), "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Noto Sans JP", Meiryo, system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* リンクや操作は穏やかに */
+a {
+  color: var(--teal-dark);
+}
+
+::selection {
+  background: var(--accent-soft);
+}

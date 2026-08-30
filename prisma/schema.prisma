@@ -1,0 +1,158 @@
+// そなえ MVP — Prisma schema (SQLite for local/prototype; migrate to Postgres later)
+// Data model follows docs/CLAUDE.md section 4.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+  // 本番デプロイ先(Linux)に合わせて調整。Debian系PaaS + Alpine系Dockerを想定。
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  googleAccount  UserGoogleAccount?
+  categories     Category[]
+  events         Event[]
+  failureLogs    FailureLog[]
+  savingsEntries SavingsEntry[]
+  feedback       Feedback[]
+  pushSubscriptions PushSubscription[]
+}
+
+// Web Push の購読情報（1 ユーザーが複数端末を持てる）
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Google 連携用トークン管理。ログイン(認証)もこのアカウントで兼ねる。
+model UserGoogleAccount {
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  googleAccountEmail String
+  accessToken        String
+  refreshToken       String?
+  tokenExpiry        DateTime?
+  calendarId         String    @default("primary")
+  lastSyncedAt       DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+
+  events      Event[]
+  learning    CategoryLearning?
+  failureLogs FailureLog[]
+
+  @@unique([userId, name])
+}
+
+model Event {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId    String?
+  category      Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  title         String
+  eventDatetime DateTime
+  endDatetime   DateTime?
+  memo          String?
+  googleEventId String?   @unique
+  source        String    @default("manual") // "google" | "manual"
+  // 再発防止の警告をユーザーが確認・了承した日時（設定されると警告は畳まれる）
+  failureWarningAckAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  checklistItems ChecklistItem[]
+  savingsEntries SavingsEntry[]
+}
+
+model ChecklistItem {
+  id            String   @id @default(cuid())
+  eventId       String
+  event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  title         String
+  timingLabel   String? // 例: "前日21時"
+  isDone        Boolean  @default(false)
+  isUserAdded   Boolean  @default(false)
+  isUserRemoved Boolean  @default(false)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+}
+
+// 「自分マニュアル」の実体。カテゴリ単位で編集内容を記憶する。
+model CategoryLearning {
+  id              String   @id @default(cuid())
+  categoryId      String   @unique
+  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  excludedItems   String   @default("[]") // json: string[]  (一度消した項目のタイトル)
+  fixedItems      String   @default("[]") // json: {title, timingLabel}[] (毎回出す項目)
+  timingOverrides String   @default("{}") // json: { [title]: timingLabel }
+  updatedAt       DateTime @updatedAt
+}
+
+model FailureLog {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId       String?
+  category         Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  description      String
+  estimatedLossYen Int      @default(0)
+  occurredAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  savingsEntries SavingsEntry[]
+}
+
+model SavingsEntry {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId         String?
+  event           Event?      @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  failureLogId    String?
+  failureLog      FailureLog? @relation(fields: [failureLogId], references: [id], onDelete: SetNull)
+  amountYen       Int         @default(0)
+  confirmedByUser Boolean     @default(false)
+  createdAt       DateTime    @default(now())
+
+  // 1 予定 × 1 失敗ログ につき「防げた」は 1 回だけ計上する
+  @@unique([eventId, failureLogId])
+}
+
+// 簡易フィードバック導線 (WTP アンケート)
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wtpYen    Int? // 月いくらなら払いたいか
+  comment   String?
+  screen    String? // どの画面から送信されたか
+  createdAt DateTime @default(now())
+}

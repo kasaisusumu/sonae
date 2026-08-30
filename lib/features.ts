@@ -1,7 +1,10 @@
+export type TimeBucket = "morning" | "afternoon" | "evening" | "allday";
+
 export interface EventFeatureData {
   isOverseas: boolean | null;
   durationNights: number | null;
   isWeekday: boolean;
+  timeBucket: TimeBucket;
   keywords: string[];
 }
 
@@ -78,6 +81,16 @@ function extractKeywords(text: string): string[] {
   return out;
 }
 
+function timeBucketOf(d: Date, text: string): TimeBucket {
+  if (/終日|all\s*day/i.test(text)) return "allday";
+  const h = d.getHours();
+  const m = d.getMinutes();
+  if (h === 0 && m === 0) return "allday"; // Google の終日予定は 00:00
+  if (h < 11) return "morning";
+  if (h < 16) return "afternoon";
+  return "evening";
+}
+
 export function extractEventFeature(event: {
   title: string;
   memo?: string | null;
@@ -90,6 +103,7 @@ export function extractEventFeature(event: {
     isOverseas: inferOverseas(text),
     durationNights: inferNights(event.eventDatetime, event.endDatetime, text),
     isWeekday: day >= 1 && day <= 5,
+    timeBucket: timeBucketOf(event.eventDatetime, text),
     keywords: extractKeywords(text),
   };
 }

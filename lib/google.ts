@@ -123,6 +123,7 @@ export async function getCalendarClient(userId: string) {
 
 export interface FetchedEvent {
   googleEventId: string;
+  recurringEventId: string | null;
   title: string;
   description: string | null;
   start: Date;
@@ -142,6 +143,7 @@ function toFetched(item: calendar_v3.Schema$Event): FetchedEvent | null {
   const endRaw = item.end?.dateTime ?? item.end?.date ?? null;
   return {
     googleEventId: item.id,
+    recurringEventId: item.recurringEventId ?? null,
     title: item.summary?.trim() || "(タイトルなし)",
     description: item.description?.trim() || null,
     start: new Date(startRaw),

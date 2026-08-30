@@ -14,14 +14,14 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "そなえ — 予定の準備リスト",
+  title: "私のマネージャー — 予定の準備リスト",
   description:
     "予定を入れるだけで準備リストを自動生成。編集を学習して自分専用マニュアルに育てます。",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "そなえ",
+    title: "私のマネージャー",
   },
   icons: {
     icon: "/icons/icon-192.png",
@@ -52,7 +52,7 @@ export default async function RootLayout({
         <header className="border-b bg-surface">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-3">
             <Link href="/" className="flex items-baseline gap-2 no-underline">
-              <span className="text-lg font-semibold text-teal-dark">そなえ</span>
+              <span className="text-lg font-semibold text-teal-dark">私のマネージャー</span>
               <span className="hidden text-xs text-muted sm:inline">
                 予定の準備、わすれない
               </span>
@@ -87,7 +87,7 @@ export default async function RootLayout({
 
         <footer className="border-t bg-surface">
           <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-5 py-4 text-xs text-muted">
-            <span>そなえ MVP — 検証用プロトタイプ。表示される金額はすべて推定値です。</span>
+            <span>私のマネージャー（検証版）— 表示される金額はすべて推定値です。</span>
             {isLoggedIn ? <FeedbackWidget /> : null}
           </div>
         </footer>

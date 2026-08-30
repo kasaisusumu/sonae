@@ -36,11 +36,14 @@ const nextKey = () => `it-${counter++}`;
 
 export function ChecklistEditor({
   eventId,
+  kind = "task",
   initialItems,
 }: {
   eventId: string;
+  kind?: "task" | "belonging";
   initialItems: InitialItem[];
 }) {
+  const isBelonging = kind === "belonging";
   const initial = useMemo<Item[]>(
     () =>
       initialItems.map((it) => ({
@@ -116,6 +119,7 @@ export function ChecklistEditor({
     startTransition(async () => {
       await saveChecklist({
         eventId,
+        kind,
         items: items
           .filter((it) => it.title.trim())
           .map((it) => ({
@@ -147,7 +151,7 @@ export function ChecklistEditor({
               <input
                 value={it.title}
                 onChange={(e) => update(it.key, { title: e.target.value })}
-                placeholder="準備することを書く"
+                placeholder={isBelonging ? "持ち物を書く" : "準備することを書く"}
                 className={`w-full rounded-md border border-transparent bg-transparent px-1 py-1 text-sm hover:border-border focus:border-border focus:bg-background ${
                   it.isDone ? "text-muted line-through" : ""
                 }`}
@@ -158,8 +162,8 @@ export function ChecklistEditor({
                   onChange={(e) =>
                     update(it.key, { timingLabel: e.target.value })
                   }
-                  list="timing-presets"
-                  placeholder="タイミング"
+                  list={`timing-presets-${kind}`}
+                  placeholder={isBelonging ? "用意する目安" : "タイミング"}
                   className="w-32 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted hover:border-border focus:border-border focus:bg-background"
                 />
                 {it.isUserAdded && (
@@ -181,7 +185,7 @@ export function ChecklistEditor({
         ))}
       </ul>
 
-      <datalist id="timing-presets">
+      <datalist id={`timing-presets-${kind}`}>
         {TIMING_PRESETS.map((t) => (
           <option key={t} value={t} />
         ))}

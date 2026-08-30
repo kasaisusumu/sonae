@@ -1,23 +1,33 @@
 import { prisma } from "@/lib/prisma";
-import { extractEventFeature } from "@/lib/features";
+import { extractEventFeature, type EventFeatureData } from "@/lib/features";
 import { generateBaseChecklist } from "@/lib/generate";
-import { getApplicableRules, norm, type ApplicableRule } from "@/lib/learning";
+import {
+  getApplicableRules,
+  norm,
+  type ApplicableRule,
+  type GeneratedItem,
+  type ItemKind,
+} from "@/lib/learning";
 
-const MIN_ITEMS = 3;
-const MAX_ITEMS = 7;
+const LIMITS: Record<ItemKind, { min: number; max: number }> = {
+  task: { min: 3, max: 7 },
+  belonging: { min: 2, max: 8 },
+};
 
 export interface BuiltItem {
+  kind: ItemKind;
   title: string;
   timingLabel: string | null;
   isSuggested: boolean;
   suggestionType: "exclude" | "add" | "timing" | null;
   suggestionRuleId: string | null;
   suggestionValue: string | null;
-  priority: number; // trim 用（低いものから削る）。永続化しない
+  priority: number;
 }
 
-function base(title: string, timingLabel: string | null): BuiltItem {
+function base(kind: ItemKind, title: string, timingLabel: string | null): BuiltItem {
   return {
+    kind,
     title,
     timingLabel,
     isSuggested: false,
@@ -28,63 +38,20 @@ function base(title: string, timingLabel: string | null): BuiltItem {
   };
 }
 
-/**
- * 予定の準備リストを組み立てる。
- * 一般的なベースリスト → 確定ルール(強制適用) → 仮ルール(提案として弱く表示) → 上限で間引き。
- * 学習が薄いカテゴリ・パターンでは、ベースリストがほぼそのまま出る。
- */
-export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem[]> {
-  const event = await prisma.event.findUnique({
-    where: { id: eventId },
-    include: { category: true },
-  });
-  if (!event) throw new Error("予定が見つかりません。");
-
-  const feature = extractEventFeature({
-    title: event.title,
-    memo: event.memo,
-    eventDatetime: event.eventDatetime,
-    endDatetime: event.endDatetime,
-  });
-
-  // 特徴量を保存（次回以降の判定に使う）
-  await prisma.eventFeature.upsert({
-    where: { eventId },
-    create: {
-      eventId,
-      isOverseas: feature.isOverseas,
-      durationNights: feature.durationNights,
-      isWeekday: feature.isWeekday,
-      keywords: JSON.stringify(feature.keywords),
-    },
-    update: {
-      isOverseas: feature.isOverseas,
-      durationNights: feature.durationNights,
-      isWeekday: feature.isWeekday,
-      keywords: JSON.stringify(feature.keywords),
-    },
-  });
-
-  const [{ items: baseItems }, rules] = await Promise.all([
-    generateBaseChecklist({
-      title: event.title,
-      categoryName: event.category?.name ?? "その他",
-      eventDatetime: event.eventDatetime,
-      memo: event.memo,
-      isOverseas: feature.isOverseas,
-      durationNights: feature.durationNights,
-    }),
-    getApplicableRules(event.categoryId, feature),
-  ]);
-
-  let items: BuiltItem[] = baseItems.map((b) => base(b.title, b.timingLabel));
+function composeKind(
+  kind: ItemKind,
+  baseItems: GeneratedItem[],
+  rules: ApplicableRule[],
+): BuiltItem[] {
+  const { min, max } = LIMITS[kind];
+  let items: BuiltItem[] = baseItems.map((b) => base(kind, b.title, b.timingLabel));
 
   const forced = rules.filter((r) => r.forced);
   const tentative = rules.filter((r) => !r.forced);
   const byType = (rs: ApplicableRule[], t: string) =>
     rs.filter((r) => r.ruleType === t);
 
-  // ── 確定ルール（強制適用）──
+  // 確定ルール（強制適用）
   const forcedExclude = new Set(
     byType(forced, "exclude_item").map((r) => norm(r.target)),
   );
@@ -96,7 +63,7 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
       hit.priority = 1;
       if (r.value) hit.timingLabel = r.value;
     } else {
-      items.push({ ...base(r.target, r.value), priority: 1 });
+      items.push({ ...base(kind, r.target, r.value), priority: 1 });
     }
   }
   for (const r of byType(forced, "timing_override")) {
@@ -104,7 +71,7 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
     if (hit && r.value) hit.timingLabel = r.value;
   }
 
-  // ── 仮ルール（提案として弱く表示。ユーザーが1タップで適用/却下）──
+  // 仮ルール（提案。1タップで適用/却下）
   for (const r of byType(tentative, "exclude_item")) {
     const hit = items.find(
       (it) => norm(it.title) === norm(r.target) && !it.isSuggested,
@@ -118,7 +85,7 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
   for (const r of byType(tentative, "fixed_item")) {
     if (!items.some((it) => norm(it.title) === norm(r.target))) {
       items.push({
-        ...base(r.target, r.value),
+        ...base(kind, r.target, r.value),
         isSuggested: true,
         suggestionType: "add",
         suggestionRuleId: r.id,
@@ -138,7 +105,7 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
     }
   }
 
-  // ── 重複排除（正規化タイトル）──
+  // 重複排除
   const seen = new Set<string>();
   items = items.filter((it) => {
     const k = norm(it.title);
@@ -147,18 +114,75 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
     return true;
   });
 
-  // ── 上限で間引き（confidence の低い＝priority の低いものから。確定 fixed は守る）──
-  if (items.length > MAX_ITEMS) {
+  // 上限で間引き（priority の低い＝confidence の低いものから。確定 fixed は守る）
+  if (items.length > max) {
     const protectedCount = items.filter((it) => it.priority >= 1).length;
-    const keepCount = Math.max(MIN_ITEMS, MAX_ITEMS - protectedCount);
+    const keepCount = Math.max(min, max - protectedCount);
     const kept = new Set(
       items
         .filter((it) => it.priority < 1)
-        .sort((a, b) => b.priority - a.priority) // 高い順
+        .sort((a, b) => b.priority - a.priority)
         .slice(0, keepCount),
     );
     items = items.filter((it) => it.priority >= 1 || kept.has(it));
   }
 
   return items;
+}
+
+/**
+ * 予定の準備リスト（準備すること＋持ち物）を組み立てる。
+ * 一般ベース → 確定ルール強制適用 → 仮ルールは提案 → 上限で間引き。
+ * 学習が薄いカテゴリ・パターンではベースがほぼそのまま出る。
+ */
+export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem[]> {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: { category: true },
+  });
+  if (!event) throw new Error("予定が見つかりません。");
+
+  const feature: EventFeatureData = extractEventFeature({
+    title: event.title,
+    memo: event.memo,
+    eventDatetime: event.eventDatetime,
+    endDatetime: event.endDatetime,
+  });
+
+  await prisma.eventFeature.upsert({
+    where: { eventId },
+    create: {
+      eventId,
+      isOverseas: feature.isOverseas,
+      durationNights: feature.durationNights,
+      isWeekday: feature.isWeekday,
+      timeBucket: feature.timeBucket,
+      keywords: JSON.stringify(feature.keywords),
+    },
+    update: {
+      isOverseas: feature.isOverseas,
+      durationNights: feature.durationNights,
+      isWeekday: feature.isWeekday,
+      timeBucket: feature.timeBucket,
+      keywords: JSON.stringify(feature.keywords),
+    },
+  });
+
+  const [gen, taskRules, belongingRules] = await Promise.all([
+    generateBaseChecklist({
+      title: event.title,
+      categoryName: event.category?.name ?? "その他",
+      eventDatetime: event.eventDatetime,
+      memo: event.memo,
+      isOverseas: feature.isOverseas,
+      durationNights: feature.durationNights,
+    }),
+    getApplicableRules(event.categoryId, feature, "task"),
+    getApplicableRules(event.categoryId, feature, "belonging"),
+  ]);
+
+  return [
+    ...composeKind("task", gen.tasks, taskRules),
+    ...composeKind("belonging", gen.belongings, belongingRules),
+  ];
 }

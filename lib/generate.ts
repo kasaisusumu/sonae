@@ -10,18 +10,25 @@ export interface GenerateInput {
   durationNights?: number | null;
 }
 
+export interface GeneratedBase {
+  tasks: GeneratedItem[];
+  belongings: GeneratedItem[];
+  source: "openai" | "template";
+}
+
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
 const SYSTEM_PROMPT = `あなたは、段取りが苦手な人（ADHD傾向）の準備をやさしく支える日本語のアシスタントです。
-予定の情報から、その予定に向けて必要な「準備タスク」のチェックリストを作ります。
+予定の情報から「準備すること(tasks)」と「持ち物(belongings)」を分けて作ります。
 
 ルール:
-- 3〜7 個。多すぎると圧になるので絞る。一般的で確実に役立つものだけ。
-- 各タスクは具体的な行動 1 つ。「〜を確認する」「〜を準備する」「〜を予約する」のように動詞で終える短い文。
-- timing は準備を始める目安。「1週間前」「3日前」「前日夜」「当日朝」「出発1時間前」など短いラベル。
-- 責める表現・急かす表現は使わない。淡々と、実行しやすい粒度で。
-- 与えられた予定の性質（海外/国内、宿泊数など）に合った内容にする。推測が過ぎる項目は入れない。
-- 出力は必ず次の JSON のみ: {"items":[{"title":"...","timing":"..."}]}`;
+- tasks は 3〜6 個。行動を1つずつ。「〜を確認する」「〜を予約する」のように動詞で終える短い文。
+- belongings は 2〜6 個。物の名前だけの短い名詞（例「充電器」「保険証」「折りたたみ傘」）。行動は書かない。
+- timing は準備を始める目安。「1週間前」「3日前」「前日夜」「当日朝」「出発1時間前」など短いラベル。belongings の timing は「前日夜」「当日朝」中心。
+- 予定の性質（海外/国内・宿泊数）に合った内容にする。推測が過ぎる項目は入れない。多すぎない。
+- 責める・急かす表現は使わない。
+- 出力は必ず次の JSON のみ:
+  {"tasks":[{"title":"...","timing":"..."}],"belongings":[{"title":"...","timing":"..."}]}`;
 
 function buildUserPrompt(input: GenerateInput): string {
   const dt = input.eventDatetime.toLocaleString("ja-JP", {
@@ -42,7 +49,7 @@ function buildUserPrompt(input: GenerateInput): string {
   if (typeof input.durationNights === "number") {
     lines.push(
       input.durationNights <= 0
-        ? "これは日帰りの予定です（宿泊関連の準備は不要）。"
+        ? "これは日帰りの予定です（宿泊関連の準備・持ち物は不要）。"
         : `これは ${input.durationNights} 泊の予定です。`,
     );
   }
@@ -54,69 +61,94 @@ interface RawItem {
   timing?: unknown;
 }
 
-function coerceItems(raw: unknown): GeneratedItem[] {
-  const arr =
-    raw && typeof raw === "object" && Array.isArray((raw as { items?: unknown }).items)
-      ? ((raw as { items: RawItem[] }).items)
-      : [];
-  return arr
+function coerce(arr: unknown, cap: number): GeneratedItem[] {
+  const list = Array.isArray(arr) ? (arr as RawItem[]) : [];
+  return list
     .map((it) => ({
       title: typeof it.title === "string" ? it.title.trim() : "",
       timingLabel:
         typeof it.timing === "string" && it.timing.trim() ? it.timing.trim() : null,
     }))
     .filter((it) => it.title.length > 0)
-    .slice(0, 10);
+    .slice(0, cap);
+}
+
+interface Templates {
+  tasks: GeneratedItem[];
+  belongings: GeneratedItem[];
 }
 
 // OpenAI キー未設定でもデモできるよう、カテゴリ別の最低限テンプレート。
-function fallbackItems(input: GenerateInput): GeneratedItem[] {
-  const base: Record<string, GeneratedItem[]> = {
-    "旅行・出張": [
-      { title: "行程と宿泊先を確認する", timingLabel: "1週間前" },
-      { title: "交通機関のチケットを予約・確認する", timingLabel: "1週間前" },
-      { title: "持ち物リストを作る", timingLabel: "3日前" },
-      { title: "着替えと洗面用具をまとめる", timingLabel: "前日夜" },
-      { title: "スマホと充電器・モバイルバッテリーを準備する", timingLabel: "前日夜" },
-      { title: "家の戸締まりと家電の電源を確認する", timingLabel: "当日朝" },
-    ],
-    通院: [
-      { title: "予約日時と診察券・保険証を確認する", timingLabel: "前日" },
-      { title: "症状や聞きたいことをメモにまとめる", timingLabel: "前日夜" },
-      { title: "お薬手帳と現在の薬を用意する", timingLabel: "前日夜" },
-      { title: "受診料の現金を財布に入れる", timingLabel: "当日朝" },
-      { title: "受付時間に間に合うよう出発する", timingLabel: "当日" },
-    ],
-    来客対応: [
-      { title: "来客の人数・時間・目的を確認する", timingLabel: "前日" },
-      { title: "部屋を片付け、必要な席を用意する", timingLabel: "前日夜" },
-      { title: "お茶・お菓子など飲み物を準備する", timingLabel: "当日朝" },
-      { title: "開始30分前に最終確認をする", timingLabel: "30分前" },
-    ],
-    "契約・手続き": [
-      { title: "必要書類の一覧を確認する", timingLabel: "1週間前" },
-      { title: "本人確認書類・印鑑を用意する", timingLabel: "前日" },
-      { title: "記入が必要な書類を先に埋めておく", timingLabel: "前日夜" },
-      { title: "手数料の現金を用意する", timingLabel: "当日朝" },
-    ],
+function fallback(input: GenerateInput): Templates {
+  const base: Record<string, Templates> = {
+    "旅行・出張": {
+      tasks: [
+        { title: "行程と宿泊先を確認する", timingLabel: "1週間前" },
+        { title: "交通機関のチケットを予約・確認する", timingLabel: "1週間前" },
+        { title: "持ち物リストを作る", timingLabel: "3日前" },
+        { title: "家の戸締まりと家電の電源を確認する", timingLabel: "当日朝" },
+      ],
+      belongings: [
+        { title: "着替え", timingLabel: "前日夜" },
+        { title: "洗面用具", timingLabel: "前日夜" },
+        { title: "充電器・モバイルバッテリー", timingLabel: "前日夜" },
+        { title: "常備薬", timingLabel: "前日夜" },
+      ],
+    },
+    通院: {
+      tasks: [
+        { title: "予約日時と受付時間を確認する", timingLabel: "前日" },
+        { title: "症状や聞きたいことをメモにまとめる", timingLabel: "前日夜" },
+      ],
+      belongings: [
+        { title: "診察券", timingLabel: "前日夜" },
+        { title: "保険証", timingLabel: "前日夜" },
+        { title: "お薬手帳", timingLabel: "前日夜" },
+        { title: "現金（受診料）", timingLabel: "当日朝" },
+      ],
+    },
+    来客対応: {
+      tasks: [
+        { title: "来客の人数・時間・目的を確認する", timingLabel: "前日" },
+        { title: "部屋を片付け、席を用意する", timingLabel: "前日夜" },
+        { title: "開始30分前に最終確認をする", timingLabel: "30分前" },
+      ],
+      belongings: [
+        { title: "お茶・飲み物", timingLabel: "当日朝" },
+        { title: "お茶菓子", timingLabel: "当日朝" },
+      ],
+    },
+    "契約・手続き": {
+      tasks: [
+        { title: "必要書類の一覧を確認する", timingLabel: "1週間前" },
+        { title: "記入が必要な書類を先に埋めておく", timingLabel: "前日夜" },
+        { title: "窓口の受付時間と場所を確認する", timingLabel: "前日夜" },
+      ],
+      belongings: [
+        { title: "本人確認書類", timingLabel: "前日夜" },
+        { title: "印鑑", timingLabel: "前日夜" },
+        { title: "手数料の現金", timingLabel: "当日朝" },
+      ],
+    },
   };
   return (
-    base[input.categoryName] ?? [
-      { title: "この予定に必要な持ち物を書き出す", timingLabel: "3日前" },
-      { title: "場所・時間・相手を確認する", timingLabel: "前日" },
-      { title: "前日の夜に持ち物をまとめる", timingLabel: "前日夜" },
-      { title: "当日の朝に最終確認をする", timingLabel: "当日朝" },
-    ]
+    base[input.categoryName] ?? {
+      tasks: [
+        { title: "場所・時間・相手を確認する", timingLabel: "前日" },
+        { title: "当日の朝に最終確認をする", timingLabel: "当日朝" },
+      ],
+      belongings: [
+        { title: "スマホ・財布・鍵", timingLabel: "当日朝" },
+        { title: "必要な資料", timingLabel: "前日夜" },
+      ],
+    }
   );
 }
 
-/**
- * 一般的な準備リスト（ベース）を生成する。学習は一切注入しない。
- * OpenAI 失敗時はテンプレートにフォールバック。
- */
+/** 一般的な準備リスト（準備すること＋持ち物）を生成。学習は注入しない。 */
 export async function generateBaseChecklist(
   input: GenerateInput,
-): Promise<{ items: GeneratedItem[]; source: "openai" | "template" }> {
+): Promise<GeneratedBase> {
   if (process.env.OPENAI_API_KEY) {
     try {
       const client = new OpenAI({
@@ -133,12 +165,20 @@ export async function generateBaseChecklist(
           { role: "user", content: buildUserPrompt(input) },
         ],
       });
-      const content = completion.choices[0]?.message?.content ?? "{}";
-      const items = coerceItems(JSON.parse(content));
-      if (items.length > 0) return { items, source: "openai" };
+      const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
+        tasks?: unknown;
+        belongings?: unknown;
+        items?: unknown;
+      };
+      const tasks = coerce(raw.tasks ?? raw.items, 8);
+      const belongings = coerce(raw.belongings, 8);
+      if (tasks.length > 0) {
+        return { tasks, belongings, source: "openai" };
+      }
     } catch (err) {
       console.error("[generate] OpenAI 生成に失敗、テンプレートにフォールバック:", err);
     }
   }
-  return { items: fallbackItems(input), source: "template" };
+  const t = fallback(input);
+  return { tasks: t.tasks, belongings: t.belongings, source: "template" };
 }

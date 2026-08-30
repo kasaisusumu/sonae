@@ -1,8 +1,13 @@
 import { prisma } from "@/lib/prisma";
 import type { EventFeatureData } from "@/lib/features";
-import { featureSignature, signatureMatches } from "@/lib/signature";
+import {
+  featureSignature,
+  signatureMatches,
+  signatureSpecificity,
+} from "@/lib/signature";
 
 export type RuleType = "exclude_item" | "fixed_item" | "timing_override";
+export type ItemKind = "task" | "belonging";
 
 export const CONFIDENCE_THRESHOLD = 0.7;
 
@@ -17,7 +22,6 @@ export function norm(s: string): string {
 
 // ── confidence の数式 ───────────────────────────────
 // streak: 連続確認回数（作成時 1、矛盾でリセット 0）
-// contra: 矛盾の累計
 export function computeConfidence(streak: number, contra: number): number {
   const v = 0.28 + 0.2 * streak - 0.18 * Math.min(contra, 3);
   return Math.max(0.05, Math.min(0.95, Number(v.toFixed(3))));
@@ -33,11 +37,13 @@ export function decayMultiplier(lastConfirmedAt: Date): number {
 
 export interface ApplicableRule {
   id: string;
+  itemKind: ItemKind;
   ruleType: RuleType;
   target: string;
   value: string | null;
   confidence: number;
   effectiveConfidence: number;
+  specificity: number;
   forced: boolean;
   isUserLocked: boolean;
   confirmedCount: number;
@@ -45,13 +51,16 @@ export interface ApplicableRule {
   lastConfirmedAt: Date;
 }
 
-/** 対象イベントの特徴に当てはまる、そのカテゴリの学習ルール。 */
+/** 対象イベントの特徴に当てはまる、そのカテゴリ・種別の学習ルール。具体的な署名を優先。 */
 export async function getApplicableRules(
   categoryId: string | null,
   feature: EventFeatureData,
+  itemKind: ItemKind = "task",
 ): Promise<ApplicableRule[]> {
   if (!categoryId) return [];
-  const rows = await prisma.learnedRule.findMany({ where: { categoryId } });
+  const rows = await prisma.learnedRule.findMany({
+    where: { categoryId, itemKind },
+  });
   return rows
     .filter((r) => signatureMatches(r.featureSignature, feature))
     .map((r) => {
@@ -60,18 +69,21 @@ export async function getApplicableRules(
         : r.confidence * decayMultiplier(r.lastConfirmedAt);
       return {
         id: r.id,
+        itemKind: r.itemKind as ItemKind,
         ruleType: r.ruleType as RuleType,
         target: r.target,
         value: r.value,
         confidence: r.confidence,
         effectiveConfidence: Number(eff.toFixed(3)),
+        specificity: signatureSpecificity(r.featureSignature),
         forced: r.isUserLocked || eff >= CONFIDENCE_THRESHOLD,
         isUserLocked: r.isUserLocked,
         confirmedCount: r.confirmedCount,
         contradictedCount: r.contradictedCount,
         lastConfirmedAt: r.lastConfirmedAt,
       };
-    });
+    })
+    .sort((a, b) => b.specificity - a.specificity);
 }
 
 // ── ルールの確認 / 矛盾 ─────────────────────────────
@@ -97,7 +109,7 @@ async function bumpRule(
     await prisma.learnedRule.update({
       where: { id: ruleId },
       data: {
-        confirmedCount: 0, // 連続を切る
+        confirmedCount: 0,
         contradictedCount: contra,
         lastConfirmedAt: new Date(),
         confidence: computeConfidence(0, contra),
@@ -111,6 +123,7 @@ export const contradictRule = (id: string) => bumpRule(id, "contradict");
 
 async function upsertAndConfirm(
   categoryId: string,
+  itemKind: ItemKind,
   ruleType: RuleType,
   target: string,
   featureSig: string,
@@ -120,8 +133,9 @@ async function upsertAndConfirm(
   if (!t) return;
   const existing = await prisma.learnedRule.findUnique({
     where: {
-      categoryId_ruleType_target_featureSignature: {
+      categoryId_itemKind_ruleType_target_featureSignature: {
         categoryId,
+        itemKind,
         ruleType,
         target: t,
         featureSignature: featureSig,
@@ -132,6 +146,7 @@ async function upsertAndConfirm(
     await prisma.learnedRule.create({
       data: {
         categoryId,
+        itemKind,
         ruleType,
         target: t,
         featureSignature: featureSig,
@@ -145,7 +160,6 @@ async function upsertAndConfirm(
     return;
   }
 
-  // timing_override で値が変わった＝矛盾
   if (ruleType === "timing_override" && value && existing.value !== value) {
     const contra = existing.contradictedCount + 1;
     await prisma.learnedRule.update({
@@ -173,15 +187,15 @@ async function upsertAndConfirm(
   });
 }
 
-/** 対象カテゴリで、指定タイプ・ターゲットの既存ルールすべてに矛盾を記録する（署名を問わない）。 */
+/** 同カテゴリ・種別で、指定タイプ・ターゲットの既存ルールすべてに矛盾を記録（署名は問わない）。 */
 async function contradictAll(
   categoryId: string,
+  itemKind: ItemKind,
   ruleType: RuleType,
   target: string,
 ): Promise<void> {
-  const t = target.trim();
   const rows = await prisma.learnedRule.findMany({
-    where: { categoryId, ruleType, target: t },
+    where: { categoryId, itemKind, ruleType, target: target.trim() },
   });
   for (const r of rows) await contradictRule(r.id);
 }
@@ -190,18 +204,17 @@ export interface EditForLearning {
   eventId: string;
   categoryId: string;
   feature: EventFeatureData;
+  itemKind: ItemKind;
   removed: string[];
   added: GeneratedItem[];
   retimed: { title: string; timingLabel: string }[];
 }
 
 /**
- * ユーザーの編集を EditRecord に記録し、LearnedRule を更新する。
- * - 項目の有無（exclude/fixed）とタイミング（timing_override）は別ルールとして扱う
- * - 反復確認で confidence 上昇、矛盾で低下（連続リセット）
+ * ユーザーの編集を EditRecord に記録し、LearnedRule を更新する（種別ごと）。
  */
 export async function recordEdit(input: EditForLearning): Promise<void> {
-  const { categoryId, feature } = input;
+  const { categoryId, feature, itemKind } = input;
   const sig = featureSignature(feature);
 
   await prisma.editRecord.create({
@@ -209,7 +222,11 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
       eventId: input.eventId,
       categoryId,
       addedItems: JSON.stringify(
-        input.added.map((a) => ({ title: a.title, timingLabel: a.timingLabel })),
+        input.added.map((a) => ({
+          title: a.title,
+          timingLabel: a.timingLabel,
+          kind: itemKind,
+        })),
       ),
       removedItems: JSON.stringify(input.removed),
       timingChanges: JSON.stringify(
@@ -220,27 +237,26 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
 
   for (const r of input.removed) {
     if (!r.trim()) continue;
-    await upsertAndConfirm(categoryId, "exclude_item", r, sig, null);
-    await contradictAll(categoryId, "fixed_item", r); // 「固定」の信念と矛盾
+    await upsertAndConfirm(categoryId, itemKind, "exclude_item", r, sig, null);
+    await contradictAll(categoryId, itemKind, "fixed_item", r);
   }
-
   for (const a of input.added) {
     if (!a.title.trim()) continue;
     await upsertAndConfirm(
       categoryId,
+      itemKind,
       "fixed_item",
       a.title,
       sig,
       a.timingLabel,
     );
-    await contradictAll(categoryId, "exclude_item", a.title); // 「除外」の信念と矛盾
+    await contradictAll(categoryId, itemKind, "exclude_item", a.title);
   }
-
   for (const rt of input.retimed) {
     if (!rt.title.trim() || !rt.timingLabel.trim()) continue;
-    // タイミングだけを更新。exclude/fixed には触れない。
     await upsertAndConfirm(
       categoryId,
+      itemKind,
       "timing_override",
       rt.title,
       sig,
@@ -255,37 +271,39 @@ export async function getLearningOverview(userId: string) {
   const categories = await prisma.category.findMany({
     where: { userId },
     orderBy: { createdAt: "asc" },
-    include: {
-      learnedRules: { orderBy: { confidence: "desc" } },
-    },
+    include: { learnedRules: { orderBy: { confidence: "desc" } } },
   });
+
+  function shape(rows: (typeof categories)[number]["learnedRules"]) {
+    return rows.map((r) => {
+      const eff = r.isUserLocked
+        ? 1
+        : r.confidence * decayMultiplier(r.lastConfirmedAt);
+      return {
+        id: r.id,
+        itemKind: r.itemKind as ItemKind,
+        ruleType: r.ruleType as RuleType,
+        target: r.target,
+        value: r.value,
+        effectiveConfidence: Number(eff.toFixed(3)),
+        specificity: signatureSpecificity(r.featureSignature),
+        isUserLocked: r.isUserLocked,
+        confirmedCount: r.confirmedCount,
+        contradictedCount: r.contradictedCount,
+        lastConfirmedAt: r.lastConfirmedAt,
+        forced: r.isUserLocked || eff >= CONFIDENCE_THRESHOLD,
+      };
+    });
+  }
 
   return categories
     .map((c) => {
-      const rules = c.learnedRules.map((r) => {
-        const eff = r.isUserLocked
-          ? 1
-          : r.confidence * decayMultiplier(r.lastConfirmedAt);
-        return {
-          id: r.id,
-          ruleType: r.ruleType as RuleType,
-          target: r.target,
-          value: r.value,
-          effectiveConfidence: Number(eff.toFixed(3)),
-          isUserLocked: r.isUserLocked,
-          confirmedCount: r.confirmedCount,
-          contradictedCount: r.contradictedCount,
-          lastConfirmedAt: r.lastConfirmedAt,
-          forced: r.isUserLocked || eff >= CONFIDENCE_THRESHOLD,
-        };
-      });
+      const rules = shape(c.learnedRules);
       return {
         categoryId: c.id,
         categoryName: c.name,
         fixed: rules.filter((r) => r.ruleType === "fixed_item" && r.forced),
-        excluded: rules.filter(
-          (r) => r.ruleType === "exclude_item" && r.forced,
-        ),
+        excluded: rules.filter((r) => r.ruleType === "exclude_item" && r.forced),
         timing: rules.filter((r) => r.ruleType === "timing_override" && r.forced),
         tentative: rules.filter((r) => !r.forced),
       };

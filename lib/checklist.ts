@@ -32,6 +32,7 @@ export async function replaceChecklistItems(
 function persistData(eventId: string, items: BuiltItem[]) {
   return items.map((it, i) => ({
     eventId,
+    kind: it.kind,
     title: it.title.trim(),
     timingLabel: it.timingLabel?.trim() || null,
     sortOrder: i,

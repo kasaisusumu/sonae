@@ -7,8 +7,40 @@ import { isDevLoginEnabled } from "@/lib/dev-login";
 import { getUpcomingWarnings } from "@/lib/failures";
 import { primeNotifiedChecklists } from "@/lib/checklist";
 
-// after() で準備リストを先行生成することがあるため長めに
 export const maxDuration = 60;
+
+const STEPS = [
+  "Google カレンダーに予定を入れる（またはアプリで手動追加）",
+  "予定ごとに「準備すること」と「持ち物」が自動で用意される",
+  "いる／いらない・タイミングを直すと、次から精度が上がる",
+  "うっかりは「失敗ログ」に記録 → 似た予定で先回り＆節約額を可視化",
+];
+
+function HowTo({ open = false }: { open?: boolean }) {
+  return (
+    <details
+      open={open}
+      className="rounded-2xl bg-surface p-5 [&_summary::-webkit-details-marker]:hidden"
+    >
+      <summary className="cursor-pointer list-none text-sm font-semibold text-teal-dark">
+        このアプリの使い方
+      </summary>
+      <ol className="mt-3 space-y-2 text-sm text-muted">
+        {STEPS.map((s, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-soft text-xs font-semibold text-teal-dark">
+              {i + 1}
+            </span>
+            <span>{s}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-3 text-xs text-muted">
+        学習でリストが「太る」ことはありません。増えた情報は、出す項目・タイミングの精度を上げるために使います。
+      </p>
+    </details>
+  );
+}
 
 export default async function HomePage({
   searchParams,
@@ -26,39 +58,40 @@ export default async function HomePage({
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-md text-center">
-        <h1 className="text-2xl font-semibold text-teal-dark">
-          予定の準備を、わすれない。
-        </h1>
-        <p className="mt-4 text-muted">
-          Google
-          カレンダーの予定から、必要な準備リストを自動でつくります。あなたの編集を覚えて、少しずつ「自分に合ったリスト」に育っていきます。
-        </p>
-
-        {authMessage && (
-          <p className="mt-4 rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">
-            {authMessage}
+      <div className="mx-auto max-w-md">
+        <div className="text-center">
+          <h1 className="text-2xl font-semibold text-teal-dark">
+            予定の準備を、わすれない。
+          </h1>
+          <p className="mt-4 text-muted">
+            「私のマネージャー」が、予定ごとに必要な準備と持ち物を用意します。あなたの直しを覚えて、少しずつ的確になっていきます。
           </p>
-        )}
-
-        <a
-          href="/api/auth/google"
-          className="mt-8 inline-flex items-center justify-center rounded-xl bg-teal px-6 py-3 font-medium text-white no-underline transition-colors hover:bg-teal-dark"
-        >
-          Google でログイン
-        </a>
-        <p className="mt-3 text-xs text-muted">
-          カレンダーは基本は読み取りのみ。設定でオンにしたときだけ、予定の説明欄に準備リストを追記します。
-        </p>
-
-        {isDevLoginEnabled() && (
-          <p className="mt-6 text-xs text-muted">
-            <a href="/api/auth/dev-login" className="underline">
-              開発用ログイン
-            </a>
-            （Google 連携なしで手動登録から試す・本番では無効）
+          {authMessage && (
+            <p className="mt-4 rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">
+              {authMessage}
+            </p>
+          )}
+          <a
+            href="/api/auth/google"
+            className="mt-8 inline-flex items-center justify-center rounded-xl bg-teal px-6 py-3 font-medium text-white no-underline transition-colors hover:bg-teal-dark"
+          >
+            Google でログイン
+          </a>
+          <p className="mt-3 text-xs text-muted">
+            カレンダーは基本は読み取りのみ。設定でオンにしたときだけ、予定の説明欄に準備リストを追記します。
           </p>
-        )}
+          {isDevLoginEnabled() && (
+            <p className="mt-6 text-xs text-muted">
+              <a href="/api/auth/dev-login" className="underline">
+                開発用ログイン
+              </a>
+              （本番では無効）
+            </p>
+          )}
+        </div>
+        <div className="mt-8">
+          <HowTo open />
+        </div>
       </div>
     );
   }
@@ -91,30 +124,28 @@ export default async function HomePage({
   ]);
 
   const monthlySavings = savingsAgg._sum.amountYen ?? 0;
-
-  // 表示後に、通知済みで準備リスト未作成の予定を先行生成（レスポンスはブロックしない）
   after(() => primeNotifiedChecklists(user.id));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <HowTo open={upcoming.length === 0} />
+
       <Link
         href="/savings"
-        className="block rounded-2xl bg-teal-soft px-6 py-5 no-underline transition-colors hover:bg-teal-soft/70"
+        className="block rounded-2xl bg-teal-soft px-6 py-5 no-underline transition-colors hover:brightness-[0.98]"
       >
         <p className="text-sm text-teal-dark">今月の推定節約額（参考値）</p>
         <p className="mt-1 text-4xl font-bold text-teal-dark">
           {formatYen(monthlySavings)}
         </p>
         <p className="mt-2 text-xs text-muted">
-          失敗ログから「防げた」と確認した項目の推定損失額の合計です。断定ではなく目安として表示しています。内訳を見る →
+          「防げた」と確認した失敗の推定損失額の合計。断定ではなく目安です。内訳を見る →
         </p>
       </Link>
 
       {warnings.length > 0 && (
         <section className="rounded-2xl border border-warn/30 bg-warn-soft p-5">
-          <h2 className="text-sm font-semibold text-warn">
-            気をつけたい予定があります
-          </h2>
+          <h2 className="text-sm font-semibold text-warn">気をつけたい予定</h2>
           <ul className="mt-3 space-y-2">
             {warnings.slice(0, 4).map((w) => (
               <li key={w.event.id}>
@@ -126,9 +157,9 @@ export default async function HomePage({
                     {w.event.title}
                   </span>
                   <span className="block text-xs text-muted">
-                    {w.event.categoryName} で過去に「
-                    {w.logs[0]?.description.slice(0, 30)}
-                    {(w.logs[0]?.description.length ?? 0) > 30 ? "…" : ""}」
+                    {w.event.categoryName}で過去に「
+                    {w.logs[0]?.description.slice(0, 28)}
+                    {(w.logs[0]?.description.length ?? 0) > 28 ? "…" : ""}」
                     {w.logs.length > 1 ? ` ほか${w.logs.length - 1}件` : ""}
                   </span>
                 </Link>
@@ -150,12 +181,13 @@ export default async function HomePage({
           <p className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">
             予定がまだありません。
             <Link href="/events" className="ml-1 no-underline">
-              予定を取り込む
+              取り込む / 追加する
             </Link>
           </p>
         ) : (
           <ul className="space-y-2">
             {upcoming.map((ev) => {
+              const total = ev.checklistItems.length;
               const done = ev.checklistItems.filter((c) => c.isDone).length;
               return (
                 <li key={ev.id}>
@@ -163,8 +195,8 @@ export default async function HomePage({
                     href={`/events/${ev.id}`}
                     className="flex items-center justify-between gap-3 rounded-xl bg-surface px-4 py-3 no-underline transition-colors hover:bg-surface-muted"
                   >
-                    <span>
-                      <span className="block font-medium text-foreground">
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-foreground">
                         {ev.title}
                       </span>
                       <span className="block text-xs text-muted">
@@ -172,9 +204,11 @@ export default async function HomePage({
                         {ev.category ? ` ・ ${ev.category.name}` : ""}
                       </span>
                     </span>
-                    <span className="shrink-0 text-xs text-muted">
-                      準備 {done}/{ev.checklistItems.length}
-                    </span>
+                    {total > 0 && (
+                      <span className="shrink-0 text-xs text-muted">
+                        {done}/{total}
+                      </span>
+                    )}
                   </Link>
                 </li>
               );

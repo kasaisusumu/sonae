@@ -114,7 +114,7 @@ export default async function SettingsPage() {
                 <div className="mt-1 space-y-2">
                   <p className="text-xs text-muted">
                     有効です。準備リスト（リンク＋箇条書き）を予定の説明欄に自動で追記・更新します。
-                    元の説明文は残し、「--- そなえ ---」ブロックだけ差し替えます。
+                    元の説明文は残し、「--- 私のマネージャー ---」ブロックだけ差し替えます。
                   </p>
                   <form action={disableDescriptionWrite}>
                     <SubmitButton variant="ghost">無効にする</SubmitButton>

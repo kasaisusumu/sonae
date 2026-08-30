@@ -92,6 +92,8 @@ model Event {
   endDatetime   DateTime?
   memo          String?
   googleEventId String?   @unique
+  // 繰り返し予定の親イベントID（Google）。同じ系列の通知・生成をまとめるのに使う
+  recurringEventId String?
   source        String    @default("manual") // "google" | "manual"
   // 再発防止の警告をユーザーが確認・了承した日時（設定されると警告は畳まれる）
   failureWarningAckAt DateTime?
@@ -106,12 +108,16 @@ model Event {
   savingsEntries SavingsEntry[]
   feature        EventFeature?
   editRecords    EditRecord[]
+
+  @@index([userId, recurringEventId])
 }
 
 model ChecklistItem {
   id            String   @id @default(cuid())
   eventId       String
   event         Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  // "task" = 準備すること / "belonging" = 持ち物
+  kind          String   @default("task")
   title         String
   timingLabel   String? // 例: "前日21時"
   isDone        Boolean  @default(false)
@@ -137,6 +143,7 @@ model EventFeature {
   isOverseas     Boolean? // タイトル・メモのキーワードから推定（不明なら null）
   durationNights Int? // 日付範囲から算出（日帰り=0、不明なら null）
   isWeekday      Boolean  @default(true)
+  timeBucket     String? // "morning" | "afternoon" | "evening" | "allday"
   keywords       String   @default("[]") // json string[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -162,7 +169,8 @@ model LearnedRule {
   id                String   @id @default(cuid())
   categoryId        String
   category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  featureSignature  String   @default("{}") // json {d?: "day"|"short"|"multi"|"unknown", o?: bool|null}
+  featureSignature  String   @default("{}") // json {d?:duration, o?:overseas, w?:weekday, t?:timeBucket}
+  itemKind          String   @default("task") // "task" | "belonging"
   ruleType          String // "exclude_item" | "fixed_item" | "timing_override"
   target            String // 対象項目名
   value             String? // timing_override / fixed_item のタイミングラベル
@@ -174,8 +182,8 @@ model LearnedRule {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  @@unique([categoryId, ruleType, target, featureSignature])
-  @@index([categoryId, ruleType])
+  @@unique([categoryId, itemKind, ruleType, target, featureSignature])
+  @@index([categoryId, itemKind, ruleType])
 }
 
 model FailureLog {

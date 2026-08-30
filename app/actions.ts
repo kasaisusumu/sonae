@@ -181,6 +181,7 @@ export async function toggleChecklistItemDone(
 
 interface SaveChecklistInput {
   eventId: string;
+  kind: "task" | "belonging";
   items: {
     title: string;
     timingLabel: string | null;
@@ -190,9 +191,10 @@ interface SaveChecklistInput {
   removedTitles: string[];
 }
 
-/** チェックリストの編集を保存し、学習ルールに反映する（提案項目は残す）。 */
+/** チェックリストの編集を保存し、学習ルールに反映する（種別ごと・提案項目は残す）。 */
 export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   const userId = await requireUserId();
+  const kind = input.kind === "belonging" ? "belonging" : "task";
   const event = await prisma.event.findFirst({
     where: { id: input.eventId, userId },
     include: { checklistItems: true },
@@ -208,8 +210,10 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     }))
     .filter((it) => it.title.length > 0);
 
-  // 学習用の差分（提案項目=isSuggested は対象外。明示編集のみ拾う）
-  const prev = event.checklistItems.filter((c) => !c.isSuggested);
+  // この種別の、非提案項目だけを対象に差分をとる
+  const prev = event.checklistItems.filter(
+    (c) => !c.isSuggested && c.kind === kind,
+  );
   const prevByTitle = new Map(prev.map((c) => [c.title.trim(), c]));
   const nextTitles = new Set(cleanItems.map((it) => it.title));
 
@@ -225,19 +229,24 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     }
   }
 
-  // 非提案項目だけ入れ替え（提案行は残す）
+  // この種別の非提案項目だけ入れ替え（提案行・他種別は残す）
+  const maxOrder = Math.max(
+    0,
+    ...event.checklistItems.map((c) => c.sortOrder),
+  );
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({
-      where: { eventId: input.eventId, isSuggested: false },
+      where: { eventId: input.eventId, isSuggested: false, kind },
     }),
     prisma.checklistItem.createMany({
       data: cleanItems.map((it, i) => ({
         eventId: input.eventId,
+        kind,
         title: it.title,
         timingLabel: it.timingLabel,
         isDone: it.isDone,
         isUserAdded: it.isUserAdded,
-        sortOrder: i,
+        sortOrder: (kind === "belonging" ? maxOrder + 1 : 0) + i,
       })),
     }),
   ]);
@@ -246,6 +255,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     await recordEdit({
       eventId: event.id,
       categoryId: event.categoryId,
+      itemKind: kind,
       feature: extractEventFeature({
         title: event.title,
         memo: event.memo,
@@ -527,7 +537,7 @@ export async function removePushSubscription(endpoint: string): Promise<void> {
 export async function sendTestPush(): Promise<void> {
   const userId = await requireUserId();
   await sendPushToUser(userId, {
-    title: "そなえ：通知テスト",
+    title: "私のマネージャー：通知テスト",
     body: "予定が追加されると、このように通知が届きます。",
     url: "/",
   });

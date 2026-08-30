@@ -12,10 +12,66 @@ import { SuggestionList } from "./suggestion-list";
 import { WarningPanel } from "./warning-panel";
 import { SubmitButton } from "@/app/components/submit-button";
 
-/**
- * 重い処理（初回は OpenAI で準備リスト生成）をまとめた部分。
- * page.tsx の <Suspense> 境界内で描画され、ページ枠より後から差し込まれる。
- */
+type Row = {
+  id: string;
+  kind: string;
+  title: string;
+  timingLabel: string | null;
+  isDone: boolean;
+  isUserAdded: boolean;
+  isSuggested: boolean;
+  suggestionType: string | null;
+  suggestionValue: string | null;
+};
+
+function KindBlock({
+  eventId,
+  kind,
+  rows,
+}: {
+  eventId: string;
+  kind: "task" | "belonging";
+  rows: Row[];
+}) {
+  const mine = rows.filter((r) => r.kind === kind);
+  const suggestions = mine.filter((r) => r.isSuggested);
+  const normal = mine.filter((r) => !r.isSuggested);
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-sm font-semibold text-foreground">
+        {kind === "task" ? "準備すること" : "持ち物"}
+      </h3>
+      {suggestions.length > 0 && (
+        <SuggestionList
+          suggestions={suggestions.map((s) => ({
+            id: s.id,
+            title: s.title,
+            timingLabel: s.timingLabel,
+            suggestionType: s.suggestionType as
+              | "exclude"
+              | "add"
+              | "timing"
+              | null,
+            suggestionValue: s.suggestionValue,
+          }))}
+        />
+      )}
+      <ChecklistEditor
+        eventId={eventId}
+        kind={kind}
+        initialItems={normal.map((c) => ({
+          id: c.id,
+          title: c.title,
+          timingLabel: c.timingLabel,
+          isDone: c.isDone,
+          isUserAdded: c.isUserAdded,
+        }))}
+      />
+    </div>
+  );
+}
+
 export async function ChecklistSection({
   event,
 }: {
@@ -41,7 +97,6 @@ export async function ChecklistSection({
       where: { eventId: event.id },
       orderBy: { sortOrder: "asc" },
     });
-    // 初回生成後、説明欄書き込みが有効なら反映（レスポンスはブロックしない）
     after(() => syncEventDescription(event.id));
   }
 
@@ -51,61 +106,31 @@ export async function ChecklistSection({
     eventDatetime: event.eventDatetime,
     endDatetime: event.endDatetime,
   });
-  const [warning, rules] = await Promise.all([
+  const [warning, taskRules, belongingRules] = await Promise.all([
     getWarningForEvent(event),
-    getApplicableRules(event.categoryId, feature),
+    getApplicableRules(event.categoryId, feature, "task"),
+    getApplicableRules(event.categoryId, feature, "belonging"),
   ]);
-  const forced = rules.filter((r) => r.forced);
-
-  const normal = items.filter((i) => !i.isSuggested);
-  const suggestions = items.filter((i) => i.isSuggested);
+  const forced = [...taskRules, ...belongingRules].filter((r) => r.forced);
+  const rows = items as unknown as Row[];
 
   return (
     <>
       {warning && <WarningPanel warning={warning} />}
 
-      <section>
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">準備リスト</h2>
-            <p className="text-xs text-muted">
-              追加・削除・タイミング変更は学習に使われ、次回以降の精度が上がります。
-            </p>
-          </div>
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted">
+            追加・削除・タイミング変更は、この種類の予定の学習に使われます。
+          </p>
           <form action={regenerateChecklist}>
             <input type="hidden" name="eventId" value={event.id} />
             <SubmitButton variant="ghost">作り直す</SubmitButton>
           </form>
         </div>
 
-        {suggestions.length > 0 && (
-          <div className="mb-3">
-            <SuggestionList
-              suggestions={suggestions.map((s) => ({
-                id: s.id,
-                title: s.title,
-                timingLabel: s.timingLabel,
-                suggestionType: s.suggestionType as
-                  | "exclude"
-                  | "add"
-                  | "timing"
-                  | null,
-                suggestionValue: s.suggestionValue,
-              }))}
-            />
-          </div>
-        )}
-
-        <ChecklistEditor
-          eventId={event.id}
-          initialItems={normal.map((c) => ({
-            id: c.id,
-            title: c.title,
-            timingLabel: c.timingLabel,
-            isDone: c.isDone,
-            isUserAdded: c.isUserAdded,
-          }))}
-        />
+        <KindBlock eventId={event.id} kind="task" rows={rows} />
+        <KindBlock eventId={event.id} kind="belonging" rows={rows} />
       </section>
 
       {forced.length > 0 && (
@@ -125,12 +150,18 @@ export async function ChecklistSection({
             {forced
               .filter((r) => r.ruleType === "fixed_item")
               .map((r) => (
-                <li key={r.id}>毎回入れる: {r.target}</li>
+                <li key={r.id}>
+                  毎回入れる: {r.target}
+                  {r.itemKind === "belonging" ? "（持ち物）" : ""}
+                </li>
               ))}
             {forced
               .filter((r) => r.ruleType === "exclude_item")
               .map((r) => (
-                <li key={r.id}>出さない: {r.target}</li>
+                <li key={r.id}>
+                  出さない: {r.target}
+                  {r.itemKind === "belonging" ? "（持ち物）" : ""}
+                </li>
               ))}
             {forced
               .filter((r) => r.ruleType === "timing_override")

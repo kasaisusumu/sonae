@@ -20,7 +20,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
       checklistItems: {
         where: { isSuggested: false },
         orderBy: { sortOrder: "asc" },
-        select: { title: true, timingLabel: true, isDone: true },
+        select: { kind: true, title: true, timingLabel: true, isDone: true },
       },
     },
   });
@@ -33,7 +33,16 @@ export async function syncEventDescription(eventId: string): Promise<void> {
   if (!account?.writeDescriptionEnabled) return;
 
   const url = `${appBaseUrl()}/events/${eventId}`;
-  const description = composeDescription(event.memo, url, event.checklistItems);
+  const description = composeDescription(
+    event.memo,
+    url,
+    event.checklistItems.map((c) => ({
+      kind: c.kind === "belonging" ? "belonging" : "task",
+      title: c.title,
+      timingLabel: c.timingLabel,
+      isDone: c.isDone,
+    })),
+  );
   const hash = hashDescription(description);
   if (hash === event.lastWrittenHash) return;
 

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { syncAndNotify } from "@/lib/sync";
 import { ensureWatch } from "@/lib/google";
 import { notifyPostEventFailureChecks } from "@/lib/failures";
+import { sendDueItemNotifications } from "@/lib/notify-items";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +44,7 @@ async function handler(req: NextRequest) {
   let generated = 0;
   let watches = 0;
   let postChecks = 0;
+  let prepNotified = 0;
   let errors = 0;
   // 1 回の実行で生成する準備リストの上限（タイムアウト対策・全ユーザー合算）
   let genBudget = 4;
@@ -64,6 +66,17 @@ async function handler(req: NextRequest) {
     }
   }
 
+  // 準備項目の「◯分前」通知は全ユーザー対象（手動予定のみのユーザーも含む）
+  const users = await prisma.user.findMany({ select: { id: true } });
+  for (const { id } of users) {
+    try {
+      prepNotified += await sendDueItemNotifications(id);
+    } catch (e) {
+      errors++;
+      console.error("[cron/poll] 準備通知に失敗 userId=%s", id, e);
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     accounts: accounts.length,
@@ -72,6 +85,7 @@ async function handler(req: NextRequest) {
     generated,
     watches,
     postChecks,
+    prepNotified,
     errors,
     at: new Date().toISOString(),
   });

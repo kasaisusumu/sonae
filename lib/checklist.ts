@@ -41,6 +41,7 @@ function persistData(
     kind: it.kind,
     title: it.title.trim(),
     timingLabel: it.timingLabel?.trim() || null,
+    notifyLeadMinutes: it.isSuggested ? null : it.notifyLeadMinutes,
     comment: it.isSuggested ? null : comments.get(key(it.kind, it.title)) ?? null,
     sortOrder: i,
     isSuggested: it.isSuggested,

@@ -114,14 +114,24 @@ export async function recallBaseChecklist(
       checklistItems: {
         where: { isSuggested: false },
         orderBy: { sortOrder: "asc" },
-        select: { kind: true, title: true, timingLabel: true },
+        select: {
+          kind: true,
+          title: true,
+          timingLabel: true,
+          notifyLeadMinutes: true,
+        },
       },
     },
   });
 
   type Scored = {
     id: string;
-    items: { kind: string; title: string; timingLabel: string | null }[];
+    items: {
+      kind: string;
+      title: string;
+      timingLabel: string | null;
+      notifyLeadMinutes: number | null;
+    }[];
     rank: number;
     exact: boolean;
   };
@@ -158,7 +168,11 @@ export async function recallBaseChecklist(
   const pick = (kind: "task" | "belonging"): GeneratedItem[] =>
     best!.items
       .filter((i) => (i.kind === "belonging" ? "belonging" : "task") === kind)
-      .map((i) => ({ title: i.title, timingLabel: i.timingLabel }));
+      .map((i) => ({
+        title: i.title,
+        timingLabel: i.timingLabel,
+        notifyLeadMinutes: i.notifyLeadMinutes,
+      }));
 
   return {
     tasks: pick("task"),

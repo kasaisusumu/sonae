@@ -147,6 +147,9 @@ export async function applyInboundDescription(
       comment: i.comment,
       isDone: i.isDone,
       isUserAdded: p ? p.isUserAdded : true,
+      // 通知リード時間は説明欄に出さないので、既存項目の設定を引き継ぐ
+      notifyLeadMinutes: p ? p.notifyLeadMinutes : null,
+      notifiedAt: p ? p.notifiedAt : null,
       sortOrder: order++,
     };
   });

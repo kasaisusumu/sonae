@@ -6,7 +6,11 @@ import {
   signatureSpecificity,
 } from "@/lib/signature";
 
-export type RuleType = "exclude_item" | "fixed_item" | "timing_override";
+export type RuleType =
+  | "exclude_item"
+  | "fixed_item"
+  | "timing_override"
+  | "notify_override"; // value = 予定開始の何分前に通知するか（分）／"off" = 通知しない
 export type ItemKind = "task" | "belonging";
 
 export const CONFIDENCE_THRESHOLD = 0.7;
@@ -14,6 +18,7 @@ export const CONFIDENCE_THRESHOLD = 0.7;
 export interface GeneratedItem {
   title: string;
   timingLabel: string | null;
+  notifyLeadMinutes?: number | null;
 }
 
 export function norm(s: string): string {
@@ -160,7 +165,11 @@ async function upsertAndConfirm(
     return;
   }
 
-  if (ruleType === "timing_override" && value && existing.value !== value) {
+  if (
+    (ruleType === "timing_override" || ruleType === "notify_override") &&
+    value &&
+    existing.value !== value
+  ) {
     const contra = existing.contradictedCount + 1;
     await prisma.learnedRule.update({
       where: { id: existing.id },
@@ -208,6 +217,20 @@ export interface EditForLearning {
   removed: string[];
   added: GeneratedItem[];
   retimed: { title: string; timingLabel: string }[];
+  // 通知リード時間の変更（分。null = 通知しない）。内容とセットで学習する。
+  renotified?: { title: string; leadMinutes: number | null }[];
+}
+
+/** 通知リード時間（分 or null）を LearnedRule.value の文字列に。 */
+export function notifyValue(leadMinutes: number | null): string {
+  return leadMinutes === null ? "off" : String(leadMinutes);
+}
+
+/** LearnedRule.value（"off" or 数字文字列）を分 or null に戻す。 */
+export function parseNotifyValue(value: string | null): number | null {
+  if (!value || value === "off") return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
 }
 
 /**
@@ -263,6 +286,17 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
       rt.timingLabel,
     );
   }
+  for (const rn of input.renotified ?? []) {
+    if (!rn.title.trim()) continue;
+    await upsertAndConfirm(
+      categoryId,
+      itemKind,
+      "notify_override",
+      rn.title,
+      sig,
+      notifyValue(rn.leadMinutes),
+    );
+  }
 }
 
 // ── 「学習内容の確認」画面用 ─────────────────────────
@@ -305,12 +339,17 @@ export async function getLearningOverview(userId: string) {
         fixed: rules.filter((r) => r.ruleType === "fixed_item" && r.forced),
         excluded: rules.filter((r) => r.ruleType === "exclude_item" && r.forced),
         timing: rules.filter((r) => r.ruleType === "timing_override" && r.forced),
+        notify: rules.filter((r) => r.ruleType === "notify_override" && r.forced),
         tentative: rules.filter((r) => !r.forced),
       };
     })
     .filter(
       (g) =>
-        g.fixed.length + g.excluded.length + g.timing.length + g.tentative.length >
+        g.fixed.length +
+          g.excluded.length +
+          g.timing.length +
+          g.notify.length +
+          g.tentative.length >
         0,
     );
 }

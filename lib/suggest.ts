@@ -5,6 +5,7 @@ import { recallBaseChecklist } from "@/lib/recall";
 import {
   getApplicableRules,
   norm,
+  parseNotifyValue,
   type ApplicableRule,
   type GeneratedItem,
   type ItemKind,
@@ -19,6 +20,7 @@ export interface BuiltItem {
   kind: ItemKind;
   title: string;
   timingLabel: string | null;
+  notifyLeadMinutes: number | null;
   isSuggested: boolean;
   suggestionType: "exclude" | "add" | "timing" | null;
   suggestionRuleId: string | null;
@@ -31,6 +33,7 @@ function base(kind: ItemKind, title: string, timingLabel: string | null): BuiltI
     kind,
     title,
     timingLabel,
+    notifyLeadMinutes: null,
     isSuggested: false,
     suggestionType: null,
     suggestionRuleId: null,
@@ -45,7 +48,10 @@ function composeKind(
   rules: ApplicableRule[],
 ): BuiltItem[] {
   const { min, max } = LIMITS[kind];
-  let items: BuiltItem[] = baseItems.map((b) => base(kind, b.title, b.timingLabel));
+  let items: BuiltItem[] = baseItems.map((b) => ({
+    ...base(kind, b.title, b.timingLabel),
+    notifyLeadMinutes: b.notifyLeadMinutes ?? null,
+  }));
 
   const forced = rules.filter((r) => r.forced);
   const tentative = rules.filter((r) => !r.forced);
@@ -70,6 +76,11 @@ function composeKind(
   for (const r of byType(forced, "timing_override")) {
     const hit = items.find((it) => norm(it.title) === norm(r.target));
     if (hit && r.value) hit.timingLabel = r.value;
+  }
+  // 通知リード時間（内容とセットで学習した値。"off" は通知しない）
+  for (const r of byType(forced, "notify_override")) {
+    const hit = items.find((it) => norm(it.title) === norm(r.target));
+    if (hit) hit.notifyLeadMinutes = parseNotifyValue(r.value);
   }
 
   // 仮ルール（提案。1タップで適用/却下）

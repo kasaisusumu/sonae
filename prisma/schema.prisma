@@ -135,6 +135,10 @@ model ChecklistItem {
   isUserAdded   Boolean  @default(false)
   isUserRemoved Boolean  @default(false)
   sortOrder     Int      @default(0)
+  // この項目の準備を促す通知を、予定開始の何分前に出すか。null = 通知しない。
+  notifyLeadMinutes Int?
+  // その通知を送った日時（再送防止）。リード時間を変えると null に戻す。
+  notifiedAt        DateTime?
   createdAt     DateTime @default(now())
 
   // confidence の低い「提案」項目（ユーザーが1タップで適用/却下）

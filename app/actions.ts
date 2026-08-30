@@ -210,8 +210,16 @@ interface SaveChecklistInput {
     comment: string | null;
     isDone: boolean;
     isUserAdded: boolean;
+    // 予定開始の何分前に通知するか。null = 通知しない。
+    notifyLeadMinutes: number | null;
   }[];
   removedTitles: string[];
+}
+
+function cleanLead(v: unknown): number | null {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.min(Math.round(n), 60 * 24 * 30); // 上限 30 日
 }
 
 /** チェックリストの編集を保存し、学習ルールに反映する（種別ごと・提案項目は残す）。 */
@@ -231,6 +239,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
       comment: it.comment?.trim() || null,
       isDone: Boolean(it.isDone),
       isUserAdded: Boolean(it.isUserAdded),
+      notifyLeadMinutes: cleanLead(it.notifyLeadMinutes),
     }))
     .filter((it) => it.title.length > 0);
 
@@ -246,10 +255,19 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     .filter((it) => it.isUserAdded || !prevByTitle.has(it.title))
     .map((it) => ({ title: it.title, timingLabel: it.timingLabel }));
   const retimed: { title: string; timingLabel: string }[] = [];
+  const renotified: { title: string; leadMinutes: number | null }[] = [];
   for (const it of cleanItems) {
     const p = prevByTitle.get(it.title);
     if (p && (p.timingLabel ?? null) !== it.timingLabel && it.timingLabel) {
       retimed.push({ title: it.title, timingLabel: it.timingLabel });
+    }
+    // 通知リード時間の変更、または通知付きで新規追加 → 内容とセットで学習
+    const prevLead = p ? (p.notifyLeadMinutes ?? null) : null;
+    if (
+      (p && prevLead !== it.notifyLeadMinutes) ||
+      (!p && it.notifyLeadMinutes !== null)
+    ) {
+      renotified.push({ title: it.title, leadMinutes: it.notifyLeadMinutes });
     }
   }
 
@@ -263,20 +281,31 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
       where: { eventId: input.eventId, isSuggested: false, kind },
     }),
     prisma.checklistItem.createMany({
-      data: cleanItems.map((it, i) => ({
-        eventId: input.eventId,
-        kind,
-        title: it.title,
-        timingLabel: it.timingLabel,
-        comment: it.comment,
-        isDone: it.isDone,
-        isUserAdded: it.isUserAdded,
-        sortOrder: (kind === "belonging" ? maxOrder + 1 : 0) + i,
-      })),
+      data: cleanItems.map((it, i) => {
+        const p = prevByTitle.get(it.title);
+        const leadUnchanged =
+          p && (p.notifyLeadMinutes ?? null) === it.notifyLeadMinutes;
+        return {
+          eventId: input.eventId,
+          kind,
+          title: it.title,
+          timingLabel: it.timingLabel,
+          comment: it.comment,
+          isDone: it.isDone,
+          isUserAdded: it.isUserAdded,
+          notifyLeadMinutes: it.notifyLeadMinutes,
+          // リード時間が変わっていなければ送信済みフラグを引き継ぐ（再送しない）
+          notifiedAt: leadUnchanged ? (p?.notifiedAt ?? null) : null,
+          sortOrder: (kind === "belonging" ? maxOrder + 1 : 0) + i,
+        };
+      }),
     }),
   ]);
 
-  if (event.categoryId && (removed.length || added.length || retimed.length)) {
+  if (
+    event.categoryId &&
+    (removed.length || added.length || retimed.length || renotified.length)
+  ) {
     await recordEdit({
       eventId: event.id,
       categoryId: event.categoryId,
@@ -290,6 +319,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
       removed,
       added,
       retimed,
+      renotified,
     });
   }
 

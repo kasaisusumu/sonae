@@ -1,13 +1,19 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { getLearningOverview, type RuleType } from "@/lib/learning";
+import {
+  getLearningOverview,
+  parseNotifyValue,
+  type RuleType,
+} from "@/lib/learning";
+import { leadLabel } from "@/lib/notify-items";
 import { RuleActions } from "./rule-actions";
 
 const TYPE_LABEL: Record<RuleType, string> = {
   fixed_item: "固定",
   exclude_item: "除外",
   timing_override: "タイミング",
+  notify_override: "通知",
 };
 
 interface Rule {
@@ -19,16 +25,24 @@ interface Rule {
   isUserLocked: boolean;
 }
 
+function notifyText(value: string | null): string {
+  const m = parseNotifyValue(value);
+  return m === null ? "通知なし" : leadLabel(m);
+}
+
+function ruleMain(r: Rule): string {
+  if (r.ruleType === "timing_override") return `${r.target} → ${r.value ?? ""}`;
+  if (r.ruleType === "notify_override")
+    return `${r.target} → ${notifyText(r.value)}`;
+  if (r.ruleType === "fixed_item" && r.value) return `${r.target}（${r.value}）`;
+  return r.target;
+}
+
 function RuleRow({ r }: { r: Rule }) {
   return (
     <li className="flex items-start justify-between gap-3 py-2">
       <div className="min-w-0">
-        <p className="text-sm">
-          {r.ruleType === "timing_override"
-            ? `${r.target} → ${r.value ?? ""}`
-            : r.target}
-          {r.ruleType === "fixed_item" && r.value ? `（${r.value}）` : ""}
-        </p>
+        <p className="text-sm">{ruleMain(r)}</p>
         <p className="text-[11px] text-muted">
           {r.isUserLocked
             ? "固定中"
@@ -105,6 +119,17 @@ export default async function LearningOverviewPage() {
               </div>
             )}
 
+            {g.notify.length > 0 && (
+              <div className="mt-3">
+                <h3 className="text-xs font-semibold text-muted">通知のタイミング</h3>
+                <ul className="divide-y divide-border">
+                  {g.notify.map((r) => (
+                    <RuleRow key={r.id} r={r} />
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {g.tentative.length > 0 && (
               <div className="mt-3">
                 <h3 className="text-xs font-semibold text-muted">
@@ -118,10 +143,7 @@ export default async function LearningOverviewPage() {
                     >
                       <div className="min-w-0">
                         <p className="text-sm text-muted">
-                          [{TYPE_LABEL[r.ruleType]}]{" "}
-                          {r.ruleType === "timing_override"
-                            ? `${r.target} → ${r.value ?? ""}`
-                            : r.target}
+                          [{TYPE_LABEL[r.ruleType]}] {ruleMain(r)}
                         </p>
                         <p className="text-[11px] text-muted">
                           確信度 {Math.round(r.effectiveConfidence * 100)}%

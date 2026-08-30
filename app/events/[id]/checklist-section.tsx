@@ -21,6 +21,7 @@ type Row = {
   comment: string | null;
   isDone: boolean;
   isUserAdded: boolean;
+  notifyLeadMinutes: number | null;
   isSuggested: boolean;
   suggestionType: string | null;
   suggestionValue: string | null;
@@ -69,6 +70,7 @@ function KindBlock({
           comment: c.comment,
           isDone: c.isDone,
           isUserAdded: c.isUserAdded,
+          notifyLeadMinutes: c.notifyLeadMinutes,
         }))}
       />
     </div>

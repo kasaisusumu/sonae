@@ -11,6 +11,8 @@ interface Item {
   comment: string;
   isDone: boolean;
   isUserAdded: boolean;
+  notifyLeadMinutes: number | null; // 予定開始の何分前に通知するか。null = しない
+  notifyCustom: boolean; // カスタム入力（時間・分）を出しているか（UIのみ）
 }
 
 interface InitialItem {
@@ -20,6 +22,7 @@ interface InitialItem {
   comment: string | null;
   isDone: boolean;
   isUserAdded: boolean;
+  notifyLeadMinutes: number | null;
 }
 
 const TIMING_PRESETS = [
@@ -32,6 +35,24 @@ const TIMING_PRESETS = [
   "30分前",
   "出発1時間前",
 ];
+
+const NOTIFY_PRESETS: { label: string; minutes: number | null }[] = [
+  { label: "通知なし", minutes: null },
+  { label: "10分前", minutes: 10 },
+  { label: "30分前", minutes: 30 },
+  { label: "1時間前", minutes: 60 },
+  { label: "2時間前", minutes: 120 },
+  { label: "3時間前", minutes: 180 },
+  { label: "6時間前", minutes: 360 },
+  { label: "12時間前", minutes: 720 },
+  { label: "前日（24時間前）", minutes: 1440 },
+  { label: "2日前", minutes: 2880 },
+  { label: "3日前", minutes: 4320 },
+  { label: "1週間前", minutes: 10080 },
+];
+
+const isNotifyPreset = (m: number | null) =>
+  NOTIFY_PRESETS.some((p) => p.minutes === m);
 
 let counter = 0;
 const nextKey = () => `it-${counter++}`;
@@ -96,6 +117,9 @@ export function ChecklistEditor({
         comment: it.comment ?? "",
         isDone: it.isDone,
         isUserAdded: it.isUserAdded,
+        notifyLeadMinutes: it.notifyLeadMinutes ?? null,
+        notifyCustom:
+          it.notifyLeadMinutes != null && !isNotifyPreset(it.notifyLeadMinutes),
       })),
     [initialItems],
   );
@@ -127,6 +151,7 @@ export function ChecklistEditor({
         comment: it.comment.trim() || null,
         isDone: it.isDone,
         isUserAdded: it.isUserAdded,
+        notifyLeadMinutes: it.notifyLeadMinutes,
       }));
   }
 
@@ -143,6 +168,27 @@ export function ChecklistEditor({
       prev.map((it) => (it.key === key ? { ...it, ...patch } : it)),
     );
     setSaved(false);
+  }
+
+  // カスタムの「X時間 Y分前」→ 分に合成（両方 0 なら通知なし）
+  function setCustomLead(key: string, hoursRaw: string, minsRaw: string) {
+    const h = Math.max(0, Math.min(336, Math.floor(Number(hoursRaw) || 0)));
+    const m = Math.max(0, Math.min(59, Math.floor(Number(minsRaw) || 0)));
+    const total = h * 60 + m;
+    update(key, { notifyLeadMinutes: total > 0 ? total : null });
+  }
+
+  function onNotifySelect(it: Item, value: string) {
+    if (value === "custom") {
+      update(it.key, {
+        notifyCustom: true,
+        notifyLeadMinutes: it.notifyLeadMinutes ?? 60,
+      });
+    } else if (value === "none") {
+      update(it.key, { notifyCustom: false, notifyLeadMinutes: null });
+    } else {
+      update(it.key, { notifyCustom: false, notifyLeadMinutes: Number(value) });
+    }
   }
 
   // チェックはその場で保存（「保存する」ボタン不要）
@@ -177,6 +223,8 @@ export function ChecklistEditor({
         comment: "",
         isDone: false,
         isUserAdded: true,
+        notifyLeadMinutes: null,
+        notifyCustom: false,
       },
     ]);
     setSaved(false);
@@ -205,6 +253,8 @@ export function ChecklistEditor({
         comment: "",
         isDone: false,
         isUserAdded: true,
+        notifyLeadMinutes: null,
+        notifyCustom: false,
       })),
     ];
     setItems(merged);
@@ -257,6 +307,69 @@ export function ChecklistEditor({
                   </span>
                 )}
               </div>
+
+              {/* 通知（予定の何時間何分前 / なし）。内容とセットで学習される */}
+              <div className="flex flex-wrap items-center gap-1 text-xs text-muted">
+                <span className="text-[11px]">🔔 通知</span>
+                <select
+                  value={
+                    it.notifyCustom || !isNotifyPreset(it.notifyLeadMinutes)
+                      ? "custom"
+                      : it.notifyLeadMinutes === null
+                        ? "none"
+                        : String(it.notifyLeadMinutes)
+                  }
+                  onChange={(e) => onNotifySelect(it, e.target.value)}
+                  className="rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-border focus:border-border focus:bg-background"
+                >
+                  {NOTIFY_PRESETS.map((p) => (
+                    <option
+                      key={p.label}
+                      value={p.minutes === null ? "none" : String(p.minutes)}
+                    >
+                      {p.label}
+                    </option>
+                  ))}
+                  <option value="custom">カスタム…</option>
+                </select>
+                {(it.notifyCustom || !isNotifyPreset(it.notifyLeadMinutes)) && (
+                  <span className="inline-flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={336}
+                      value={Math.floor((it.notifyLeadMinutes ?? 0) / 60) || ""}
+                      onChange={(e) =>
+                        setCustomLead(
+                          it.key,
+                          e.target.value,
+                          String((it.notifyLeadMinutes ?? 0) % 60),
+                        )
+                      }
+                      className="w-12 rounded border bg-background px-1 py-0.5 text-xs"
+                      aria-label="時間"
+                    />
+                    時間
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={(it.notifyLeadMinutes ?? 0) % 60 || ""}
+                      onChange={(e) =>
+                        setCustomLead(
+                          it.key,
+                          String(Math.floor((it.notifyLeadMinutes ?? 0) / 60)),
+                          e.target.value,
+                        )
+                      }
+                      className="w-12 rounded border bg-background px-1 py-0.5 text-xs"
+                      aria-label="分"
+                    />
+                    分前
+                  </span>
+                )}
+              </div>
+
               <input
                 value={it.comment}
                 onChange={(e) => update(it.key, { comment: e.target.value })}
@@ -370,5 +483,6 @@ function strip(it: Item) {
     title: it.title.trim(),
     timingLabel: it.timingLabel.trim(),
     comment: it.comment.trim(),
+    notifyLeadMinutes: it.notifyLeadMinutes,
   };
 }

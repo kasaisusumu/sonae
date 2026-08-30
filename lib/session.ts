@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
@@ -59,12 +60,15 @@ export async function getSessionUserId(): Promise<string | null> {
   return parse(store.get(COOKIE_NAME)?.value);
 }
 
-/** ログイン中の User を DB から取得（未ログイン or 不整合なら null）。 */
-export async function getCurrentUser() {
+/**
+ * ログイン中の User を DB から取得（未ログイン or 不整合なら null）。
+ * 1 リクエスト内で複数回呼んでも DB アクセスは 1 回（React cache）。
+ */
+export const getCurrentUser = cache(async () => {
   const userId = await getSessionUserId();
   if (!userId) return null;
   return prisma.user.findUnique({
     where: { id: userId },
     include: { googleAccount: true },
   });
-}
+});

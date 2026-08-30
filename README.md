@@ -11,7 +11,16 @@
 - 準備リスト生成: OpenAI API（`gpt-4o-mini`、未設定時はカテゴリ別テンプレート）
 - 通知: Web Push（PWA / Service Worker + `web-push` + VAPID）
 - 新規予定の検知: GitHub Actions（`.github/workflows/poll.yml`）が数分おきに `/api/cron/poll` を叩く
-- ホスティング: Vercel（無料 Hobby）
+- ホスティング: Vercel（無料 Hobby）。`vercel.json` で関数リージョンを `syd1`（Neon と同じシドニー）に固定し DB 往復を短縮
+
+## パフォーマンス上の設計
+
+- Vercel 関数と Neon を同一リージョン（Sydney）に配置（`vercel.json` の `regions`）。
+  併せて Vercel の Project → Settings → Functions → Region も `Sydney (syd1)` にしておくと確実。
+- レイアウトはログイン判定に DB を使わない（Cookie 署名のみ）。`getCurrentUser` は React `cache` で1リクエスト1回。
+- ダッシュボードの警告集計は N+1 を廃し、まとめクエリ。一覧は必要カラムだけ `select`。
+- 各ページに `loading.tsx`（スケルトン）を置き、遷移を即時に感じられるように。
+- OpenAI 呼び出しはタイムアウト付き。準備リスト初回生成と cron は `maxDuration = 60`。
 
 ## ローカル開発
 

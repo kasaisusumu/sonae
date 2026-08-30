@@ -1,7 +1,13 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { disconnectGoogle, logout, submitFeedback } from "@/app/actions";
+import {
+  disconnectGoogle,
+  logout,
+  setCalendarId,
+  submitFeedback,
+} from "@/app/actions";
+import { listCalendars, type CalendarChoice } from "@/lib/google";
 import { formatDateTime, formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { PushControls } from "@/app/components/push-controls";
@@ -17,6 +23,15 @@ export default async function SettingsPage() {
     take: 5,
   });
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
+
+  let calendars: CalendarChoice[] = [];
+  if (account) {
+    try {
+      calendars = await listCalendars(user.id);
+    } catch {
+      calendars = [];
+    }
+  }
 
   return (
     <div className="space-y-8">
@@ -42,6 +57,28 @@ export default async function SettingsPage() {
                 : "まだ取り込んでいません"}
               {" ・ 読み取り専用（calendar.readonly）"}
             </p>
+            {calendars.length > 0 && (
+              <form action={setCalendarId} className="pt-1">
+                <label className="text-xs text-muted">
+                  同期するカレンダー
+                  <div className="mt-1 flex gap-2">
+                    <select
+                      name="calendarId"
+                      defaultValue={account.calendarId || "primary"}
+                      className="flex-1 rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                    >
+                      {calendars.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.summary}
+                          {c.primary ? "（メイン）" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <SubmitButton variant="ghost">変更</SubmitButton>
+                  </div>
+                </label>
+              </form>
+            )}
             <div className="flex flex-wrap gap-3 pt-1">
               <a
                 href="/api/auth/google"

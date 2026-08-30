@@ -122,7 +122,11 @@ export async function generateChecklist(
 
   if (process.env.OPENAI_API_KEY) {
     try {
-      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const client = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+        timeout: 20000,
+        maxRetries: 1,
+      });
       const completion = await client.chat.completions.create({
         model: MODEL,
         temperature: 0.4,

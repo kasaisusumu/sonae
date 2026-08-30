@@ -142,3 +142,23 @@ export async function fetchUpcomingEvents(userId: string): Promise<{
 
   return { events, calendarId: account.calendarId || "primary" };
 }
+
+export interface CalendarChoice {
+  id: string;
+  summary: string;
+  primary: boolean;
+}
+
+/** ユーザーが同期対象を選べるように、カレンダー一覧を返す。 */
+export async function listCalendars(userId: string): Promise<CalendarChoice[]> {
+  const { calendar } = await getCalendarClient(userId);
+  const res = await calendar.calendarList.list({ maxResults: 100 });
+  return (res.data.items ?? [])
+    .filter((c): c is typeof c & { id: string } => Boolean(c.id))
+    .map((c) => ({
+      id: c.id,
+      summary: c.summaryOverride || c.summary || c.id,
+      primary: Boolean(c.primary),
+    }))
+    .sort((a, b) => Number(b.primary) - Number(a.primary));
+}

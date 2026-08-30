@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getOrCreateCategory, inferCategoryName } from "@/lib/categories";
+import { resolveCategoryForEvent } from "@/lib/categories";
 import { fetchUpcomingEvents } from "@/lib/google";
 
 export interface SyncResult {
@@ -21,6 +21,7 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
 
   const newEvents: SyncResult["newEvents"] = [];
   let updatedCount = 0;
+  let aiBudget = 12; // 1 回の同期で AI カテゴリ判定を使う上限（タイムアウト対策）
 
   for (const ev of events) {
     const existing = await prisma.event.findUnique({
@@ -40,10 +41,13 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
       });
       updatedCount++;
     } else {
-      const category = await getOrCreateCategory(
+      const category = await resolveCategoryForEvent(
         userId,
-        inferCategoryName(ev.title, ev.description),
+        ev.title,
+        ev.description,
+        aiBudget > 0,
       );
+      if (aiBudget > 0) aiBudget--;
       const created = await prisma.event.create({
         data: {
           userId,

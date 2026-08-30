@@ -5,6 +5,7 @@ import { sendPushToUser } from "@/lib/push";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 /**
  * 全ユーザーの Google カレンダーを取り込み、新規予定があれば通知する。

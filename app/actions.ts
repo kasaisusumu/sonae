@@ -4,7 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { clearSession, getSessionUserId } from "@/lib/session";
-import { getOrCreateCategory } from "@/lib/categories";
+import {
+  getOrCreateCategory,
+  resolveCategoryForEvent,
+} from "@/lib/categories";
 import { syncUserCalendar } from "@/lib/sync";
 import { sendPushToUser } from "@/lib/push";
 import {
@@ -34,6 +37,19 @@ export async function logout(): Promise<void> {
 export async function disconnectGoogle(): Promise<void> {
   const userId = await requireUserId();
   await prisma.userGoogleAccount.deleteMany({ where: { userId } });
+  revalidatePath("/settings");
+  revalidatePath("/events");
+}
+
+/** 同期対象の Google カレンダーを切り替える。 */
+export async function setCalendarId(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const calendarId = String(formData.get("calendarId") ?? "").trim();
+  if (!calendarId) return;
+  await prisma.userGoogleAccount.updateMany({
+    where: { userId },
+    data: { calendarId },
+  });
   revalidatePath("/settings");
   revalidatePath("/events");
 }
@@ -69,11 +85,14 @@ export async function createManualEvent(formData: FormData): Promise<void> {
   const title = String(formData.get("title") ?? "").trim();
   const datetimeRaw = String(formData.get("eventDatetime") ?? "").trim();
   const memo = String(formData.get("memo") ?? "").trim() || null;
-  const categoryName = String(formData.get("categoryName") ?? "").trim() || "その他";
+  const categoryName = String(formData.get("categoryName") ?? "").trim();
 
   if (!title || !datetimeRaw) redirect("/events?error=missing");
 
-  const category = await getOrCreateCategory(userId, categoryName);
+  // カテゴリ未指定なら自動判定（キーワード→AIで新カテゴリも作られる）
+  const category = categoryName
+    ? await getOrCreateCategory(userId, categoryName)
+    : await resolveCategoryForEvent(userId, title, memo);
   const event = await prisma.event.create({
     data: {
       userId,
@@ -127,6 +146,25 @@ export async function ensureChecklist(eventId: string): Promise<void> {
   const event = await prisma.event.findFirst({ where: { id: eventId, userId } });
   if (!event) return;
   await ensureChecklistForEvent(eventId);
+}
+
+/** チェック（完了）の即時トグル。詳細ページは再描画せず、一覧の集計だけ更新。 */
+export async function toggleChecklistItemDone(
+  itemId: string,
+  isDone: boolean,
+): Promise<void> {
+  const userId = await requireUserId();
+  const item = await prisma.checklistItem.findFirst({
+    where: { id: itemId, event: { userId } },
+    select: { id: true },
+  });
+  if (!item) return;
+  await prisma.checklistItem.update({
+    where: { id: itemId },
+    data: { isDone: Boolean(isDone) },
+  });
+  revalidatePath("/events");
+  revalidatePath("/");
 }
 
 interface SaveChecklistInput {

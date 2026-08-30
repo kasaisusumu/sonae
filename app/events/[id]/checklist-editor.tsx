@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { saveChecklist } from "@/app/actions";
+import { saveChecklist, toggleChecklistItemDone } from "@/app/actions";
 
 interface Item {
   key: string;
+  id: string | null;
   title: string;
   timingLabel: string;
   isDone: boolean;
@@ -12,6 +13,7 @@ interface Item {
 }
 
 interface InitialItem {
+  id: string | null;
   title: string;
   timingLabel: string | null;
   isDone: boolean;
@@ -43,6 +45,7 @@ export function ChecklistEditor({
     () =>
       initialItems.map((it) => ({
         key: nextKey(),
+        id: it.id,
         title: it.title,
         timingLabel: it.timingLabel ?? "",
         isDone: it.isDone,
@@ -61,6 +64,7 @@ export function ChecklistEditor({
     [initialItems],
   );
 
+  // isDone は個別に自動保存するので dirty 判定から除外
   const dirty =
     JSON.stringify(items.map(strip)) !== JSON.stringify(initial.map(strip)) ||
     removedTitles.length > 0;
@@ -70,6 +74,14 @@ export function ChecklistEditor({
       prev.map((it) => (it.key === key ? { ...it, ...patch } : it)),
     );
     setSaved(false);
+  }
+
+  // チェックはその場で保存（「保存する」ボタン不要）
+  function toggleDone(it: Item, next: boolean) {
+    setItems((prev) =>
+      prev.map((x) => (x.key === it.key ? { ...x, isDone: next } : x)),
+    );
+    if (it.id) void toggleChecklistItemDone(it.id, next);
   }
 
   function remove(key: string) {
@@ -90,6 +102,7 @@ export function ChecklistEditor({
       ...prev,
       {
         key: nextKey(),
+        id: null,
         title: "",
         timingLabel: "",
         isDone: false,
@@ -126,7 +139,7 @@ export function ChecklistEditor({
             <input
               type="checkbox"
               checked={it.isDone}
-              onChange={(e) => update(it.key, { isDone: e.target.checked })}
+              onChange={(e) => toggleDone(it, e.target.checked)}
               className="mt-2 h-4 w-4 shrink-0 accent-[var(--teal)]"
               aria-label="完了"
             />
@@ -197,14 +210,13 @@ export function ChecklistEditor({
           </button>
         </div>
       </div>
+      <p className="mt-2 text-[11px] text-muted">
+        チェックは自動保存されます。文言・タイミングの変更は「保存する」で反映＆学習されます。
+      </p>
     </div>
   );
 }
 
 function strip(it: Item) {
-  return {
-    title: it.title.trim(),
-    timingLabel: it.timingLabel.trim(),
-    isDone: it.isDone,
-  };
+  return { title: it.title.trim(), timingLabel: it.timingLabel.trim() };
 }

@@ -25,7 +25,16 @@ export default async function EventsPage({
     prisma.event.findMany({
       where: { userId: user.id },
       orderBy: { eventDatetime: "asc" },
-      include: { category: true, checklistItems: true },
+      select: {
+        id: true,
+        title: true,
+        eventDatetime: true,
+        source: true,
+        categoryId: true,
+        failureWarningAckAt: true,
+        category: { select: { name: true } },
+        checklistItems: { select: { isDone: true } },
+      },
     }),
     prisma.failureLog.findMany({
       where: { userId: user.id, categoryId: { not: null } },
@@ -43,57 +52,51 @@ export default async function EventsPage({
   const account = user.googleAccount;
   const now = new Date();
   const upcoming = events.filter((e) => e.eventDatetime >= now);
-  const past = events.filter((e) => e.eventDatetime < now);
+  const past = [...events.filter((e) => e.eventDatetime < now)].reverse();
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold">予定</h1>
-      </div>
+    <div className="space-y-6">
+      <h1 className="text-xl font-semibold">予定</h1>
 
       {connected === "1" && (
         <p className="rounded-lg bg-accent-soft px-4 py-3 text-sm text-teal-dark">
-          Google カレンダーに接続しました。「カレンダーから取り込む」を押すと予定が読み込まれます。
+          Google カレンダーに接続しました。「カレンダーから取り込む」で予定が読み込まれます。
         </p>
       )}
 
       {/* Google 連携 / 同期 */}
-      <section className="rounded-2xl bg-surface p-5">
+      <section className="rounded-2xl bg-surface p-4">
         {account ? (
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm">
-              <p className="font-medium">{account.googleAccountEmail}</p>
-              <p className="text-xs text-muted">
-                {account.lastSyncedAt
-                  ? `最終取り込み: ${formatDateTime(account.lastSyncedAt)}`
-                  : "まだ取り込んでいません"}
-              </p>
-            </div>
+            <p className="text-xs text-muted">
+              {account.googleAccountEmail}
+              {" ・ "}
+              {account.lastSyncedAt
+                ? `最終取り込み ${formatDateTime(account.lastSyncedAt)}`
+                : "未取り込み"}
+            </p>
             <form action={syncCalendar}>
               <SubmitButton>カレンダーから取り込む</SubmitButton>
             </form>
           </div>
         ) : (
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted">
-              Google カレンダーがまだ接続されていません。
-            </p>
+            <p className="text-sm text-muted">Google カレンダー未接続</p>
             <a
               href="/api/auth/google"
               className="rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white no-underline hover:bg-teal-dark"
             >
-              Google カレンダーと接続
+              接続する
             </a>
           </div>
         )}
       </section>
 
-      {/* 手動登録 */}
-      <section className="rounded-2xl bg-surface p-5">
-        <h2 className="text-sm font-semibold text-muted">手動で予定を追加</h2>
-        <p className="mt-1 text-xs text-muted">
-          カレンダーに入れる前に試したいときに。
-        </p>
+      {/* 手動登録（折りたたみ） */}
+      <details className="rounded-2xl bg-surface p-4">
+        <summary className="cursor-pointer text-sm font-medium text-teal-dark">
+          ＋ 手動で予定を追加
+        </summary>
         <form action={createManualEvent} className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">
             <span className="text-muted">予定タイトル</span>
@@ -114,11 +117,11 @@ export default async function EventsPage({
             />
           </label>
           <label className="text-sm">
-            <span className="text-muted">カテゴリ</span>
+            <span className="text-muted">カテゴリ（空欄で自動判定）</span>
             <input
               name="categoryName"
               list="category-options"
-              defaultValue="その他"
+              placeholder="自動"
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
             />
             <datalist id="category-options">
@@ -139,14 +142,14 @@ export default async function EventsPage({
             <SubmitButton>追加して準備リストを作る</SubmitButton>
           </div>
         </form>
-      </section>
+      </details>
 
-      {/* 予定一覧 */}
-      <section className="space-y-3">
+      {/* これからの予定 */}
+      <section className="space-y-2">
         <h2 className="text-lg font-semibold">これからの予定</h2>
         {upcoming.length === 0 ? (
           <p className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">
-            まだ予定がありません。
+            まだありません。
           </p>
         ) : (
           <ul className="space-y-2">
@@ -164,20 +167,19 @@ export default async function EventsPage({
             ))}
           </ul>
         )}
-
-        {past.length > 0 && (
-          <details className="mt-4">
-            <summary className="cursor-pointer text-sm text-muted">
-              過去の予定（{past.length}）
-            </summary>
-            <ul className="mt-2 space-y-2">
-              {past.map((ev) => (
-                <EventRow key={ev.id} ev={ev} categoryNames={categoryNames} past />
-              ))}
-            </ul>
-          </details>
-        )}
       </section>
+
+      {/* 済んだ予定（チェックリストはいつでも開ける） */}
+      {past.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-lg font-semibold">済んだ予定</h2>
+          <ul className="space-y-2">
+            {past.map((ev) => (
+              <EventRow key={ev.id} ev={ev} categoryNames={categoryNames} past />
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }
@@ -200,13 +202,14 @@ function EventRow({
   past?: boolean;
   warn?: boolean;
 }) {
+  const total = ev.checklistItems.length;
   const done = ev.checklistItems.filter((c) => c.isDone).length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
   return (
-    <li
-      className={`rounded-xl bg-surface p-4 ${past ? "opacity-70" : ""}`}
-    >
+    <li className={`rounded-xl bg-surface p-4 ${past ? "opacity-80" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <Link
             href={`/events/${ev.id}`}
             className="font-medium text-foreground no-underline hover:text-teal-dark"
@@ -221,10 +224,20 @@ function EventRow({
           <p className="text-xs text-muted">
             {formatDateShort(ev.eventDatetime)}
             {ev.source === "google" ? " ・ Google" : " ・ 手動"}
-            {ev.checklistItems.length > 0
-              ? ` ・ 準備 ${done}/${ev.checklistItems.length}`
-              : ""}
           </p>
+          {total > 0 && (
+            <div className="mt-2 flex items-center gap-2">
+              <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-muted">
+                <div
+                  className="h-full rounded-full bg-accent"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="shrink-0 text-[11px] text-muted">
+                準備 {done}/{total}
+              </span>
+            </div>
+          )}
         </div>
         <CategorySelect
           eventId={ev.id}

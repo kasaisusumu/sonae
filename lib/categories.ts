@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { classifyEventCategory } from "@/lib/categorize-ai";
 
 // 仕様書のカテゴリ例。ユーザーは後から自由に追加・変更できる。
 export const DEFAULT_CATEGORIES = [
@@ -68,6 +69,40 @@ export async function ensureDefaultCategories(userId: string): Promise<void> {
   await prisma.category.createMany({
     data: DEFAULT_CATEGORIES.map((name) => ({ userId, name })),
   });
+}
+
+/**
+ * 予定に対するカテゴリを決めて、そのカテゴリ行を返す（無ければ作成）。
+ * 1) キーワード規則で決まればそれを使う（高速）
+ * 2) 決まらなければ OpenAI で既存カテゴリから選ぶ or 新カテゴリ名を作る
+ *    → カテゴリが内容に応じて自動で増えていく
+ * 3) それも駄目なら「その他」
+ */
+export async function resolveCategoryForEvent(
+  userId: string,
+  title: string | null | undefined,
+  description?: string | null,
+  useAi = true,
+) {
+  const byRule = inferCategoryName(title, description);
+  if (byRule !== FALLBACK_CATEGORY) {
+    return getOrCreateCategory(userId, byRule);
+  }
+  if (!useAi) {
+    return getOrCreateCategory(userId, FALLBACK_CATEGORY);
+  }
+
+  const existing = await prisma.category.findMany({
+    where: { userId },
+    select: { name: true },
+  });
+  const aiName = await classifyEventCategory({
+    title: title ?? "(タイトルなし)",
+    description,
+    existingCategories: existing.map((c) => c.name),
+  });
+
+  return getOrCreateCategory(userId, aiName || FALLBACK_CATEGORY);
 }
 
 /** 名前でカテゴリを取得。なければ作成して返す。 */

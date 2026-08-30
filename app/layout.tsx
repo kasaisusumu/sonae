@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
-import { getCurrentUser } from "@/lib/session";
+import { getSessionUserId } from "@/lib/session";
 import { logout } from "@/app/actions";
 import { FeedbackWidget } from "@/app/components/feedback-widget";
 import { SwRegister } from "@/app/components/sw-register";
@@ -41,7 +41,8 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getCurrentUser();
+  // レイアウトはログイン有無だけ判定（DB アクセスなし＝毎回のページ遷移を軽く）
+  const isLoggedIn = (await getSessionUserId()) !== null;
 
   return (
     <html lang="ja" className={`${geistSans.variable} h-full`}>
@@ -56,7 +57,7 @@ export default async function RootLayout({
                 予定の準備、わすれない
               </span>
             </Link>
-            {user ? (
+            {isLoggedIn ? (
               <nav className="hidden items-center gap-4 text-sm sm:flex">
                 <Link href="/events" className="text-foreground no-underline hover:text-teal-dark">
                   予定
@@ -87,11 +88,11 @@ export default async function RootLayout({
         <footer className="border-t bg-surface">
           <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-5 py-4 text-xs text-muted">
             <span>そなえ MVP — 検証用プロトタイプ。表示される金額はすべて推定値です。</span>
-            {user ? <FeedbackWidget /> : null}
+            {isLoggedIn ? <FeedbackWidget /> : null}
           </div>
         </footer>
 
-        {user ? <BottomNav /> : null}
+        {isLoggedIn ? <BottomNav /> : null}
       </body>
     </html>
   );

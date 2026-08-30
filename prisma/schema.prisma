@@ -54,6 +54,12 @@ model UserGoogleAccount {
   tokenExpiry        DateTime?
   calendarId         String    @default("primary")
   lastSyncedAt       DateTime?
+  // 差分同期トークン（events.list の nextSyncToken）
+  syncToken          String?
+  // Google Calendar push 通知（watch チャンネル）
+  watchChannelId     String?
+  watchResourceId    String?
+  watchExpiration    DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }
@@ -86,6 +92,8 @@ model Event {
   source        String    @default("manual") // "google" | "manual"
   // 再発防止の警告をユーザーが確認・了承した日時（設定されると警告は畳まれる）
   failureWarningAckAt DateTime?
+  // 新規追加の通知を送った日時（アプリを開いたときの準備リスト先行生成にも使う）
+  notifiedAt    DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

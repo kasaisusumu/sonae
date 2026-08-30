@@ -1,15 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { syncUserCalendar } from "@/lib/sync";
-import { sendPushToUser } from "@/lib/push";
+import { syncAndNotify } from "@/lib/sync";
+import { ensureWatch } from "@/lib/google";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
- * 全ユーザーの Google カレンダーを取り込み、新規予定があれば通知する。
- * 定期実行（GitHub Actions 等）から数分おきに叩く想定。
+ * 全ユーザーのカレンダーを差分同期し、新規予定を通知する保険のポーリング。
+ * あわせて push 通知の watch チャンネルを期限前に張り直す。
+ * 定期実行から:
  *   curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" "$APP_BASE_URL/api/cron/poll"
  * ※ 前後の空白・改行はコピペ事故対策で無視する。
  */
@@ -21,7 +22,6 @@ async function handler(req: NextRequest) {
     ""
   ).trim();
   if (!expected || provided !== expected) {
-    // 値は返さず、切り分け用に「設定有無」と「長さ」だけ返す
     return NextResponse.json(
       {
         error: "forbidden",
@@ -39,27 +39,18 @@ async function handler(req: NextRequest) {
 
   let totalNew = 0;
   let notified = 0;
+  let watches = 0;
   let errors = 0;
 
   for (const { userId } of accounts) {
     try {
-      const result = await syncUserCalendar(userId);
+      const result = await syncAndNotify(userId);
       totalNew += result.newEvents.length;
-
-      if (!result.isFirstSync) {
-        for (const ev of result.newEvents) {
-          const r = await sendPushToUser(userId, {
-            title: "新しい予定が追加されました",
-            body: `「${ev.title}」の準備リストを確認しましょう`,
-            url: `/events/${ev.id}`,
-            tag: `event-${ev.id}`,
-          });
-          notified += r.sent;
-        }
-      }
+      notified += result.isFirstSync ? 0 : result.newEvents.length;
+      if (await ensureWatch(userId)) watches++;
     } catch (e) {
       errors++;
-      console.error("[cron/poll] userId=%s の同期に失敗", userId, e);
+      console.error("[cron/poll] userId=%s の処理に失敗", userId, e);
     }
   }
 
@@ -68,6 +59,7 @@ async function handler(req: NextRequest) {
     accounts: accounts.length,
     totalNew,
     notified,
+    watches,
     errors,
     at: new Date().toISOString(),
   });

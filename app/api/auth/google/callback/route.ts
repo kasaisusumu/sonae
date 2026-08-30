@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { exchangeCode } from "@/lib/google";
+import { exchangeCode, ensureWatch } from "@/lib/google";
 import { setSession } from "@/lib/session";
 import { ensureDefaultCategories } from "@/lib/categories";
 
 export const runtime = "nodejs";
+export const maxDuration = 30;
 
 function appBase(req: NextRequest): string {
   return process.env.APP_BASE_URL || req.nextUrl.origin;
@@ -57,6 +58,11 @@ export async function GET(req: NextRequest) {
 
     await ensureDefaultCategories(user.id);
     await setSession(user.id);
+
+    // カレンダー変更の即時通知（push watch）を登録。失敗してもポーリングで代替。
+    await ensureWatch(user.id).catch((e) =>
+      console.error("[auth/callback] ensureWatch 失敗:", e),
+    );
 
     return NextResponse.redirect(`${base}/events?connected=1`);
   } catch (e) {

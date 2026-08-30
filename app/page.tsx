@@ -1,9 +1,14 @@
 import Link from "next/link";
+import { after } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatYen } from "@/lib/format";
 import { isDevLoginEnabled } from "@/lib/dev-login";
 import { getUpcomingWarnings } from "@/lib/failures";
+import { primeNotifiedChecklists } from "@/lib/checklist";
+
+// after() で準備リストを先行生成することがあるため長めに
+export const maxDuration = 60;
 
 export default async function HomePage({
   searchParams,
@@ -66,7 +71,13 @@ export default async function HomePage({
       where: { userId: user.id, eventDatetime: { gte: now } },
       orderBy: { eventDatetime: "asc" },
       take: 5,
-      include: { category: true, checklistItems: true },
+      select: {
+        id: true,
+        title: true,
+        eventDatetime: true,
+        category: { select: { name: true } },
+        checklistItems: { select: { isDone: true } },
+      },
     }),
     prisma.savingsEntry.aggregate({
       where: {
@@ -80,6 +91,9 @@ export default async function HomePage({
   ]);
 
   const monthlySavings = savingsAgg._sum.amountYen ?? 0;
+
+  // 表示後に、通知済みで準備リスト未作成の予定を先行生成（レスポンスはブロックしない）
+  after(() => primeNotifiedChecklists(user.id));
 
   return (
     <div className="space-y-8">

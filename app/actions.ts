@@ -8,8 +8,9 @@ import {
   getOrCreateCategory,
   resolveCategoryForEvent,
 } from "@/lib/categories";
-import { syncUserCalendar } from "@/lib/sync";
+import { syncAndNotify } from "@/lib/sync";
 import { sendPushToUser } from "@/lib/push";
+import { ensureWatch, stopWatch } from "@/lib/google";
 import {
   ensureChecklistForEvent,
   generateAndSaveChecklist,
@@ -36,6 +37,7 @@ export async function logout(): Promise<void> {
 /** Google 連携を解除する（トークンを削除）。予定データは残す。 */
 export async function disconnectGoogle(): Promise<void> {
   const userId = await requireUserId();
+  await stopWatch(userId).catch(() => {});
   await prisma.userGoogleAccount.deleteMany({ where: { userId } });
   revalidatePath("/settings");
   revalidatePath("/events");
@@ -54,28 +56,18 @@ export async function setCalendarId(formData: FormData): Promise<void> {
   revalidatePath("/events");
 }
 
-/** Google カレンダーから予定を取り込む（手動同期ボタン）。 */
+/** Google カレンダーから予定を取り込む（手動同期ボタン）。自動通知の watch も張り直す。 */
 export async function syncCalendar(): Promise<void> {
   const userId = await requireUserId();
   const account = await prisma.userGoogleAccount.findUnique({ where: { userId } });
   if (!account) redirect("/settings");
 
-  const result = await syncUserCalendar(userId);
-
-  // 初回取り込みでは大量に通知が飛ぶため送らない。以降の新規予定のみ通知。
-  if (!result.isFirstSync) {
-    for (const ev of result.newEvents) {
-      await sendPushToUser(userId, {
-        title: "新しい予定が追加されました",
-        body: `「${ev.title}」の準備リストを確認しましょう`,
-        url: `/events/${ev.id}`,
-        tag: `event-${ev.id}`,
-      });
-    }
-  }
+  await syncAndNotify(userId);
+  await ensureWatch(userId).catch(() => {});
 
   revalidatePath("/events");
   revalidatePath("/");
+  revalidatePath("/settings");
 }
 
 /** 手動で予定を登録し、準備リストを生成する。 */

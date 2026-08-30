@@ -1,7 +1,16 @@
-import { google } from "googleapis";
+import crypto from "node:crypto";
+import { google, type calendar_v3 } from "googleapis";
 import { prisma } from "@/lib/prisma";
 
 type OAuth2Client = InstanceType<typeof google.auth.OAuth2>;
+
+export function appBaseUrl(): string {
+  return (
+    process.env.APP_BASE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
+    "http://localhost:3000"
+  ).replace(/\/$/, "");
+}
 
 export const GOOGLE_SCOPES = [
   "openid",
@@ -105,42 +114,84 @@ export interface FetchedEvent {
   end: Date | null;
 }
 
-/** 直近〜将来の予定を取得する（過去 1 日 〜 先 60 日）。 */
-export async function fetchUpcomingEvents(userId: string): Promise<{
-  events: FetchedEvent[];
-  calendarId: string;
-}> {
+export interface CalendarChanges {
+  upserts: FetchedEvent[];
+  deletedIds: string[];
+  nextSyncToken: string | null;
+  wasFullSync: boolean;
+}
+
+function toFetched(item: calendar_v3.Schema$Event): FetchedEvent | null {
+  const startRaw = item.start?.dateTime ?? item.start?.date;
+  if (!item.id || !startRaw) return null;
+  const endRaw = item.end?.dateTime ?? item.end?.date ?? null;
+  return {
+    googleEventId: item.id,
+    title: item.summary?.trim() || "(タイトルなし)",
+    description: item.description?.trim() || null,
+    start: new Date(startRaw),
+    end: endRaw ? new Date(endRaw) : null,
+  };
+}
+
+/**
+ * 前回の syncToken があれば差分だけ、無ければ直近〜先60日を全件取得する。
+ * syncToken 失効(410)時は自動で全件取得にフォールバック。
+ */
+export async function fetchCalendarChanges(userId: string): Promise<CalendarChanges> {
   const { calendar, account } = await getCalendarClient(userId);
-  const timeMin = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
-  const timeMax = new Date(
-    Date.now() + 1000 * 60 * 60 * 24 * 60,
-  ).toISOString();
+  const calendarId = account.calendarId || "primary";
 
-  const res = await calendar.events.list({
-    calendarId: account.calendarId || "primary",
-    timeMin,
-    timeMax,
-    singleEvents: true,
-    orderBy: "startTime",
-    maxResults: 100,
-  });
+  async function run(syncToken: string | null): Promise<CalendarChanges> {
+    const upserts: FetchedEvent[] = [];
+    const deletedIds: string[] = [];
+    let pageToken: string | undefined;
+    let nextSyncToken: string | null = null;
 
-  const events: FetchedEvent[] = [];
-  for (const item of res.data.items ?? []) {
-    if (!item.id || item.status === "cancelled") continue;
-    const startRaw = item.start?.dateTime ?? item.start?.date;
-    if (!startRaw) continue;
-    const endRaw = item.end?.dateTime ?? item.end?.date ?? null;
-    events.push({
-      googleEventId: item.id,
-      title: item.summary?.trim() || "(タイトルなし)",
-      description: item.description?.trim() || null,
-      start: new Date(startRaw),
-      end: endRaw ? new Date(endRaw) : null,
-    });
+    do {
+      const params: calendar_v3.Params$Resource$Events$List = {
+        calendarId,
+        singleEvents: true,
+        showDeleted: true,
+        maxResults: 250,
+        pageToken,
+      };
+      if (syncToken) {
+        params.syncToken = syncToken;
+      } else {
+        params.timeMin = new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString();
+        params.timeMax = new Date(
+          Date.now() + 1000 * 60 * 60 * 24 * 60,
+        ).toISOString();
+      }
+
+      const res = await calendar.events.list(params);
+      for (const item of res.data.items ?? []) {
+        if (item.status === "cancelled") {
+          if (item.id) deletedIds.push(item.id);
+        } else {
+          const f = toFetched(item);
+          if (f) upserts.push(f);
+        }
+      }
+      pageToken = res.data.nextPageToken ?? undefined;
+      nextSyncToken = res.data.nextSyncToken ?? nextSyncToken;
+    } while (pageToken);
+
+    return { upserts, deletedIds, nextSyncToken, wasFullSync: !syncToken };
   }
 
-  return { events, calendarId: account.calendarId || "primary" };
+  try {
+    return await run(account.syncToken ?? null);
+  } catch (err: unknown) {
+    const e = err as { code?: number | string; response?: { status?: number } };
+    const status = Number(e?.code ?? e?.response?.status ?? 0);
+    if (account.syncToken && status === 410) {
+      // syncToken 失効 → 全件でやり直し
+      return run(null);
+    }
+    throw err;
+  }
 }
 
 export interface CalendarChoice {
@@ -161,4 +212,104 @@ export async function listCalendars(userId: string): Promise<CalendarChoice[]> {
       primary: Boolean(c.primary),
     }))
     .sort((a, b) => Number(b.primary) - Number(a.primary));
+}
+
+// ── Google Calendar push 通知（watch チャンネル）────────────────
+
+/** webhook で本人確認するための共有トークン（チャンネルごと固定）。 */
+function watchToken(userId: string): string {
+  const secret = process.env.CRON_SECRET || process.env.SESSION_SECRET || "sonae";
+  return crypto.createHmac("sha256", secret).update(`watch:${userId}`).digest("hex");
+}
+
+export function verifyWatchToken(userId: string, token: string | null): boolean {
+  if (!token) return false;
+  const expected = watchToken(userId);
+  return (
+    token.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected))
+  );
+}
+
+/**
+ * カレンダー変更の push 通知チャンネルを（再）登録する。
+ * ドメイン未確認などで失敗しても throw せず false を返す（ポーリングが保険）。
+ */
+export async function ensureWatch(userId: string): Promise<boolean> {
+  const { calendar, account } = await getCalendarClient(userId);
+
+  // まだ十分先まで有効なら何もしない
+  if (
+    account.watchChannelId &&
+    account.watchExpiration &&
+    account.watchExpiration.getTime() - Date.now() > 1000 * 60 * 60 * 24
+  ) {
+    return true;
+  }
+
+  // 古いチャンネルを止める（ベストエフォート）
+  if (account.watchChannelId && account.watchResourceId) {
+    try {
+      await calendar.channels.stop({
+        requestBody: {
+          id: account.watchChannelId,
+          resourceId: account.watchResourceId,
+        },
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const channelId = crypto.randomUUID();
+  try {
+    const res = await calendar.events.watch({
+      calendarId: account.calendarId || "primary",
+      requestBody: {
+        id: channelId,
+        type: "web_hook",
+        address: `${appBaseUrl()}/api/google/webhook`,
+        token: watchToken(userId),
+        params: { ttl: `${60 * 60 * 24 * 7}` }, // 7 日
+      },
+    });
+    const expMs = res.data.expiration ? Number(res.data.expiration) : Date.now() + 6 * 864e5;
+    await prisma.userGoogleAccount.update({
+      where: { userId },
+      data: {
+        watchChannelId: channelId,
+        watchResourceId: res.data.resourceId ?? null,
+        watchExpiration: new Date(expMs),
+      },
+    });
+    return true;
+  } catch (err) {
+    console.error("[google] events.watch 登録に失敗（ポーリングで代替）:", err);
+    await prisma.userGoogleAccount.update({
+      where: { userId },
+      data: {
+        watchChannelId: null,
+        watchResourceId: null,
+        watchExpiration: null,
+      },
+    });
+    return false;
+  }
+}
+
+/** 連携解除時などに watch を止める。 */
+export async function stopWatch(userId: string): Promise<void> {
+  const account = await prisma.userGoogleAccount.findUnique({ where: { userId } });
+  if (!account?.watchChannelId || !account.watchResourceId) return;
+  try {
+    const { calendar } = await getCalendarClient(userId);
+    await calendar.channels.stop({
+      requestBody: {
+        id: account.watchChannelId,
+        resourceId: account.watchResourceId,
+      },
+    });
+  } catch {
+    /* ignore */
+  }
 }

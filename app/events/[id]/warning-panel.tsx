@@ -39,12 +39,22 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
       <ul className="mt-4 space-y-4">
         {logs.map((log) => (
           <li key={log.id} className="rounded-xl bg-surface p-4">
-            <p className="whitespace-pre-wrap text-sm">{log.description}</p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="whitespace-pre-wrap text-sm">{log.description}</p>
+              {log.occurredCount > 1 && (
+                <span className="shrink-0 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] font-medium text-warn">
+                  {log.occurredCount}回
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-xs text-muted">
-              {log.occurredAt.toLocaleDateString("ja-JP")}
+              直近 {log.lastOccurredAt.toLocaleDateString("ja-JP")}
               {log.fromEventTitle ? ` ・ 「${log.fromEventTitle}」のとき` : ""}
               {log.estimatedLossYen > 0
                 ? ` ・ 推定損失 ${formatYen(log.estimatedLossYen)}`
+                : ""}
+              {log.preventedCount > 0
+                ? ` ・ これまで ${log.preventedCount}回は防げた`
                 : ""}
             </p>
 

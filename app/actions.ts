@@ -24,6 +24,7 @@ import {
   type GeneratedItem,
 } from "@/lib/learning";
 import { extractEventFeature } from "@/lib/features";
+import { featureSignature } from "@/lib/signature";
 
 async function requireUserId(): Promise<string> {
   const userId = await getSessionUserId();
@@ -418,7 +419,14 @@ export async function createFailureLog(formData: FormData): Promise<void> {
   const linkedEvent = eventId
     ? await prisma.event.findFirst({
         where: { id: eventId, userId },
-        select: { id: true, categoryId: true, eventDatetime: true },
+        select: {
+          id: true,
+          categoryId: true,
+          title: true,
+          memo: true,
+          eventDatetime: true,
+          endDatetime: true,
+        },
       })
     : null;
 
@@ -426,11 +434,24 @@ export async function createFailureLog(formData: FormData): Promise<void> {
     ? await getOrCreateCategory(userId, categoryName)
     : null;
 
+  // 予定に紐づくなら、その予定の特徴シグネチャをその場で確定（学習と同じ粒度）
+  const featureSig = linkedEvent
+    ? featureSignature(
+        extractEventFeature({
+          title: linkedEvent.title,
+          memo: linkedEvent.memo,
+          eventDatetime: linkedEvent.eventDatetime,
+          endDatetime: linkedEvent.endDatetime,
+        }),
+      )
+    : "{}";
+
   await prisma.failureLog.create({
     data: {
       userId,
       categoryId: category?.id ?? linkedEvent?.categoryId ?? null,
       eventId: linkedEvent?.id ?? null,
+      featureSignature: featureSig,
       description,
       estimatedLossYen,
       occurredAt: occurredAtRaw
@@ -463,11 +484,20 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
     where: { userId, eventId, description: template.description },
   });
   if (!dup) {
+    const featureSig = featureSignature(
+      extractEventFeature({
+        title: event.title,
+        memo: event.memo,
+        eventDatetime: event.eventDatetime,
+        endDatetime: event.endDatetime,
+      }),
+    );
     await prisma.failureLog.create({
       data: {
         userId,
         categoryId: event.categoryId ?? template.categoryId ?? null,
         eventId: event.id,
+        featureSignature: featureSig,
         description: template.description,
         estimatedLossYen: template.estimatedLossYen,
         occurredAt: event.eventDatetime,
@@ -476,6 +506,7 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
   }
 
   revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events/[id]", "page");
   revalidatePath("/failures");
   revalidatePath("/");
 }

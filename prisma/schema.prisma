@@ -208,6 +208,9 @@ model FailureLog {
   event            Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
   // 失敗の内容（自由記述）。「遅刻した」「保険証を忘れた」など。金額はなくてよい
   description      String
+  // 予定の特徴シグネチャ（spec 9.2 の {d,o,w,t}）。記録時にその場で確定する。
+  // "{}" は「予定に紐づかない＝カテゴリ全体」を意味し、どの予定にも当たる。
+  featureSignature String   @default("{}")
   // 推定損失額（円・任意。0 のままでもよい）
   estimatedLossYen Int      @default(0)
   occurredAt       DateTime @default(now())

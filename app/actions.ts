@@ -413,7 +413,7 @@ export async function createFailureLog(formData: FormData): Promise<void> {
   const occurredAtRaw = String(formData.get("occurredAt") ?? "").trim();
   const eventId = String(formData.get("eventId") ?? "").trim() || null;
 
-  if (!description) redirect("/failures?error=missing");
+  if (!description) return;
 
   const linkedEvent = eventId
     ? await prisma.event.findFirst({
@@ -442,6 +442,7 @@ export async function createFailureLog(formData: FormData): Promise<void> {
   revalidatePath("/failures");
   revalidatePath("/");
   revalidatePath("/events");
+  if (linkedEvent) revalidatePath("/events/[id]", "page");
 }
 
 /** 事後の警告で「今回もやってしまった」を1タップ記録（同じ内容で、この予定に紐づけて追記）。 */

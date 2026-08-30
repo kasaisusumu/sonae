@@ -32,21 +32,36 @@ self.addEventListener("notificationclick", (event) => {
   const targetUrl = new URL(targetPath, self.location.origin).href;
 
   event.waitUntil(
-    self.clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((clientList) => {
-        // 既にアプリの窓が開いていれば、それを対象ページへ移動してフォーカス
-        for (const client of clientList) {
-          if (client.url.startsWith(self.location.origin) && "focus" in client) {
-            return client
-              .focus()
-              .then(() =>
-                "navigate" in client ? client.navigate(targetUrl) : client,
-              );
+    (async () => {
+      const all = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+
+      // 1) 既に目的のページを開いている窓があればフォーカスするだけ
+      for (const c of all) {
+        if (c.url === targetUrl && "focus" in c) return c.focus();
+      }
+
+      // 2) 同一オリジンの窓があれば、その窓を目的ページへ移動する
+      for (const c of all) {
+        if (!c.url.startsWith(self.location.origin)) continue;
+        if (typeof c.navigate === "function") {
+          try {
+            await c.navigate(targetUrl);
+            return c.focus();
+          } catch {
+            /* navigate 不可の環境（iOS PWA 等）は下のフォールバックへ */
           }
         }
-        // 無ければ新しく開く（インストール済み PWA なら PWA で開く）
-        if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
-      }),
+        await c.focus().catch(() => {});
+        return self.clients.openWindow
+          ? self.clients.openWindow(targetUrl)
+          : undefined;
+      }
+
+      // 3) 開いている窓が無ければ新しく開く（インストール済み PWA なら PWA で開く）
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+    })(),
   );
 });

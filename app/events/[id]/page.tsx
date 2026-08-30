@@ -10,6 +10,7 @@ import {
   ChecklistSection,
   ChecklistSectionSkeleton,
 } from "./checklist-section";
+import { EventFailureLog } from "./event-failure-log";
 
 // 初回表示時に準備リストを OpenAI で生成することがあるため長めに
 export const maxDuration = 60;
@@ -88,6 +89,8 @@ export default async function EventDetailPage({
           }}
         />
       </Suspense>
+
+      <EventFailureLog eventId={event.id} />
     </div>
   );
 }

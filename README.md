@@ -18,7 +18,7 @@
 ```bash
 npm install
 cp .env.example .env         # DATABASE_URL / DIRECT_URL に Neon の接続文字列を入れる
-npx prisma migrate deploy    # Neon にテーブル作成（初回のみ）
+npm run db:deploy            # Neon にテーブル作成（初回・スキーマ変更時）
 npm run dev                  # http://localhost:3000
 ```
 
@@ -62,7 +62,7 @@ Google 連携なしで試すには、トップページの「開発用ログイ�
 | コマンド | 内容 |
 | --- | --- |
 | `npm run dev` | 開発サーバー |
-| `npm run build` | `prisma generate` + `prisma migrate deploy` + `next build` |
+| `npm run build` | `prisma generate` + `next build` |
 | `npm start` | 本番サーバー |
 | `npm run db:migrate` | `prisma migrate dev`（スキーマ変更時） |
 | `npm run db:deploy` | `prisma migrate deploy` |

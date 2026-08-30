@@ -1,0 +1,30 @@
+name: poll-calendar
+
+# 新規予定を検知して通知するために、数分おきに本番の /api/cron/poll を叩く。
+# GitHub の cron は最短5分間隔で、混雑時は数分〜十数分遅れることがある（プロトタイプ用途では許容）。
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: poll-calendar
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger /api/cron/poll
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_BASE_URL / CRON_SECRET secrets are not set"; exit 1
+          fi
+          code=$(curl -sS -o /tmp/body -w "%{http_code}" -X POST \
+            -H "x-cron-secret: $CRON_SECRET" \
+            "${APP_BASE_URL%/}/api/cron/poll")
+          echo "HTTP $code"; cat /tmp/body; echo
+          [ "$code" = "200" ]

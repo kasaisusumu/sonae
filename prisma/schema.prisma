@@ -1,16 +1,17 @@
-// そなえ MVP — Prisma schema (SQLite for local/prototype; migrate to Postgres later)
+// そなえ MVP — Prisma schema (PostgreSQL: 本番 Neon / ローカルも Neon 可)
 // Data model follows docs/CLAUDE.md section 4.
 
 generator client {
   provider = "prisma-client-js"
   output   = "../generated/prisma"
-  // 本番デプロイ先(Linux)に合わせて調整。Debian系PaaS + Alpine系Dockerを想定。
-  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+  // native = ローカル、rhel-openssl-3.0.x = Vercel(サーバーレス)
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // アプリ実行用（Neon の pooled 接続文字列）
+  directUrl = env("DIRECT_URL")   // マイグレーション用（Neon の直結 接続文字列）
 }
 
 model User {

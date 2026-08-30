@@ -15,6 +15,8 @@ function oneLine(s: string): string {
 
 const CHECK_DONE = "☑";
 const CHECK_TODO = "☐";
+// コメント行の字下げ（半角スペース）。行頭が空白の行はコメントとして扱う。
+const COMMENT_INDENT = "    ";
 
 /**
  * 既存の説明欄から自アプリのブロックを取り除く（ユーザーが書いた内容だけ残す）。
@@ -48,8 +50,8 @@ function bullet(it: DescItem): string {
   // 完了はチェック済みアイコン、未完了は空ボックス。取り消し線などの装飾は使わない
   const main = `${it.isDone ? CHECK_DONE : CHECK_TODO} ${label}`;
   const c = it.comment?.trim();
-  // コメントはすぐ下に段下げ
-  return c ? `${main}\n  ↳ ${oneLine(c)}` : main;
+  // コメントはすぐ下の行に字下げ（行頭の空白がコメントの目印）
+  return c ? `${main}\n${COMMENT_INDENT}${oneLine(c)}` : main;
 }
 
 /**
@@ -128,7 +130,10 @@ export function parseSonaeBlock(desc: string | null | undefined): {
   let kind: "task" | "belonging" = "task";
 
   for (const rawLine of body.split("\n")) {
-    const line = rawLine.replace(/　/g, " ").trim();
+    // 行頭の字下げ（半角/全角スペース・タブ・ノーブレークスペース）を検出してから整形する
+    const probe = rawLine.replace(/[　 ]/g, " ");
+    const indented = /^[ \t]+\S/.test(probe);
+    const line = probe.trim();
     if (!line) continue;
 
     if (/^【\s*準備すること\s*】$/.test(line)) {
@@ -141,10 +146,21 @@ export function parseSonaeBlock(desc: string | null | undefined): {
     }
     if (/^準備リスト\s*[:：]/.test(line) || /^https?:\/\//.test(line)) continue;
 
-    // コメント行（↳ / └ / -> のあと）→ 直前の項目に付ける
+    // 行頭が記号（チェックボックス・箇条書き・番号）、または末尾が「（…）」＝タイミング付き項目
+    const startsAsItem =
+      BOX_OR_BULLET.test(line) ||
+      /^\d+[.)]\s*/.test(line) ||
+      /[（(][^（()）]{1,12}[）)]\s*$/.test(line);
+
+    // コメント行 = 旧「↳ / └ / -> / →」マーカー、または「行頭が空白で字下げされた非項目行」。
+    // 直前の項目に付ける（複数行あれば空白でつなぐ）。コメントは学習しない。
     const cm = line.match(/^(?:↳|└|->|»|→)\s*(.+)$/);
-    if (cm) {
-      if (items.length) items[items.length - 1].comment = cm[1].trim();
+    if (cm || (indented && !startsAsItem)) {
+      const text = (cm ? cm[1] : line).trim();
+      if (items.length && text) {
+        const prev = items[items.length - 1];
+        prev.comment = prev.comment ? `${prev.comment} ${text}` : text;
+      }
       continue;
     }
 

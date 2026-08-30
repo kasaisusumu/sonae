@@ -27,7 +27,8 @@ export default async function FailuresPage() {
       include: { category: true, event: { select: { title: true } } },
     }),
     prisma.event.findMany({
-      where: { userId: user.id },
+      // 失敗 log は「もう起きたこと」なので、選べるのは過去の予定だけ
+      where: { userId: user.id, eventDatetime: { lte: new Date() } },
       orderBy: { eventDatetime: "desc" },
       take: 80,
       select: { id: true, title: true, eventDatetime: true },
@@ -62,7 +63,7 @@ export default async function FailuresPage() {
             />
           </label>
           <label className="text-sm sm:col-span-2">
-            <span className="text-muted">どの予定で起きた？（任意）</span>
+            <span className="text-muted">どの予定で起きた？（過去の予定・任意）</span>
             <select
               name="eventId"
               defaultValue=""

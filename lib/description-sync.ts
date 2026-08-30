@@ -30,7 +30,14 @@ export async function syncEventDescription(eventId: string): Promise<void> {
       },
     },
   });
-  if (!event || event.source !== "google" || !event.googleEventId) return;
+  if (
+    !event ||
+    event.source !== "google" ||
+    !event.googleEventId ||
+    !event.autoManaged
+  ) {
+    return;
+  }
 
   const account = await prisma.userGoogleAccount.findUnique({
     where: { userId: event.userId },

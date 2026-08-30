@@ -39,7 +39,8 @@ export async function applyInboundDescription(
     where: { userId: event.userId },
     select: { writeDescriptionEnabled: true },
   });
-  if (!account?.writeDescriptionEnabled) {
+  // 自動管理外（連携時に既にあった予定）や書き込み無効なら、memo の更新だけ
+  if (!account?.writeDescriptionEnabled || !event.autoManaged) {
     if (memoPart !== event.memo) {
       await prisma.event.update({ where: { id: eventId }, data: { memo: memoPart } });
     }

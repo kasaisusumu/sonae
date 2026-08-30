@@ -36,6 +36,14 @@ function parseYen(raw: FormDataEntryValue | null): number {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
+/** アプリで能動的に触った予定は、以後の自動管理（説明欄同期）の対象にする。 */
+function markAutoManaged(eventId: string) {
+  return prisma.event.updateMany({
+    where: { id: eventId, autoManaged: false },
+    data: { autoManaged: true },
+  });
+}
+
 export async function logout(): Promise<void> {
   await clearSession();
   redirect("/");
@@ -146,6 +154,7 @@ export async function regenerateChecklist(formData: FormData): Promise<void> {
   if (!event) return;
 
   await generateAndSaveChecklist(eventId);
+  await markAutoManaged(eventId);
   after(() => syncEventDescription(eventId));
   revalidatePath(`/events/${eventId}`);
 }
@@ -174,6 +183,7 @@ export async function toggleChecklistItemDone(
     data: { isDone: Boolean(isDone) },
   });
   // 完了状態をカレンダー説明欄（取り消し線）にも反映
+  await markAutoManaged(item.eventId);
   after(() => syncEventDescription(item.eventId));
   revalidatePath("/events");
   revalidatePath("/");
@@ -271,6 +281,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     });
   }
 
+  await markAutoManaged(input.eventId);
   after(() => syncEventDescription(input.eventId));
   revalidatePath(`/events/${input.eventId}`);
   revalidatePath("/events");
@@ -311,6 +322,7 @@ export async function acceptSuggestion(itemId: string): Promise<void> {
   }
 
   if (item.suggestionRuleId) await confirmRule(item.suggestionRuleId);
+  await markAutoManaged(item.eventId);
   after(() => syncEventDescription(item.eventId));
   revalidatePath(`/events/${item.eventId}`);
   revalidatePath("/events");
@@ -340,6 +352,7 @@ export async function rejectSuggestion(itemId: string): Promise<void> {
   }
 
   if (item.suggestionRuleId) await contradictRule(item.suggestionRuleId);
+  await markAutoManaged(item.eventId);
   after(() => syncEventDescription(item.eventId));
   revalidatePath(`/events/${item.eventId}`);
   revalidatePath("/events");

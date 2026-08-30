@@ -110,20 +110,22 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
   }
 
   for (const ev of candidates) {
-    if (newEvents.length >= MAX_NEW_PER_RUN) break;
+    // 連携直後の初回取り込みは既存予定 → 件数上限なしで全部入れるが「自動管理しない」
+    if (!isFirstSync && newEvents.length >= MAX_NEW_PER_RUN) break;
     if (ev.recurringEventId) {
       const c = seriesCount.get(ev.recurringEventId) ?? 0;
       if (c >= MAX_PER_SERIES) continue;
       seriesCount.set(ev.recurringEventId, c + 1);
     }
 
+    // 初回は AI カテゴリ判定を使わない（キーワードのみ・高速）
     const category = await resolveCategoryForEvent(
       userId,
       ev.title,
       ev.description,
-      aiBudget > 0,
+      !isFirstSync && aiBudget > 0,
     );
-    if (aiBudget > 0) aiBudget--;
+    if (!isFirstSync && aiBudget > 0) aiBudget--;
     try {
       const created = await prisma.event.create({
         data: {
@@ -133,6 +135,7 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
           eventDatetime: ev.start,
           endDatetime: ev.end,
           recurringEventId: ev.recurringEventId,
+          autoManaged: !isFirstSync, // 既存予定は自動管理の対象外
           memo: stripSonaeBlock(ev.description) || null,
           googleEventId: ev.googleEventId,
           source: "google",

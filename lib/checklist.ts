@@ -95,6 +95,7 @@ export async function primeNotifiedChecklists(
     where: {
       userId,
       source: "google",
+      autoManaged: true,
       eventDatetime: { gte: new Date() },
       checklistItems: { none: {} },
     },

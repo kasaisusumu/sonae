@@ -36,6 +36,46 @@ const TIMING_PRESETS = [
 let counter = 0;
 const nextKey = () => `it-${counter++}`;
 
+const normTitle = (s: string) => s.toLowerCase().replace(/\s+/g, "").trim();
+
+/** メモ帳などから貼り付けたテキストを、1行1項目に分解する。記号・番号・末尾の（目安）は落とす。 */
+function parseBulk(text: string): { title: string; timingLabel: string }[] {
+  let lines = text.split(/\r?\n/);
+  // 1行だけで「、」や「,」区切りなら、それで分ける
+  if (lines.length === 1 && /[、,]/.test(lines[0])) {
+    lines = lines[0].split(/[、,]/);
+  }
+  const out: { title: string; timingLabel: string }[] = [];
+  const seen = new Set<string>();
+  for (const raw of lines) {
+    let line = raw.replace(/[　 ]/g, " ").trim();
+    if (!line) continue;
+    // 行頭の箇条書き記号・チェックボックス・番号
+    line = line
+      .replace(
+        /^(?:[-*・•‣▸▹>＞○●◦]|\[[ xX]\]|[☐☑✅⬜◻◼■□▪▫]|\d+[.)、]|[（(]\d+[）)])\s*/,
+        "",
+      )
+      .trim();
+    // 行頭の「済 / done / ✓」など
+    line = line.replace(/^(?:済み?|done|[✓✔☑])\s*[:：\-]?\s*/i, "").trim();
+    if (!line) continue;
+    // 末尾の（目安）→ タイミングに
+    let timingLabel = "";
+    const m = line.match(/^(.*?)[（(]\s*([^（()）]{1,16})\s*[）)]\s*$/);
+    if (m && m[1].trim()) {
+      line = m[1].trim();
+      timingLabel = m[2].trim();
+    }
+    if (!line) continue;
+    const key = normTitle(line);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push({ title: line.slice(0, 120), timingLabel });
+  }
+  return out;
+}
+
 export function ChecklistEditor({
   eventId,
   kind = "task",
@@ -64,6 +104,9 @@ export function ChecklistEditor({
   const [removedTitles, setRemovedTitles] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkNote, setBulkNote] = useState<string | null>(null);
 
   const originalTitles = useMemo(
     () => new Set(initialItems.map((i) => i.title)),
@@ -74,6 +117,26 @@ export function ChecklistEditor({
   const dirty =
     JSON.stringify(items.map(strip)) !== JSON.stringify(initial.map(strip)) ||
     removedTitles.length > 0;
+
+  function toPayload(list: Item[]) {
+    return list
+      .filter((it) => it.title.trim())
+      .map((it) => ({
+        title: it.title.trim(),
+        timingLabel: it.timingLabel.trim() || null,
+        comment: it.comment.trim() || null,
+        isDone: it.isDone,
+        isUserAdded: it.isUserAdded,
+      }));
+  }
+
+  function persist(list: Item[]) {
+    startTransition(async () => {
+      await saveChecklist({ eventId, kind, items: toPayload(list), removedTitles });
+      setRemovedTitles([]);
+      setSaved(true);
+    });
+  }
 
   function update(key: string, patch: Partial<Item>) {
     setItems((prev) =>
@@ -119,25 +182,42 @@ export function ChecklistEditor({
     setSaved(false);
   }
 
-  function save() {
-    startTransition(async () => {
-      await saveChecklist({
-        eventId,
-        kind,
-        items: items
-          .filter((it) => it.title.trim())
-          .map((it) => ({
-            title: it.title.trim(),
-            timingLabel: it.timingLabel.trim() || null,
-            comment: it.comment.trim() || null,
-            isDone: it.isDone,
-            isUserAdded: it.isUserAdded,
-          })),
-        removedTitles,
-      });
-      setRemovedTitles([]);
-      setSaved(true);
-    });
+  function bulkAdd() {
+    const parsed = parseBulk(bulkText);
+    if (parsed.length === 0) {
+      setBulkNote("追加できる行が見つかりませんでした。");
+      return;
+    }
+    const existing = new Set(items.map((i) => normTitle(i.title)));
+    const fresh = parsed.filter((p) => !existing.has(normTitle(p.title)));
+    if (fresh.length === 0) {
+      setBulkText("");
+      setBulkNote("すべて登録済みでした。");
+      return;
+    }
+    const merged: Item[] = [
+      ...items,
+      ...fresh.map((p) => ({
+        key: nextKey(),
+        id: null,
+        title: p.title,
+        timingLabel: p.timingLabel,
+        comment: "",
+        isDone: false,
+        isUserAdded: true,
+      })),
+    ];
+    setItems(merged);
+    setBulkText("");
+    setBulkOpen(false);
+    setBulkNote(
+      `${fresh.length}件を追加しました${
+        parsed.length !== fresh.length
+          ? `（${parsed.length - fresh.length}件は重複のため除外）`
+          : ""
+      }。`,
+    );
+    persist(merged);
   }
 
   return (
@@ -202,14 +282,26 @@ export function ChecklistEditor({
         ))}
       </datalist>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={add}
-          className="rounded-lg border border-dashed border-border px-3 py-1.5 text-sm text-muted hover:border-teal hover:text-teal-dark"
-        >
-          ＋ 項目を追加
-        </button>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={add}
+            className="rounded-lg border border-dashed border-border px-3 py-1.5 text-sm text-muted hover:border-teal hover:text-teal-dark"
+          >
+            ＋ 項目を追加
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setBulkOpen((v) => !v);
+              setBulkNote(null);
+            }}
+            className="rounded-lg border border-dashed border-border px-3 py-1.5 text-sm text-muted hover:border-teal hover:text-teal-dark"
+          >
+            メモから一括追加
+          </button>
+        </div>
 
         <div className="flex items-center gap-3">
           {saved && !dirty && (
@@ -217,7 +309,7 @@ export function ChecklistEditor({
           )}
           <button
             type="button"
-            onClick={save}
+            onClick={() => persist(items)}
             disabled={pending || !dirty}
             className="rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-dark disabled:opacity-50"
           >
@@ -225,6 +317,47 @@ export function ChecklistEditor({
           </button>
         </div>
       </div>
+
+      {bulkOpen && (
+        <div className="mt-3 rounded-xl border border-border bg-background p-3">
+          <textarea
+            value={bulkText}
+            onChange={(e) => setBulkText(e.target.value)}
+            rows={5}
+            placeholder={
+              isBelonging
+                ? "メモを貼り付け。1行に1つ。例:\n充電器\nモバイルバッテリー\n常備薬（前日夜）"
+                : "メモを貼り付け。1行に1つ。例:\n宿の予約を確認する（1週間前）\n・切符を用意する\n1. 戸締まりチェック"
+            }
+            className="w-full rounded-lg border bg-surface px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-[11px] text-muted">
+            行頭の「・」「-」「1.」やチェック記号、末尾の（目安）は自動で取り除きます。重複はスキップします。
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={bulkAdd}
+              disabled={pending || !bulkText.trim()}
+              className="rounded-lg bg-teal px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-dark disabled:opacity-50"
+            >
+              追加する
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBulkOpen(false);
+                setBulkText("");
+              }}
+              className="text-xs text-muted underline hover:text-foreground"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+      {bulkNote && <p className="mt-2 text-xs text-teal-dark">{bulkNote}</p>}
+
       <p className="mt-2 text-[11px] text-muted">
         チェックは自動保存。文言・タイミング・コメントの変更は「保存する」で反映（コメントは学習しません）。
       </p>

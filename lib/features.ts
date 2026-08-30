@@ -64,14 +64,15 @@ function inferNights(
 /** タイトル・メモから主要キーワードを抽出（最大8語）。 */
 function extractKeywords(text: string): string[] {
   const tokens =
-    text.match(/[一-龠々〆ヵヶ]{2,}|[ァ-ヴ]{2,}|[a-zA-Z][a-zA-Z0-9]{1,}/g) ?? [];
+    text.match(/[一-龠々〆ヵヶ]{2,}|[ァ-ヶーヴ・]{2,}|[a-zA-Z][a-zA-Z0-9]{1,}/g) ??
+    [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of tokens) {
-    const w = raw.toLowerCase();
+    const w = raw.replace(/[・ー]+$/, "").toLowerCase();
     if (w.length < 2 || STOPWORDS.has(w) || seen.has(w)) continue;
     seen.add(w);
-    out.push(raw);
+    out.push(raw.replace(/[・]+$/, ""));
     if (out.length >= 8) break;
   }
   return out;

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
+  disableDescriptionWrite,
   disconnectGoogle,
   logout,
   setCalendarId,
@@ -66,7 +67,9 @@ export default async function SettingsPage() {
               {account.lastSyncedAt
                 ? `最終取り込み: ${formatDateTime(account.lastSyncedAt)}`
                 : "まだ取り込んでいません"}
-              {" ・ 読み取り専用（calendar.readonly）"}
+              {account.writeDescriptionEnabled
+                ? " ・ 読み取り＋説明欄書き込み"
+                : " ・ 読み取りのみ"}
             </p>
             {calendars.length > 0 && (
               <form action={setCalendarId} className="pt-1">
@@ -100,6 +103,37 @@ export default async function SettingsPage() {
               <form action={disconnectGoogle}>
                 <SubmitButton variant="ghost">連携を解除する</SubmitButton>
               </form>
+            </div>
+
+            {/* 説明欄への書き込み（オプトイン） */}
+            <div className="rounded-lg bg-surface-muted p-3">
+              <p className="text-xs font-semibold">
+                予定の説明欄に準備リストを書き込む
+              </p>
+              {account.writeDescriptionEnabled ? (
+                <div className="mt-1 space-y-2">
+                  <p className="text-xs text-muted">
+                    有効です。準備リスト（リンク＋箇条書き）を予定の説明欄に自動で追記・更新します。
+                    元の説明文は残し、「--- そなえ ---」ブロックだけ差し替えます。
+                  </p>
+                  <form action={disableDescriptionWrite}>
+                    <SubmitButton variant="ghost">無効にする</SubmitButton>
+                  </form>
+                </div>
+              ) : (
+                <div className="mt-1 space-y-2">
+                  <p className="text-xs text-muted">
+                    デフォルトは OFF（読み取りのみ）。オンにすると予定の説明欄に準備リストを追記します。
+                    有効化には Google で「予定の編集」権限の追加許可（再認証1回）が必要です。
+                  </p>
+                  <a
+                    href="/api/auth/google?write=1"
+                    className="inline-block rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white no-underline hover:bg-teal-dark"
+                  >
+                    有効にする
+                  </a>
+                </div>
+              )}
             </div>
           </div>
         ) : (

@@ -60,6 +60,8 @@ model UserGoogleAccount {
   watchChannelId     String?
   watchResourceId    String?
   watchExpiration    DateTime?
+  // 予定の説明欄への準備リスト書き込み（オプトイン。calendar.events スコープ許可済みで true）
+  writeDescriptionEnabled Boolean @default(false)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }
@@ -95,6 +97,8 @@ model Event {
   failureWarningAckAt DateTime?
   // 新規追加の通知を送った日時（アプリを開いたときの準備リスト先行生成にも使う）
   notifiedAt    DateTime?
+  // そなえが最後に説明欄へ書き込んだ内容のハッシュ（無限ループ／再書き込み防止）
+  lastWrittenHash String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

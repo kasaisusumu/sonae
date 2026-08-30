@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { buildChecklistForEvent, type BuiltItem } from "@/lib/suggest";
+import { syncEventDescription } from "@/lib/description-sync";
 
 export interface DraftItem {
   title: string;
@@ -79,6 +80,7 @@ export async function primeNotifiedChecklists(
   for (const t of targets) {
     try {
       await generateAndSaveChecklist(t.id);
+      await syncEventDescription(t.id);
     } catch (e) {
       console.error("[prime] 生成失敗 eventId=%s", t.id, e);
     }

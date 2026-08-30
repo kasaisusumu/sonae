@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveCategoryForEvent } from "@/lib/categories";
 import { fetchCalendarChanges } from "@/lib/google";
 import { sendPushToUser } from "@/lib/push";
+import { hashDescription, stripSonaeBlock } from "@/lib/description";
 
 export interface SyncResult {
   newEvents: { id: string; title: string; eventDatetime: Date }[];
@@ -39,13 +40,22 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
     });
 
     if (existing) {
+      // そなえが書き込んだ内容そのものの変更なら、更新をスキップ（再書き込み・churn 防止）
+      if (
+        ev.description &&
+        existing.lastWrittenHash &&
+        hashDescription(ev.description) === existing.lastWrittenHash
+      ) {
+        continue;
+      }
       await prisma.event.update({
         where: { id: existing.id },
         data: {
           title: ev.title,
           eventDatetime: ev.start,
           endDatetime: ev.end,
-          memo: ev.description,
+          // 「そなえ」ブロックは除いてユーザーの元メモだけ保存
+          memo: stripSonaeBlock(ev.description) || null,
         },
       });
       updatedCount++;
@@ -65,7 +75,7 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
             title: ev.title,
             eventDatetime: ev.start,
             endDatetime: ev.end,
-            memo: ev.description,
+            memo: stripSonaeBlock(ev.description) || null,
             googleEventId: ev.googleEventId,
             source: "google",
           },

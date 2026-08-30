@@ -12,12 +12,20 @@ export function appBaseUrl(): string {
   ).replace(/\/$/, "");
 }
 
+export const CALENDAR_READ_SCOPE =
+  "https://www.googleapis.com/auth/calendar.readonly";
+export const CALENDAR_EVENTS_SCOPE =
+  "https://www.googleapis.com/auth/calendar.events";
+
 export const GOOGLE_SCOPES = [
   "openid",
   "email",
   "profile",
-  "https://www.googleapis.com/auth/calendar.readonly",
+  CALENDAR_READ_SCOPE,
 ];
+
+/** 説明欄書き込みを有効にするとき用の追加スコープ込み。 */
+export const GOOGLE_SCOPES_WITH_WRITE = [...GOOGLE_SCOPES, CALENDAR_EVENTS_SCOPE];
 
 function required(name: string): string {
   const v = process.env[name];
@@ -33,12 +41,15 @@ export function makeOAuthClient(): OAuth2Client {
   );
 }
 
-/** Google 同意画面の URL。ログインとカレンダー読み取り許可を 1 回で取得する。 */
-export function buildConsentUrl(state: string): string {
+/**
+ * Google 同意画面の URL。
+ * withWrite=true のときは calendar.events（予定の編集）も要求する。
+ */
+export function buildConsentUrl(state: string, withWrite = false): string {
   return makeOAuthClient().generateAuthUrl({
     access_type: "offline",
     prompt: "consent", // refresh_token を確実に得るため
-    scope: GOOGLE_SCOPES,
+    scope: withWrite ? GOOGLE_SCOPES_WITH_WRITE : GOOGLE_SCOPES,
     include_granted_scopes: true,
     state,
   });
@@ -55,6 +66,7 @@ export async function exchangeCode(code: string): Promise<{
   accessToken: string;
   refreshToken: string | null;
   expiryDate: Date | null;
+  canWriteEvents: boolean;
 }> {
   const client = makeOAuthClient();
   const { tokens } = await client.getToken(code);
@@ -65,11 +77,14 @@ export async function exchangeCode(code: string): Promise<{
 
   if (!data.email) throw new Error("Google からメールアドレスを取得できませんでした。");
 
+  const grantedScopes = (tokens.scope ?? "").split(/\s+/);
+
   return {
     profile: { email: data.email, name: data.name ?? undefined },
     accessToken: tokens.access_token ?? "",
     refreshToken: tokens.refresh_token ?? null,
     expiryDate: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+    canWriteEvents: grantedScopes.includes(CALENDAR_EVENTS_SCOPE),
   };
 }
 
@@ -293,6 +308,29 @@ export async function ensureWatch(userId: string): Promise<boolean> {
         watchExpiration: null,
       },
     });
+    return false;
+  }
+}
+
+/**
+ * 予定の説明欄を書き換える（calendar.events スコープが必要）。
+ * 権限不足などで失敗しても throw せず false を返す。
+ */
+export async function writeEventDescription(
+  userId: string,
+  googleEventId: string,
+  description: string,
+): Promise<boolean> {
+  try {
+    const { calendar, account } = await getCalendarClient(userId);
+    await calendar.events.patch({
+      calendarId: account.calendarId || "primary",
+      eventId: googleEventId,
+      requestBody: { description },
+    });
+    return true;
+  } catch (err) {
+    console.error("[google] 説明欄の書き込みに失敗:", err);
     return false;
   }
 }

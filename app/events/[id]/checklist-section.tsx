@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ensureChecklistForEvent } from "@/lib/checklist";
+import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
 import { getWarningForEvent } from "@/lib/failures";
@@ -39,6 +41,8 @@ export async function ChecklistSection({
       where: { eventId: event.id },
       orderBy: { sortOrder: "asc" },
     });
+    // 初回生成後、説明欄書き込みが有効なら反映（レスポンスはブロックしない）
+    after(() => syncEventDescription(event.id));
   }
 
   const feature = extractEventFeature({

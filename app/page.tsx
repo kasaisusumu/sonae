@@ -48,7 +48,7 @@ export default async function HomePage({
           Google でログイン
         </a>
         <p className="mt-3 text-xs text-muted">
-          カレンダーは読み取りのみ。予定を書き換えることはありません。
+          カレンダーは基本は読み取りのみ。設定でオンにしたときだけ、予定の説明欄に準備リストを追記します。
         </p>
 
         {isDevLoginEnabled() && (

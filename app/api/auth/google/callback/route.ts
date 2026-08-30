@@ -21,14 +21,16 @@ export async function GET(req: NextRequest) {
 
   const store = await cookies();
   const expectedState = store.get("sonae_oauth_state")?.value;
+  const wantedWrite = store.get("sonae_oauth_write")?.value === "1";
   store.delete("sonae_oauth_state");
+  store.delete("sonae_oauth_write");
 
   if (error || !code || !state || state !== expectedState) {
     return NextResponse.redirect(`${base}/?auth=failed`);
   }
 
   try {
-    const { profile, accessToken, refreshToken, expiryDate } =
+    const { profile, accessToken, refreshToken, expiryDate, canWriteEvents } =
       await exchangeCode(code);
 
     const user = await prisma.user.upsert({
@@ -45,6 +47,8 @@ export async function GET(req: NextRequest) {
         // 再認可で refresh_token が返らないことがあるので、来たときだけ更新
         ...(refreshToken ? { refreshToken } : {}),
         tokenExpiry: expiryDate,
+        // 書き込みスコープが許可されたら有効化（外れることはあっても勝手に無効化はしない）
+        ...(canWriteEvents ? { writeDescriptionEnabled: true } : {}),
       },
       create: {
         userId: user.id,
@@ -53,6 +57,7 @@ export async function GET(req: NextRequest) {
         refreshToken,
         tokenExpiry: expiryDate,
         calendarId: "primary",
+        writeDescriptionEnabled: canWriteEvents,
       },
     });
 
@@ -64,7 +69,8 @@ export async function GET(req: NextRequest) {
       console.error("[auth/callback] ensureWatch 失敗:", e),
     );
 
-    return NextResponse.redirect(`${base}/events?connected=1`);
+    const dest = wantedWrite ? "/settings" : "/events?connected=1";
+    return NextResponse.redirect(`${base}${dest}`);
   } catch (e) {
     console.error("[auth/callback] 失敗:", e);
     return NextResponse.redirect(`${base}/?auth=failed`);

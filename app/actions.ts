@@ -2,8 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { clearSession, getSessionUserId } from "@/lib/session";
+import { syncEventDescription } from "@/lib/description-sync";
 import {
   getOrCreateCategory,
   resolveCategoryForEvent,
@@ -46,6 +48,16 @@ export async function disconnectGoogle(): Promise<void> {
   await prisma.userGoogleAccount.deleteMany({ where: { userId } });
   revalidatePath("/settings");
   revalidatePath("/events");
+}
+
+/** 予定の説明欄への書き込みを無効にする（スコープはそのまま。フラグだけ落とす）。 */
+export async function disableDescriptionWrite(): Promise<void> {
+  const userId = await requireUserId();
+  await prisma.userGoogleAccount.updateMany({
+    where: { userId },
+    data: { writeDescriptionEnabled: false },
+  });
+  revalidatePath("/settings");
 }
 
 /** 同期対象の Google カレンダーを切り替える。 */
@@ -134,6 +146,7 @@ export async function regenerateChecklist(formData: FormData): Promise<void> {
   if (!event) return;
 
   await generateAndSaveChecklist(eventId);
+  after(() => syncEventDescription(eventId));
   revalidatePath(`/events/${eventId}`);
 }
 
@@ -243,6 +256,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     });
   }
 
+  after(() => syncEventDescription(input.eventId));
   revalidatePath(`/events/${input.eventId}`);
   revalidatePath("/events");
 }
@@ -282,6 +296,7 @@ export async function acceptSuggestion(itemId: string): Promise<void> {
   }
 
   if (item.suggestionRuleId) await confirmRule(item.suggestionRuleId);
+  after(() => syncEventDescription(item.eventId));
   revalidatePath(`/events/${item.eventId}`);
   revalidatePath("/events");
 }
@@ -310,6 +325,7 @@ export async function rejectSuggestion(itemId: string): Promise<void> {
   }
 
   if (item.suggestionRuleId) await contradictRule(item.suggestionRuleId);
+  after(() => syncEventDescription(item.eventId));
   revalidatePath(`/events/${item.eventId}`);
   revalidatePath("/events");
 }

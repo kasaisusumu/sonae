@@ -8,15 +8,17 @@ export const dynamic = "force-dynamic";
 
 /**
  * 全ユーザーの Google カレンダーを取り込み、新規予定があれば通知する。
- * Render の Cron Job から数分おきに叩く想定。
+ * 定期実行（GitHub Actions 等）から数分おきに叩く想定。
  *   curl -fsS -X POST -H "x-cron-secret: $CRON_SECRET" "$APP_BASE_URL/api/cron/poll"
+ * ※ 前後の空白・改行はコピペ事故対策で無視する。
  */
 async function handler(req: NextRequest) {
-  const expected = process.env.CRON_SECRET;
-  const provided =
+  const expected = (process.env.CRON_SECRET ?? "").trim();
+  const provided = (
     req.headers.get("x-cron-secret") ??
     req.nextUrl.searchParams.get("secret") ??
-    "";
+    ""
+  ).trim();
   if (!expected || provided !== expected) {
     return new NextResponse("forbidden", { status: 403 });
   }

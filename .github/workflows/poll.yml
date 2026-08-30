@@ -17,9 +17,12 @@ jobs:
     steps:
       - name: Trigger /api/cron/poll
         env:
-          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_BASE_URL_RAW: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET_RAW: ${{ secrets.CRON_SECRET }}
         run: |
+          # シークレットに紛れ込んだ空白・改行を除去（コピペ事故対策）
+          APP_BASE_URL=$(printf '%s' "$APP_BASE_URL_RAW" | tr -d '[:space:]')
+          CRON_SECRET=$(printf '%s' "$CRON_SECRET_RAW" | tr -d '[:space:]')
           if [ -z "$APP_BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
             echo "APP_BASE_URL / CRON_SECRET secrets are not set"; exit 1
           fi

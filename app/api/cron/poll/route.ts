@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncAndNotify } from "@/lib/sync";
 import { ensureWatch } from "@/lib/google";
-import { catchUpInboundEdits } from "@/lib/description-sync";
 import { notifyPostEventFailureChecks } from "@/lib/failures";
 
 export const runtime = "nodejs";
@@ -43,7 +42,6 @@ async function handler(req: NextRequest) {
   let notified = 0;
   let generated = 0;
   let watches = 0;
-  let normalized = 0;
   let postChecks = 0;
   let errors = 0;
   // 1 回の実行で生成する準備リストの上限（タイムアウト対策・全ユーザー合算）
@@ -59,7 +57,6 @@ async function handler(req: NextRequest) {
       generated += result.generated;
       genBudget -= result.generated;
       if (await ensureWatch(userId)) watches++;
-      normalized += await catchUpInboundEdits(userId);
       postChecks += await notifyPostEventFailureChecks(userId);
     } catch (e) {
       errors++;
@@ -74,7 +71,6 @@ async function handler(req: NextRequest) {
     notified,
     generated,
     watches,
-    normalized,
     postChecks,
     errors,
     at: new Date().toISOString(),

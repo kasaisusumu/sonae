@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import {
+  hashDescription,
   parseSonaeBlock,
   stripSonaeBlock,
   type ParsedItem,
@@ -12,15 +13,20 @@ const norm = (s: string) => s.toLowerCase().replace(/\s+/g, "").trim();
 
 /**
  * Google カレンダー上で説明欄が直接編集されたときに、その内容を
- * ChecklistItem に取り込み、構造変化は学習にも反映する。
+ * ChecklistItem に取り込み、構造変化はその場で学習にも反映する。
  * - writeDescriptionEnabled のときだけ双方向。無効なら memo だけ更新（従来動作）
- * - コメント・完了/未完了の変更は取り込むが学習しない
- * - 自分の書き込みのエコーは呼び出し側の hash 一致でスキップ済みの前提
+ * - 完了/未完了・コメントの変更は取り込むが学習しない
+ * - 同じ受信テキストは二度処理しない（lastInboundHash）。webhook と cron が
+ *   競合しても二重学習しないための要。
+ * - 構造が変わったとき（項目の増減・タイミング変更）だけ、正規化した内容を
+ *   その場で書き戻す。チェックだけの変更では書き戻さない（編集画面のカクつき防止）。
  */
 export async function applyInboundDescription(
   eventId: string,
   rawDescription: string,
 ): Promise<void> {
+  const inboundHash = hashDescription(rawDescription);
+
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: {
@@ -33,6 +39,15 @@ export async function applyInboundDescription(
   });
   if (!event) return;
 
+  // 同じ受信テキストを既に取り込み済みなら何もしない（二重取り込み・二重学習の防止）
+  if (event.lastInboundHash === inboundHash) return;
+
+  const markSeen = () =>
+    prisma.event.update({
+      where: { id: eventId },
+      data: { lastInboundHash: inboundHash },
+    });
+
   const memoPart = stripSonaeBlock(rawDescription) || null;
 
   const account = await prisma.userGoogleAccount.findUnique({
@@ -41,18 +56,26 @@ export async function applyInboundDescription(
   });
   // 自動管理外（連携時に既にあった予定）や書き込み無効なら、memo の更新だけ
   if (!account?.writeDescriptionEnabled || !event.autoManaged) {
-    if (memoPart !== event.memo) {
-      await prisma.event.update({ where: { id: eventId }, data: { memo: memoPart } });
-    }
+    await prisma.event.update({
+      where: { id: eventId },
+      data: {
+        lastInboundHash: inboundHash,
+        ...(memoPart !== event.memo ? { memo: memoPart } : {}),
+      },
+    });
     return;
   }
 
   const parsed = parseSonaeBlock(rawDescription);
   if (!parsed.hasBlock) {
-    // ユーザーがブロックごと消した → wipe せず、DB の内容から復元
-    if (memoPart !== event.memo) {
-      await prisma.event.update({ where: { id: eventId }, data: { memo: memoPart } });
-    }
+    // ユーザーがブロックごと消した → wipe せず、DB の内容から即復元
+    await prisma.event.update({
+      where: { id: eventId },
+      data: {
+        lastInboundHash: inboundHash,
+        ...(memoPart !== event.memo ? { memo: memoPart } : {}),
+      },
+    });
     await syncEventDescription(eventId);
     return;
   }
@@ -84,10 +107,7 @@ export async function applyInboundDescription(
       if (!p) {
         diffs[kind].added.push({ title: i.title, timingLabel: i.timingLabel });
       } else {
-        if (
-          i.timingLabel &&
-          (p.timingLabel ?? null) !== i.timingLabel
-        ) {
+        if (i.timingLabel && (p.timingLabel ?? null) !== i.timingLabel) {
           diffs[kind].retimed.push({ title: i.title, timingLabel: i.timingLabel });
         }
         if (
@@ -106,7 +126,11 @@ export async function applyInboundDescription(
   );
   const memoChanged = memoPart !== event.memo;
 
-  if (!structural && !doneOrCommentChanged && !memoChanged) return; // Google の正規化のみ
+  if (!structural && !doneOrCommentChanged && !memoChanged) {
+    // Google 側の正規化のみ。受信済みとして記録し終わり。
+    await markSeen();
+    return;
+  }
 
   // 非提案項目を、パース結果で丸ごと置き換え（提案行は残す）
   const prevKindByTitle = new Map(
@@ -134,12 +158,11 @@ export async function applyInboundDescription(
     prisma.checklistItem.createMany({ data: rows }),
     prisma.event.update({
       where: { id: eventId },
-      // 直後しばらくは正規化の書き戻しを控える（Google 編集画面のカクつき防止）
-      data: { memo: memoPart, lastInboundEditAt: new Date() },
+      data: { memo: memoPart, lastInboundHash: inboundHash },
     }),
   ]);
 
-  // 学習（構造変化のみ・種別ごと。完了/コメントは学習しない）
+  // 学習（構造変化のみ・種別ごと・その場で反映。完了/コメントは学習しない）
   if (event.categoryId && structural) {
     const feature = extractEventFeature({
       title: event.title,
@@ -163,6 +186,9 @@ export async function applyInboundDescription(
     }
   }
 
-  // 取り込みは即時。正規化の書き戻しはクールダウン明けまで待つ（カクつき防止）。
-  await syncEventDescription(eventId, { respectCooldown: true });
+  // 構造やメモが変わったときだけ、正規化した内容をその場で書き戻す。
+  // チェック／コメントだけの変更では書き戻さない（ユーザーの表記のままで十分・カクつき防止）。
+  if (structural || memoChanged) {
+    await syncEventDescription(eventId);
+  }
 }

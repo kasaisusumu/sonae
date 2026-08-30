@@ -6,6 +6,7 @@ import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
 import { getWarningForEvent } from "@/lib/failures";
+import { refreshEventFromGoogle } from "@/lib/sync";
 import { regenerateChecklist } from "@/app/actions";
 import { ChecklistEditor } from "./checklist-editor";
 import { SuggestionList } from "./suggestion-list";
@@ -90,6 +91,10 @@ export async function ChecklistSection({
     category: { name: string } | null;
   };
 }) {
+  // 開いた瞬間に、その予定だけ Google から取り直して説明欄の直接編集を取り込む
+  // （webhook / cron の遅延を待たない）。Suspense のフォールバック中に走る。
+  await refreshEventFromGoogle(event.id);
+
   let items = await prisma.checklistItem.findMany({
     where: { eventId: event.id },
     orderBy: { sortOrder: "asc" },

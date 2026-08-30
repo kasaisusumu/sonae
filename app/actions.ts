@@ -11,7 +11,7 @@ import {
   resolveCategoryForEvent,
 } from "@/lib/categories";
 import { syncAndNotify } from "@/lib/sync";
-import { sendPushToUser } from "@/lib/push";
+import { sendPushToUser, isPushConfigured } from "@/lib/push";
 import { ensureWatch, stopWatch } from "@/lib/google";
 import {
   ensureChecklistForEvent,
@@ -122,6 +122,17 @@ export async function createManualEvent(formData: FormData): Promise<void> {
   });
 
   await generateAndSaveChecklist(event.id);
+
+  // 予定を入れて提案ができたら通知する（アプリを閉じていても届く）
+  after(() =>
+    sendPushToUser(userId, {
+      title: "準備リストができました",
+      body: `「${title}」の準備すること・持ち物を用意しました`,
+      url: `/events/${event.id}`,
+      tag: `event-${event.id}`,
+    }).catch(() => {}),
+  );
+
   revalidatePath("/events");
   redirect(`/events/${event.id}`);
 }
@@ -595,14 +606,28 @@ export async function removePushSubscription(endpoint: string): Promise<void> {
   await prisma.pushSubscription.deleteMany({ where: { endpoint } });
 }
 
-/** 設定画面から「テスト通知を送る」。 */
-export async function sendTestPush(): Promise<void> {
+export interface TestPushResult {
+  configured: boolean;
+  subscriptions: number;
+  sent: number;
+  removed: number;
+}
+
+/** 設定画面から「テスト通知を送る」。診断のため結果を返す。 */
+export async function sendTestPush(): Promise<TestPushResult> {
   const userId = await requireUserId();
-  await sendPushToUser(userId, {
+  const configured = isPushConfigured();
+  const subscriptions = await prisma.pushSubscription.count({ where: { userId } });
+  if (!configured || subscriptions === 0) {
+    return { configured, subscriptions, sent: 0, removed: 0 };
+  }
+  const { sent, removed } = await sendPushToUser(userId, {
     title: "私のマネージャー：通知テスト",
     body: "予定が追加されると、このように通知が届きます。",
     url: "/",
+    tag: "test",
   });
+  return { configured, subscriptions, sent, removed };
 }
 
 // ─────────────────────────────────────────────

@@ -104,7 +104,9 @@ model Event {
   notifiedAt    DateTime?
   // そなえが最後に説明欄へ書き込んだ内容のハッシュ（無限ループ／再書き込み防止）
   lastWrittenHash String?
-  // Google 上で説明欄が直接編集された最終日時。直後しばらくは正規化の書き戻しを控える（カクつき防止）
+  // 直近に取り込んだ「受信テキスト」のハッシュ（webhook と cron の二重取り込み・二重学習を防ぐ）
+  lastInboundHash String?
+  // （旧）クールダウン用。現在は未使用
   lastInboundEditAt DateTime?
   // 事後の「今回は防げた？」通知を送った日時（再送防止）
   postFailureCheckNotifiedAt DateTime?

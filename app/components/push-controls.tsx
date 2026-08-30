@@ -31,6 +31,22 @@ export function PushControls({ publicKey }: { publicKey: string | null }) {
     try {
       const reg = await registerServiceWorker();
       const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        // 端末側に購読があるのにサーバー側の行が消えている場合があるので、
+        // 開くたびに登録し直す（upsert なので無害・これで通知が復活する）
+        const json = sub.toJSON();
+        try {
+          await savePushSubscription({
+            endpoint: sub.endpoint,
+            p256dh: json.keys?.p256dh ?? "",
+            auth: json.keys?.auth ?? "",
+            userAgent:
+              typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+          });
+        } catch {
+          /* 一時的な失敗は無視（次回の起動で再試行される） */
+        }
+      }
       setStatus(sub ? "on" : "off");
     } catch {
       setStatus("off");
@@ -97,8 +113,26 @@ export function PushControls({ publicKey }: { publicKey: string | null }) {
     setBusy(true);
     setNote(null);
     try {
-      await sendTestPush();
-      setNote("テスト通知を送りました。数秒待っても届かない場合は端末の通知設定を確認してください。");
+      const r = await sendTestPush();
+      if (!r.configured) {
+        setNote(
+          "サーバー側の通知設定（VAPID 鍵）が未登録です。デプロイ環境の環境変数を確認してください。",
+        );
+      } else if (r.subscriptions === 0) {
+        setNote(
+          "この端末がサーバーに登録されていません。いったん「オフにする」→「通知をオンにする」を試してください。",
+        );
+      } else if (r.sent === 0) {
+        setNote(
+          `送信できませんでした（登録 ${r.subscriptions} 件 / 無効化 ${r.removed} 件）。通知をオフ→オンで再登録してみてください。`,
+        );
+      } else {
+        setNote(
+          `テスト通知を送りました（${r.sent} 件）。数秒待っても届かない場合は端末の通知設定を確認してください。`,
+        );
+      }
+    } catch {
+      setNote("テスト通知の送信でエラーが発生しました。");
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { resolveCategoryForEvent } from "@/lib/categories";
-import { fetchCalendarChanges, type FetchedEvent } from "@/lib/google";
+import {
+  fetchCalendarChanges,
+  getCalendarClient,
+  type FetchedEvent,
+} from "@/lib/google";
 import { sendPushToUser } from "@/lib/push";
 import { hashDescription, stripSonaeBlock } from "@/lib/description";
 import { applyInboundDescription } from "@/lib/description-inbound";
@@ -178,6 +182,59 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
   });
 
   return { newEvents, updatedCount, deletedCount, isFirstSync };
+}
+
+/**
+ * 1 予定だけを Google から取り直して、説明欄の直接編集をすぐ取り込む。
+ * 予定詳細を開いたときに after() から呼ぶ。webhook / cron の遅延を待たずに
+ * 「開いた瞬間に最新」にするための補助。失敗しても無視する。
+ */
+export async function refreshEventFromGoogle(eventId: string): Promise<void> {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      userId: true,
+      source: true,
+      googleEventId: true,
+      lastWrittenHash: true,
+      autoManaged: true,
+    },
+  });
+  if (!event || event.source !== "google" || !event.googleEventId) return;
+
+  try {
+    const { calendar, account } = await getCalendarClient(event.userId);
+    const res = await calendar.events.get({
+      calendarId: account.calendarId || "primary",
+      eventId: event.googleEventId,
+    });
+    const item = res.data;
+    const startRaw = item.start?.dateTime ?? item.start?.date;
+    if (item.status === "cancelled" || !startRaw) return;
+
+    const description = item.description?.trim() || "";
+    const start = new Date(startRaw);
+    const endRaw = item.end?.dateTime ?? item.end?.date ?? null;
+
+    await prisma.event.update({
+      where: { id: event.id },
+      data: {
+        title: item.summary?.trim() || "(タイトルなし)",
+        eventDatetime: start,
+        endDatetime: endRaw ? new Date(endRaw) : null,
+        recurringEventId: item.recurringEventId ?? null,
+      },
+    });
+
+    const echo =
+      !!description &&
+      !!event.lastWrittenHash &&
+      hashDescription(description) === event.lastWrittenHash;
+    if (!echo) await applyInboundDescription(event.id, description);
+  } catch (e) {
+    console.error("[refreshEventFromGoogle] eventId=%s", eventId, e);
+  }
 }
 
 /**

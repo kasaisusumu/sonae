@@ -34,12 +34,16 @@ export interface DescItem {
   title: string;
   timingLabel: string | null;
   isDone?: boolean;
+  comment?: string | null;
 }
 
 function bullet(it: DescItem): string {
   const label = it.timingLabel ? `${it.title}（${it.timingLabel}）` : it.title;
   const safe = escapeHtml(label);
-  return it.isDone ? `・<s>${safe}</s> ✓` : `・${safe}`;
+  const main = it.isDone ? `・<s>${safe}</s> ✓` : `・${safe}`;
+  const c = it.comment?.trim();
+  // コメントはすぐ下に段下げ
+  return c ? `${main}\n　　↳ ${escapeHtml(c)}` : main;
 }
 
 /** ブロック本文（リンク＋準備すること＋持ち物）。完了項目は <s> で取り消し線。 */

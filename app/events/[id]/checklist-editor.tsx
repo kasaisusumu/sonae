@@ -8,6 +8,7 @@ interface Item {
   id: string | null;
   title: string;
   timingLabel: string;
+  comment: string;
   isDone: boolean;
   isUserAdded: boolean;
 }
@@ -16,6 +17,7 @@ interface InitialItem {
   id: string | null;
   title: string;
   timingLabel: string | null;
+  comment: string | null;
   isDone: boolean;
   isUserAdded: boolean;
 }
@@ -51,6 +53,7 @@ export function ChecklistEditor({
         id: it.id,
         title: it.title,
         timingLabel: it.timingLabel ?? "",
+        comment: it.comment ?? "",
         isDone: it.isDone,
         isUserAdded: it.isUserAdded,
       })),
@@ -108,6 +111,7 @@ export function ChecklistEditor({
         id: null,
         title: "",
         timingLabel: "",
+        comment: "",
         isDone: false,
         isUserAdded: true,
       },
@@ -125,6 +129,7 @@ export function ChecklistEditor({
           .map((it) => ({
             title: it.title.trim(),
             timingLabel: it.timingLabel.trim() || null,
+            comment: it.comment.trim() || null,
             isDone: it.isDone,
             isUserAdded: it.isUserAdded,
           })),
@@ -172,6 +177,12 @@ export function ChecklistEditor({
                   </span>
                 )}
               </div>
+              <input
+                value={it.comment}
+                onChange={(e) => update(it.key, { comment: e.target.value })}
+                placeholder="コメント（任意・学習しません）"
+                className="w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted hover:border-border focus:border-border focus:bg-background"
+              />
             </div>
             <button
               type="button"
@@ -215,12 +226,16 @@ export function ChecklistEditor({
         </div>
       </div>
       <p className="mt-2 text-[11px] text-muted">
-        チェックは自動保存されます。文言・タイミングの変更は「保存する」で反映＆学習されます。
+        チェックは自動保存。文言・タイミング・コメントの変更は「保存する」で反映（コメントは学習しません）。
       </p>
     </div>
   );
 }
 
 function strip(it: Item) {
-  return { title: it.title.trim(), timingLabel: it.timingLabel.trim() };
+  return {
+    title: it.title.trim(),
+    timingLabel: it.timingLabel.trim(),
+    comment: it.comment.trim(),
+  };
 }

@@ -20,7 +20,13 @@ export async function syncEventDescription(eventId: string): Promise<void> {
       checklistItems: {
         where: { isSuggested: false },
         orderBy: { sortOrder: "asc" },
-        select: { kind: true, title: true, timingLabel: true, isDone: true },
+        select: {
+          kind: true,
+          title: true,
+          timingLabel: true,
+          isDone: true,
+          comment: true,
+        },
       },
     },
   });
@@ -41,6 +47,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
       title: c.title,
       timingLabel: c.timingLabel,
       isDone: c.isDone,
+      comment: c.comment,
     })),
   );
   const hash = hashDescription(description);

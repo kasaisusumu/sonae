@@ -120,6 +120,7 @@ model ChecklistItem {
   kind          String   @default("task")
   title         String
   timingLabel   String? // 例: "前日21時"
+  comment       String? // ユーザーの自由メモ（学習対象外）
   isDone        Boolean  @default(false)
   isUserAdded   Boolean  @default(false)
   isUserRemoved Boolean  @default(false)

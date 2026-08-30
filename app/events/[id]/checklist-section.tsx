@@ -17,6 +17,7 @@ type Row = {
   kind: string;
   title: string;
   timingLabel: string | null;
+  comment: string | null;
   isDone: boolean;
   isUserAdded: boolean;
   isSuggested: boolean;
@@ -64,6 +65,7 @@ function KindBlock({
           id: c.id,
           title: c.title,
           timingLabel: c.timingLabel,
+          comment: c.comment,
           isDone: c.isDone,
           isUserAdded: c.isUserAdded,
         }))}

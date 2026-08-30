@@ -29,12 +29,19 @@ export async function replaceChecklistItems(
   ]);
 }
 
-function persistData(eventId: string, items: BuiltItem[]) {
+function persistData(
+  eventId: string,
+  items: BuiltItem[],
+  comments: Map<string, string>,
+) {
+  const key = (kind: string, title: string) =>
+    `${kind}:${title.toLowerCase().replace(/\s+/g, "")}`;
   return items.map((it, i) => ({
     eventId,
     kind: it.kind,
     title: it.title.trim(),
     timingLabel: it.timingLabel?.trim() || null,
+    comment: it.isSuggested ? null : comments.get(key(it.kind, it.title)) ?? null,
     sortOrder: i,
     isSuggested: it.isSuggested,
     suggestionType: it.suggestionType,
@@ -43,12 +50,28 @@ function persistData(eventId: string, items: BuiltItem[]) {
   }));
 }
 
-/** ベース生成＋学習ルール適用で準備リストを（再）生成し、丸ごと保存する。 */
+/** ベース生成＋学習ルール適用で準備リストを（再）生成し、丸ごと保存する。既存コメントは引き継ぐ。 */
 export async function generateAndSaveChecklist(eventId: string): Promise<void> {
+  const existing = await prisma.checklistItem.findMany({
+    where: { eventId, comment: { not: null } },
+    select: { kind: true, title: true, comment: true },
+  });
+  const comments = new Map<string, string>();
+  for (const e of existing) {
+    if (e.comment) {
+      comments.set(
+        `${e.kind}:${e.title.toLowerCase().replace(/\s+/g, "")}`,
+        e.comment,
+      );
+    }
+  }
+
   const items = await buildChecklistForEvent(eventId);
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({ where: { eventId } }),
-    prisma.checklistItem.createMany({ data: persistData(eventId, items) }),
+    prisma.checklistItem.createMany({
+      data: persistData(eventId, items, comments),
+    }),
   ]);
 }
 

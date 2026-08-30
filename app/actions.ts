@@ -185,6 +185,7 @@ interface SaveChecklistInput {
   items: {
     title: string;
     timingLabel: string | null;
+    comment: string | null;
     isDone: boolean;
     isUserAdded: boolean;
   }[];
@@ -205,6 +206,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     .map((it) => ({
       title: it.title.trim(),
       timingLabel: it.timingLabel?.trim() || null,
+      comment: it.comment?.trim() || null,
       isDone: Boolean(it.isDone),
       isUserAdded: Boolean(it.isUserAdded),
     }))
@@ -244,6 +246,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
         kind,
         title: it.title,
         timingLabel: it.timingLabel,
+        comment: it.comment,
         isDone: it.isDone,
         isUserAdded: it.isUserAdded,
         sortOrder: (kind === "belonging" ? maxOrder + 1 : 0) + i,

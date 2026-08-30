@@ -78,3 +78,88 @@ export function composeDescription(
 export function hashDescription(s: string): string {
   return crypto.createHash("sha256").update(s, "utf8").digest("hex");
 }
+
+// ── 説明欄の逆パース（ユーザーが Google 上で直接編集した内容を取り込む）──
+
+export interface ParsedItem {
+  kind: "task" | "belonging";
+  title: string;
+  timingLabel: string | null;
+  isDone: boolean;
+  comment: string | null;
+}
+
+const DONE_MARK =
+  /<s>|<\/s>|<del>|<strike>|~~|\[[xX]\]|[✓✔☑]|(?:^|\s)済(?:$|\s)/;
+
+/** 「私のマネージャー」ブロックを行ごとに読み、項目を復元する。ゆるくパースする。 */
+export function parseSonaeBlock(desc: string | null | undefined): {
+  hasBlock: boolean;
+  items: ParsedItem[];
+} {
+  if (!desc) return { hasBlock: false, items: [] };
+  const text = desc.replace(/<br\s*\/?>/gi, "\n");
+
+  let body: string | null = null;
+  for (const mark of [START, START_ALT]) {
+    const re = new RegExp(
+      `${escapeRe(mark)}\\n([\\s\\S]*?)\\n${escapeRe(END)}(?:\\n|$)`,
+    );
+    const m = text.match(re);
+    if (m) {
+      body = m[1];
+      break;
+    }
+  }
+  if (body === null) return { hasBlock: false, items: [] };
+
+  const items: ParsedItem[] = [];
+  let kind: "task" | "belonging" = "task";
+
+  for (const rawLine of body.split("\n")) {
+    const line = rawLine.replace(/　/g, " ").trim();
+    if (!line) continue;
+
+    if (/^【\s*準備すること\s*】$/.test(line)) {
+      kind = "task";
+      continue;
+    }
+    if (/^【\s*持ち物\s*】$/.test(line)) {
+      kind = "belonging";
+      continue;
+    }
+    if (/^準備リスト\s*[:：]/.test(line) || /^https?:\/\//.test(line)) continue;
+
+    // コメント行（↳ / └ / -> のあと）→ 直前の項目に付ける
+    const cm = line.match(/^(?:↳|└|->|»|→)\s*(.+)$/);
+    if (cm) {
+      if (items.length) items[items.length - 1].comment = cm[1].trim();
+      continue;
+    }
+
+    // 箇条書き
+    const bm = line.match(/^(?:[・*\-•‣▪]|\d+[.)])\s*(.+)$/);
+    const content = bm ? bm[1] : /[（(].+[）)]$/.test(line) ? line : null;
+    if (!content) continue;
+
+    const isDone = DONE_MARK.test(content);
+    let t = content
+      .replace(/<\/?(?:s|del|strike)>/gi, "")
+      .replace(/~~/g, "")
+      .replace(/\[[xX ]\]/g, "")
+      .replace(/[✓✔☑]/g, "")
+      .replace(/(?:^|\s)済(?:$|\s)/g, " ")
+      .trim();
+
+    let timingLabel: string | null = null;
+    const tm = t.match(/^(.*)[（(]\s*([^（()）]+?)\s*[）)]\s*$/);
+    if (tm) {
+      t = tm[1].trim();
+      timingLabel = tm[2].trim() || null;
+    }
+    if (!t) continue;
+    items.push({ kind, title: t, timingLabel, isDone, comment: null });
+  }
+
+  return { hasBlock: true, items };
+}

@@ -3,6 +3,8 @@ import { resolveCategoryForEvent } from "@/lib/categories";
 import { fetchCalendarChanges, type FetchedEvent } from "@/lib/google";
 import { sendPushToUser } from "@/lib/push";
 import { hashDescription, stripSonaeBlock } from "@/lib/description";
+import { applyInboundDescription } from "@/lib/description-inbound";
+import { primeNotifiedChecklists } from "@/lib/checklist";
 
 export interface SyncResult {
   newEvents: {
@@ -58,13 +60,13 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
   for (const ev of upserts) {
     const existing = existingByGid.get(ev.googleEventId);
     if (!existing || !inWindow(ev)) continue;
-    if (
-      ev.description &&
-      existing.lastWrittenHash &&
-      hashDescription(ev.description) === existing.lastWrittenHash
-    ) {
-      continue; // 自分が書いた内容 → churn 防止
-    }
+
+    const echo =
+      !!ev.description &&
+      !!existing.lastWrittenHash &&
+      hashDescription(ev.description) === existing.lastWrittenHash;
+
+    // 説明欄以外のスカラー項目は常に更新（memo は下の取り込みで扱う）
     await prisma.event.update({
       where: { id: existing.id },
       data: {
@@ -72,10 +74,18 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
         eventDatetime: ev.start,
         endDatetime: ev.end,
         recurringEventId: ev.recurringEventId,
-        memo: stripSonaeBlock(ev.description) || null,
       },
     });
     updatedCount++;
+
+    // 自分の書き込みのエコーでなければ、説明欄の直接編集を取り込む
+    if (!echo) {
+      try {
+        await applyInboundDescription(existing.id, ev.description ?? "");
+      } catch (e) {
+        console.error("[sync] 説明欄の取り込みに失敗 eventId=%s", existing.id, e);
+      }
+    }
   }
 
   // 新規候補：ウィンドウ内・未取り込み・開始時刻昇順
@@ -168,12 +178,24 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
 }
 
 /**
- * 同期して、新規予定があれば即プッシュ通知する（準備リストは作らない）。
+ * 同期 → 新規予定の準備リストを先行生成（説明欄にも反映）→ 即プッシュ通知。
+ * アプリを開かなくても成り立つための中心処理。
  * 繰り返し予定は「系列ごとに1回だけ」通知する。初回同期では通知しない。
  */
-export async function syncAndNotify(userId: string): Promise<SyncResult> {
+export async function syncAndNotify(
+  userId: string,
+  opts?: { generateBudget?: number },
+): Promise<SyncResult & { generated: number }> {
   const result = await syncUserCalendar(userId);
-  if (result.isFirstSync || result.newEvents.length === 0) return result;
+  if (result.isFirstSync) return { ...result, generated: 0 };
+
+  // 通知の前に、準備リストを用意して説明欄へ反映（新規＋積み残し、上限つき）
+  const generated = await primeNotifiedChecklists(
+    userId,
+    opts?.generateBudget ?? 3,
+  );
+
+  if (result.newEvents.length === 0) return { ...result, generated };
 
   // 系列は最も近い1件だけ通知対象にする
   const notifiable: SyncResult["newEvents"] = [];
@@ -202,7 +224,7 @@ export async function syncAndNotify(userId: string): Promise<SyncResult> {
       title: isSeries
         ? "繰り返しの予定が追加されました"
         : "新しい予定が追加されました",
-      body: `「${ev.title}」— 開くと準備リストを用意します`,
+      body: `「${ev.title}」の準備リストを用意しました`,
       url: `/events/${ev.id}`,
       tag: isSeries ? `series-${ev.recurringEventId}` : `event-${ev.id}`,
     });
@@ -212,5 +234,5 @@ export async function syncAndNotify(userId: string): Promise<SyncResult> {
     });
   }
 
-  return result;
+  return { ...result, generated };
 }

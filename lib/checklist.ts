@@ -82,17 +82,19 @@ export async function ensureChecklistForEvent(eventId: string): Promise<void> {
 }
 
 /**
- * 通知を送った直近の予定のうち、まだ準備リストが無いものを先行生成する。
- * ダッシュボード表示後に after() で走らせる想定（レスポンスをブロックしない）。
+ * 通知済みでまだ準備リストが無い予定を先行生成し、説明欄にも反映する。
+ * cron / webhook / ダッシュボード表示後（after）から呼ぶ。生成した件数を返す。
+ * アプリを開かなくてもリストが用意されるための要。
  */
 export async function primeNotifiedChecklists(
   userId: string,
   limit = 3,
-): Promise<void> {
+): Promise<number> {
+  if (limit <= 0) return 0;
   const targets = await prisma.event.findMany({
     where: {
       userId,
-      notifiedAt: { not: null },
+      source: "google",
       eventDatetime: { gte: new Date() },
       checklistItems: { none: {} },
     },
@@ -101,12 +103,15 @@ export async function primeNotifiedChecklists(
     select: { id: true },
   });
 
+  let n = 0;
   for (const t of targets) {
     try {
       await generateAndSaveChecklist(t.id);
       await syncEventDescription(t.id);
+      n++;
     } catch (e) {
       console.error("[prime] 生成失敗 eventId=%s", t.id, e);
     }
   }
+  return n;
 }

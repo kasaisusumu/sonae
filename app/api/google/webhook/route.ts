@@ -35,12 +35,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await syncAndNotify(account.userId);
+    const result = await syncAndNotify(account.userId, { generateBudget: 3 });
     return NextResponse.json({
       ok: true,
       new: result.newEvents.length,
       updated: result.updatedCount,
       deleted: result.deletedCount,
+      generated: result.generated,
     });
   } catch (e) {
     console.error("[google/webhook] 同期に失敗 userId=%s", account.userId, e);

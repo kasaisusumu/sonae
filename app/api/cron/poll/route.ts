@@ -39,14 +39,21 @@ async function handler(req: NextRequest) {
 
   let totalNew = 0;
   let notified = 0;
+  let generated = 0;
   let watches = 0;
   let errors = 0;
+  // 1 回の実行で生成する準備リストの上限（タイムアウト対策・全ユーザー合算）
+  let genBudget = 4;
 
   for (const { userId } of accounts) {
     try {
-      const result = await syncAndNotify(userId);
+      const result = await syncAndNotify(userId, {
+        generateBudget: Math.max(0, genBudget),
+      });
       totalNew += result.newEvents.length;
       notified += result.isFirstSync ? 0 : result.newEvents.length;
+      generated += result.generated;
+      genBudget -= result.generated;
       if (await ensureWatch(userId)) watches++;
     } catch (e) {
       errors++;
@@ -59,6 +66,7 @@ async function handler(req: NextRequest) {
     accounts: accounts.length,
     totalNew,
     notified,
+    generated,
     watches,
     errors,
     at: new Date().toISOString(),

@@ -16,7 +16,7 @@ export default async function FailuresPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/");
 
-  const [categories, logs] = await Promise.all([
+  const [categories, logs, events] = await Promise.all([
     prisma.category.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "asc" },
@@ -24,7 +24,13 @@ export default async function FailuresPage() {
     prisma.failureLog.findMany({
       where: { userId: user.id },
       orderBy: { occurredAt: "desc" },
-      include: { category: true },
+      include: { category: true, event: { select: { title: true } } },
+    }),
+    prisma.event.findMany({
+      where: { userId: user.id },
+      orderBy: { eventDatetime: "desc" },
+      take: 80,
+      select: { id: true, title: true, eventDatetime: true },
     }),
   ]);
 
@@ -38,7 +44,7 @@ export default async function FailuresPage() {
       <div>
         <h1 className="text-xl font-semibold">失敗ログ</h1>
         <p className="mt-1 text-sm text-muted">
-          うっかりは誰にでもあります。責めるためではなく、同じカテゴリの予定で先回りするための記録です。
+          うっかりは誰にでもあります。責めるためではなく、似た予定で先回りするための記録です。金額がなくても記録できます。
         </p>
       </div>
 
@@ -51,27 +57,45 @@ export default async function FailuresPage() {
               name="description"
               required
               rows={2}
-              placeholder="例: 新幹線に乗り遅れて、指定席を取り直した"
+              placeholder="例: 集合時間に遅刻した／保険証を忘れた／新幹線に乗り遅れた"
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
             />
           </label>
+          <label className="text-sm sm:col-span-2">
+            <span className="text-muted">どの予定で起きた？（任意）</span>
+            <select
+              name="eventId"
+              defaultValue=""
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
+            >
+              <option value="">— 予定に紐づけない（カテゴリ全体の記録）—</option>
+              {events.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.eventDatetime.toLocaleDateString("ja-JP")} {e.title}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted">
+              紐づけると、その予定に似た予定でだけ警告します。
+            </span>
+          </label>
           <label className="text-sm">
-            <span className="text-muted">推定損失額（円）</span>
+            <span className="text-muted">推定損失額（円・任意）</span>
             <input
               type="number"
               name="estimatedLossYen"
               min={0}
               step={100}
-              placeholder="25000"
+              placeholder="なくてもOK"
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
             />
           </label>
           <label className="text-sm">
-            <span className="text-muted">関連カテゴリ</span>
+            <span className="text-muted">関連カテゴリ（任意）</span>
             <input
               name="categoryName"
               list="failure-category-options"
-              placeholder="旅行・出張"
+              placeholder="予定を選べば自動で入ります"
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
             />
             <datalist id="failure-category-options">
@@ -80,13 +104,13 @@ export default async function FailuresPage() {
               ))}
             </datalist>
           </label>
-          <label className="text-sm">
+          <label className="text-sm sm:col-span-2">
             <span className="text-muted">いつ？</span>
             <input
               type="date"
               name="occurredAt"
               defaultValue={todayValue()}
-              className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 sm:w-56"
             />
           </label>
           <div className="sm:col-span-2">
@@ -121,6 +145,7 @@ export default async function FailuresPage() {
                   <p className="mt-1 text-xs text-muted">
                     {l.occurredAt.toLocaleDateString("ja-JP")}
                     {l.category ? ` ・ ${l.category.name}` : " ・ カテゴリなし"}
+                    {l.event ? ` ・ 「${l.event.title}」` : ""}
                     {l.estimatedLossYen > 0
                       ? ` ・ 推定 ${formatYen(l.estimatedLossYen)}`
                       : ""}

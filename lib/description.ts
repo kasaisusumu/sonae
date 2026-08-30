@@ -8,9 +8,13 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/** プレーンテキスト用: 改行を潰し、前後の空白を整える。 */
+function oneLine(s: string): string {
+  return s.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
 }
+
+const CHECK_DONE = "☑";
+const CHECK_TODO = "☐";
 
 /**
  * 既存の説明欄から自アプリのブロックを取り除く（ユーザーが書いた内容だけ残す）。
@@ -38,25 +42,28 @@ export interface DescItem {
 }
 
 function bullet(it: DescItem): string {
-  const label = it.timingLabel ? `${it.title}（${it.timingLabel}）` : it.title;
-  const safe = escapeHtml(label);
-  const main = it.isDone ? `・<s>${safe}</s> ✓` : `・${safe}`;
+  const label = it.timingLabel
+    ? `${oneLine(it.title)}（${oneLine(it.timingLabel)}）`
+    : oneLine(it.title);
+  // 完了はチェック済みアイコン、未完了は空ボックス。取り消し線などの装飾は使わない
+  const main = `${it.isDone ? CHECK_DONE : CHECK_TODO} ${label}`;
   const c = it.comment?.trim();
   // コメントはすぐ下に段下げ
-  return c ? `${main}\n　　↳ ${escapeHtml(c)}` : main;
+  return c ? `${main}\n  ↳ ${oneLine(c)}` : main;
 }
 
-/** ブロック本文（リンク＋準備すること＋持ち物）。完了項目は <s> で取り消し線。 */
+/**
+ * ブロック本文（リンク＋準備すること＋持ち物）。プレーンテキスト。
+ * 完了項目は行頭を「☑」、未完了は「☐」で示す（HTML の装飾は入れない）。
+ * HTML を入れると Google カレンダーの編集画面で書式警告やカクつきが出るため。
+ */
 export function buildSonaeBlock(url: string, items: DescItem[]): string {
   const tasks = items.filter((i) => (i.kind ?? "task") === "task");
   const belongings = items.filter((i) => i.kind === "belonging");
 
-  const lines = [
-    START,
-    `準備リスト: <a href="${escapeHtml(url)}">${escapeHtml(url)}</a>`,
-  ];
+  const lines = [START, `準備リスト: ${url}`];
   lines.push("", "【準備すること】");
-  lines.push(...(tasks.length ? tasks.map(bullet) : ["・（なし）"]));
+  lines.push(...(tasks.length ? tasks.map(bullet) : [`${CHECK_TODO} （なし）`]));
   if (belongings.length) {
     lines.push("", "【持ち物】");
     lines.push(...belongings.map(bullet));
@@ -90,7 +97,11 @@ export interface ParsedItem {
 }
 
 const DONE_MARK =
-  /<s>|<\/s>|<del>|<strike>|~~|\[[xX]\]|[✓✔☑]|(?:^|\s)済(?:$|\s)/;
+  /<s>|<\/s>|<del>|<strike>|~~|\[[xX]\]|[✓✔☑✅]|(?:^|\s)済(?:$|\s)/;
+
+// 行頭に付きうるチェックボックス／箇条書き記号（完了・未完了とも）
+const BOX_OR_BULLET =
+  /^(?:[☐☑✅⬜◻◼■□▪▫✔✓]️?|\[[ xX]\]|[・*\-•‣▸▹])\s*/;
 
 /** 「私のマネージャー」ブロックを行ごとに読み、項目を復元する。ゆるくパースする。 */
 export function parseSonaeBlock(desc: string | null | undefined): {
@@ -137,17 +148,23 @@ export function parseSonaeBlock(desc: string | null | undefined): {
       continue;
     }
 
-    // 箇条書き
-    const bm = line.match(/^(?:[・*\-•‣▪]|\d+[.)])\s*(.+)$/);
-    const content = bm ? bm[1] : /[（(].+[）)]$/.test(line) ? line : null;
+    // チェックボックス／箇条書き行 → 項目
+    const isDone = DONE_MARK.test(line);
+    let content: string | null = null;
+    if (BOX_OR_BULLET.test(line)) {
+      content = line.replace(BOX_OR_BULLET, "");
+    } else if (/^\d+[.)]\s*/.test(line)) {
+      content = line.replace(/^\d+[.)]\s*/, "");
+    } else if (/[（(].+[）)]\s*$/.test(line)) {
+      content = line; // 記号なしでも「（…）」で終わる行は項目として拾う
+    }
     if (!content) continue;
 
-    const isDone = DONE_MARK.test(content);
     let t = content
       .replace(/<\/?(?:s|del|strike)>/gi, "")
       .replace(/~~/g, "")
       .replace(/\[[xX ]\]/g, "")
-      .replace(/[✓✔☑]/g, "")
+      .replace(/[✓✔☑✅⬜◻◼■□▪▫️]/g, "")
       .replace(/(?:^|\s)済(?:$|\s)/g, " ")
       .trim();
 

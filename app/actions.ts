@@ -393,15 +393,23 @@ export async function deleteLearnedRule(ruleId: string): Promise<void> {
 // P1: 失敗ログ & 再発防止
 // ─────────────────────────────────────────────
 
-/** 「うっかり失敗」を記録する。 */
+/** 「うっかり失敗」を記録する。金額は任意。特定の予定に紐づけられる。 */
 export async function createFailureLog(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const description = String(formData.get("description") ?? "").trim();
   const estimatedLossYen = parseYen(formData.get("estimatedLossYen"));
   const categoryName = String(formData.get("categoryName") ?? "").trim();
   const occurredAtRaw = String(formData.get("occurredAt") ?? "").trim();
+  const eventId = String(formData.get("eventId") ?? "").trim() || null;
 
   if (!description) redirect("/failures?error=missing");
+
+  const linkedEvent = eventId
+    ? await prisma.event.findFirst({
+        where: { id: eventId, userId },
+        select: { id: true, categoryId: true, eventDatetime: true },
+      })
+    : null;
 
   const category = categoryName
     ? await getOrCreateCategory(userId, categoryName)
@@ -410,16 +418,54 @@ export async function createFailureLog(formData: FormData): Promise<void> {
   await prisma.failureLog.create({
     data: {
       userId,
-      categoryId: category?.id ?? null,
+      categoryId: category?.id ?? linkedEvent?.categoryId ?? null,
+      eventId: linkedEvent?.id ?? null,
       description,
       estimatedLossYen,
-      occurredAt: occurredAtRaw ? new Date(occurredAtRaw) : new Date(),
+      occurredAt: occurredAtRaw
+        ? new Date(occurredAtRaw)
+        : (linkedEvent?.eventDatetime ?? new Date()),
     },
   });
 
   revalidatePath("/failures");
   revalidatePath("/");
   revalidatePath("/events");
+}
+
+/** 事後の警告で「今回もやってしまった」を1タップ記録（同じ内容で、この予定に紐づけて追記）。 */
+export async function logRepeatedFailure(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  const failureLogId = String(formData.get("failureLogId") ?? "");
+  if (!eventId || !failureLogId) return;
+
+  const [event, template] = await Promise.all([
+    prisma.event.findFirst({ where: { id: eventId, userId } }),
+    prisma.failureLog.findFirst({ where: { id: failureLogId, userId } }),
+  ]);
+  if (!event || !template) return;
+
+  // 同じ予定・同じ内容の二重記録を避ける
+  const dup = await prisma.failureLog.findFirst({
+    where: { userId, eventId, description: template.description },
+  });
+  if (!dup) {
+    await prisma.failureLog.create({
+      data: {
+        userId,
+        categoryId: event.categoryId ?? template.categoryId ?? null,
+        eventId: event.id,
+        description: template.description,
+        estimatedLossYen: template.estimatedLossYen,
+        occurredAt: event.eventDatetime,
+      },
+    });
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/failures");
+  revalidatePath("/");
 }
 
 /** 失敗ログを削除する。 */

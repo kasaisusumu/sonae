@@ -132,7 +132,11 @@ export async function applyInboundDescription(
       where: { eventId, isSuggested: false },
     }),
     prisma.checklistItem.createMany({ data: rows }),
-    prisma.event.update({ where: { id: eventId }, data: { memo: memoPart } }),
+    prisma.event.update({
+      where: { id: eventId },
+      // 直後しばらくは正規化の書き戻しを控える（Google 編集画面のカクつき防止）
+      data: { memo: memoPart, lastInboundEditAt: new Date() },
+    }),
   ]);
 
   // 学習（構造変化のみ・種別ごと。完了/コメントは学習しない）
@@ -159,6 +163,6 @@ export async function applyInboundDescription(
     }
   }
 
-  // 正規化して書き戻す（lastWrittenHash も更新される）
-  await syncEventDescription(eventId);
+  // 取り込みは即時。正規化の書き戻しはクールダウン明けまで待つ（カクつき防止）。
+  await syncEventDescription(eventId, { respectCooldown: true });
 }

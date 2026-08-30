@@ -13,12 +13,19 @@ export interface CategoryBreakdown {
   count: number;
 }
 
+export interface SavedItem {
+  description: string; // 防げた失敗の内容
+  amountYen: number;
+  eventTitle: string | null;
+}
+
 export interface SavingsSummary {
   totalYen: number;
   thisMonthYen: number;
   entryCount: number;
   monthly: MonthlyPoint[]; // 直近 6 ヶ月（古い→新しい）
   byCategory: CategoryBreakdown[]; // 金額の多い順
+  thisMonthItems: SavedItem[]; // 今月「防げた」失敗の内訳
   recent: {
     id: string;
     amountYen: number;
@@ -82,12 +89,21 @@ export async function getSavingsSummary(userId: string): Promise<SavingsSummary>
 
   const byCategory = [...catMap.values()].sort((a, b) => b.amountYen - a.amountYen);
 
+  const thisMonthItems: SavedItem[] = entries
+    .filter((e) => monthKey(e.createdAt) === thisMonthKey)
+    .map((e) => ({
+      description: e.failureLog?.description ?? "（失敗ログ削除済み）",
+      amountYen: e.amountYen,
+      eventTitle: e.event?.title ?? null,
+    }));
+
   return {
     totalYen,
     thisMonthYen,
     entryCount: entries.length,
     monthly,
     byCategory,
+    thisMonthItems,
     recent: entries.slice(0, 8).map((e) => ({
       id: e.id,
       amountYen: e.amountYen,

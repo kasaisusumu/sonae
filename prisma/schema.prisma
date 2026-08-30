@@ -104,11 +104,16 @@ model Event {
   notifiedAt    DateTime?
   // そなえが最後に説明欄へ書き込んだ内容のハッシュ（無限ループ／再書き込み防止）
   lastWrittenHash String?
+  // Google 上で説明欄が直接編集された最終日時。直後しばらくは正規化の書き戻しを控える（カクつき防止）
+  lastInboundEditAt DateTime?
+  // 事後の「今回は防げた？」通知を送った日時（再送防止）
+  postFailureCheckNotifiedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   checklistItems ChecklistItem[]
   savingsEntries SavingsEntry[]
+  failureLogs    FailureLog[]
   feature        EventFeature?
   editRecords    EditRecord[]
 
@@ -196,12 +201,19 @@ model FailureLog {
   user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   categoryId       String?
   category         Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  // どの予定で起きた失敗か（任意）。指定すると、その予定に似た予定でだけ警告する
+  eventId          String?
+  event            Event?   @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  // 失敗の内容（自由記述）。「遅刻した」「保険証を忘れた」など。金額はなくてよい
   description      String
+  // 推定損失額（円・任意。0 のままでもよい）
   estimatedLossYen Int      @default(0)
   occurredAt       DateTime @default(now())
   createdAt        DateTime @default(now())
 
   savingsEntries SavingsEntry[]
+
+  @@index([userId, categoryId])
 }
 
 model SavingsEntry {

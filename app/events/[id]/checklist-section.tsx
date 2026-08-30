@@ -85,6 +85,7 @@ export async function ChecklistSection({
     eventDatetime: Date;
     endDatetime: Date | null;
     categoryId: string | null;
+    recurringEventId: string | null;
     failureWarningAckAt: Date | null;
     category: { name: string } | null;
   };
@@ -118,7 +119,11 @@ export async function ChecklistSection({
 
   return (
     <>
-      {warning && <WarningPanel warning={warning} />}
+      {warning && (
+        <div id="failure-check" className="scroll-mt-4">
+          <WarningPanel warning={warning} />
+        </div>
+      )}
 
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3">

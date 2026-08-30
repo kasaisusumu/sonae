@@ -33,6 +33,32 @@ export default async function SavingsPage() {
           ※ これは<strong>推定値</strong>です。断定ではありません。
           推定ロジック: あなたが記録した失敗の「推定損失額」のうち、同じカテゴリの予定で「防げた」と自己申告したものを合計しています。実際に防げたかどうかの自動判定は行っていません。
         </p>
+
+        {s.thisMonthItems.length > 0 && (
+          <div className="mt-4 rounded-xl bg-surface/70 p-4">
+            <p className="text-xs font-semibold text-teal-dark">
+              今月防げたこと
+            </p>
+            <ul className="mt-2 space-y-1 text-sm text-teal-dark/90">
+              {s.thisMonthItems.map((it, i) => (
+                <li key={i} className="flex items-baseline justify-between gap-3">
+                  <span className="min-w-0 truncate">
+                    ・{it.description}
+                    {it.eventTitle ? (
+                      <span className="text-teal-dark/60">
+                        {" "}
+                        （{it.eventTitle}）
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="shrink-0 tabular-nums">
+                    {it.amountYen > 0 ? formatYen(it.amountYen) : "±0"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
 
       {s.entryCount === 0 ? (

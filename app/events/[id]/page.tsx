@@ -80,6 +80,7 @@ export default async function EventDetailPage({
             eventDatetime: event.eventDatetime,
             endDatetime: event.endDatetime,
             categoryId: event.categoryId,
+            recurringEventId: event.recurringEventId,
             failureWarningAckAt: event.failureWarningAckAt,
             category: event.category
               ? { name: event.category.name }

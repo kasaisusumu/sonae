@@ -14,9 +14,14 @@ import { ensureWatch, stopWatch } from "@/lib/google";
 import {
   ensureChecklistForEvent,
   generateAndSaveChecklist,
-  replaceChecklistItems,
 } from "@/lib/checklist";
-import { updateLearningFromEdits, type GeneratedItem } from "@/lib/learning";
+import {
+  recordEdit,
+  confirmRule,
+  contradictRule,
+  type GeneratedItem,
+} from "@/lib/learning";
+import { extractEventFeature } from "@/lib/features";
 
 async function requireUserId(): Promise<string> {
   const userId = await getSessionUserId();
@@ -170,7 +175,7 @@ interface SaveChecklistInput {
   removedTitles: string[];
 }
 
-/** チェックリストの編集を保存し、カテゴリ学習に反映する（自分マニュアル）。 */
+/** チェックリストの編集を保存し、学習ルールに反映する（提案項目は残す）。 */
 export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   const userId = await requireUserId();
   const event = await prisma.event.findFirst({
@@ -188,26 +193,51 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     }))
     .filter((it) => it.title.length > 0);
 
-  // 学習用の差分を計算
-  const prevByTitle = new Map(
-    event.checklistItems.map((c) => [c.title.trim(), c]),
-  );
+  // 学習用の差分（提案項目=isSuggested は対象外。明示編集のみ拾う）
+  const prev = event.checklistItems.filter((c) => !c.isSuggested);
+  const prevByTitle = new Map(prev.map((c) => [c.title.trim(), c]));
+  const nextTitles = new Set(cleanItems.map((it) => it.title));
+
+  const removed = [...prevByTitle.keys()].filter((t) => !nextTitles.has(t));
   const added: GeneratedItem[] = cleanItems
     .filter((it) => it.isUserAdded || !prevByTitle.has(it.title))
     .map((it) => ({ title: it.title, timingLabel: it.timingLabel }));
   const retimed: { title: string; timingLabel: string }[] = [];
   for (const it of cleanItems) {
-    const prev = prevByTitle.get(it.title);
-    if (prev && (prev.timingLabel ?? null) !== it.timingLabel && it.timingLabel) {
+    const p = prevByTitle.get(it.title);
+    if (p && (p.timingLabel ?? null) !== it.timingLabel && it.timingLabel) {
       retimed.push({ title: it.title, timingLabel: it.timingLabel });
     }
   }
 
-  await replaceChecklistItems(input.eventId, cleanItems);
+  // 非提案項目だけ入れ替え（提案行は残す）
+  await prisma.$transaction([
+    prisma.checklistItem.deleteMany({
+      where: { eventId: input.eventId, isSuggested: false },
+    }),
+    prisma.checklistItem.createMany({
+      data: cleanItems.map((it, i) => ({
+        eventId: input.eventId,
+        title: it.title,
+        timingLabel: it.timingLabel,
+        isDone: it.isDone,
+        isUserAdded: it.isUserAdded,
+        sortOrder: i,
+      })),
+    }),
+  ]);
 
-  if (event.categoryId) {
-    await updateLearningFromEdits(event.categoryId, {
-      removed: input.removedTitles.filter(Boolean),
+  if (event.categoryId && (removed.length || added.length || retimed.length)) {
+    await recordEdit({
+      eventId: event.id,
+      categoryId: event.categoryId,
+      feature: extractEventFeature({
+        title: event.title,
+        memo: event.memo,
+        eventDatetime: event.eventDatetime,
+        endDatetime: event.endDatetime,
+      }),
+      removed,
       added,
       retimed,
     });
@@ -215,6 +245,104 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
 
   revalidatePath(`/events/${input.eventId}`);
   revalidatePath("/events");
+}
+
+/** 提案項目を「適用」する（1タップ）。ルールの確信度を上げる。 */
+export async function acceptSuggestion(itemId: string): Promise<void> {
+  const userId = await requireUserId();
+  const item = await prisma.checklistItem.findFirst({
+    where: { id: itemId, isSuggested: true, event: { userId } },
+  });
+  if (!item) return;
+
+  if (item.suggestionType === "exclude") {
+    await prisma.checklistItem.delete({ where: { id: itemId } });
+  } else if (item.suggestionType === "add") {
+    await prisma.checklistItem.update({
+      where: { id: itemId },
+      data: {
+        isSuggested: false,
+        suggestionType: null,
+        suggestionRuleId: null,
+        suggestionValue: null,
+        isUserAdded: true,
+      },
+    });
+  } else if (item.suggestionType === "timing") {
+    await prisma.checklistItem.update({
+      where: { id: itemId },
+      data: {
+        timingLabel: item.suggestionValue ?? item.timingLabel,
+        isSuggested: false,
+        suggestionType: null,
+        suggestionRuleId: null,
+        suggestionValue: null,
+      },
+    });
+  }
+
+  if (item.suggestionRuleId) await confirmRule(item.suggestionRuleId);
+  revalidatePath(`/events/${item.eventId}`);
+  revalidatePath("/events");
+}
+
+/** 提案項目を「却下」する（1タップ）。ルールの確信度を下げる。 */
+export async function rejectSuggestion(itemId: string): Promise<void> {
+  const userId = await requireUserId();
+  const item = await prisma.checklistItem.findFirst({
+    where: { id: itemId, isSuggested: true, event: { userId } },
+  });
+  if (!item) return;
+
+  if (item.suggestionType === "add") {
+    await prisma.checklistItem.delete({ where: { id: itemId } });
+  } else {
+    // exclude / timing → 項目は現状のまま残す
+    await prisma.checklistItem.update({
+      where: { id: itemId },
+      data: {
+        isSuggested: false,
+        suggestionType: null,
+        suggestionRuleId: null,
+        suggestionValue: null,
+      },
+    });
+  }
+
+  if (item.suggestionRuleId) await contradictRule(item.suggestionRuleId);
+  revalidatePath(`/events/${item.eventId}`);
+  revalidatePath("/events");
+}
+
+/** 学習内容の確認画面: ルールを固定/解除する。 */
+export async function setRuleLocked(
+  ruleId: string,
+  locked: boolean,
+): Promise<void> {
+  const userId = await requireUserId();
+  const rule = await prisma.learnedRule.findFirst({
+    where: { id: ruleId, category: { userId } },
+  });
+  if (!rule) return;
+  await prisma.learnedRule.update({
+    where: { id: ruleId },
+    data: {
+      isUserLocked: locked,
+      ...(locked
+        ? { confidence: 0.95, confirmedCount: Math.max(rule.confirmedCount, 3) }
+        : {}),
+    },
+  });
+  revalidatePath("/settings/learning");
+}
+
+/** 学習内容の確認画面: ルールを削除（リセット）する。 */
+export async function deleteLearnedRule(ruleId: string): Promise<void> {
+  const userId = await requireUserId();
+  await prisma.learnedRule.deleteMany({
+    where: { id: ruleId, category: { userId } },
+  });
+  revalidatePath("/settings/learning");
 }
 
 // ─────────────────────────────────────────────

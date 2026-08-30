@@ -71,9 +71,10 @@ model Category {
   name      String
   createdAt DateTime @default(now())
 
-  events      Event[]
-  learning    CategoryLearning?
-  failureLogs FailureLog[]
+  events       Event[]
+  learnedRules LearnedRule[]
+  editRecords  EditRecord[]
+  failureLogs  FailureLog[]
 
   @@unique([userId, name])
 }
@@ -99,6 +100,8 @@ model Event {
 
   checklistItems ChecklistItem[]
   savingsEntries SavingsEntry[]
+  feature        EventFeature?
+  editRecords    EditRecord[]
 }
 
 model ChecklistItem {
@@ -112,17 +115,63 @@ model ChecklistItem {
   isUserRemoved Boolean  @default(false)
   sortOrder     Int      @default(0)
   createdAt     DateTime @default(now())
+
+  // confidence の低い「提案」項目（ユーザーが1タップで適用/却下）
+  isSuggested      Boolean @default(false)
+  suggestionType   String? // "exclude" | "add" | "timing"
+  suggestionRuleId String? // 元になった LearnedRule.id
+  suggestionValue  String? // timing 提案のときの提案タイミング
 }
 
-// 「自分マニュアル」の実体。カテゴリ単位で編集内容を記憶する。
-model CategoryLearning {
-  id              String   @id @default(cuid())
-  categoryId      String   @unique
-  category        Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  excludedItems   String   @default("[]") // json: string[]  (一度消した項目のタイトル)
-  fixedItems      String   @default("[]") // json: {title, timingLabel}[] (毎回出す項目)
-  timingOverrides String   @default("{}") // json: { [title]: timingLabel }
-  updatedAt       DateTime @updatedAt
+// ── 学習ロジック（spec 9.2）: EventFeature + EditRecord + LearnedRule ──
+
+// 予定の特徴量（軽いルールベース推定）
+model EventFeature {
+  id             String   @id @default(cuid())
+  eventId        String   @unique
+  event          Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  isOverseas     Boolean? // タイトル・メモのキーワードから推定（不明なら null）
+  durationNights Int? // 日付範囲から算出（日帰り=0、不明なら null）
+  isWeekday      Boolean  @default(true)
+  keywords       String   @default("[]") // json string[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// 個々の編集の生ログ（イベント単位）
+model EditRecord {
+  id            String    @id @default(cuid())
+  eventId       String
+  event         Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  categoryId    String?
+  category      Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  addedItems    String    @default("[]") // json [{title, timingLabel}]
+  removedItems  String    @default("[]") // json string[]
+  timingChanges String    @default("{}") // json { title: timingLabel }
+  createdAt     DateTime  @default(now())
+
+  @@index([categoryId])
+}
+
+// EditRecord を集約した、提案時に参照するルール
+model LearnedRule {
+  id                String   @id @default(cuid())
+  categoryId        String
+  category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  featureSignature  String   @default("{}") // json {d?: "day"|"short"|"multi"|"unknown", o?: bool|null}
+  ruleType          String // "exclude_item" | "fixed_item" | "timing_override"
+  target            String // 対象項目名
+  value             String? // timing_override / fixed_item のタイミングラベル
+  confidence        Float    @default(0.35) // 0-1。反復確認で上昇、矛盾で低下、未更新で経年劣化
+  confirmedCount    Int      @default(1) // 連続確認回数（矛盾でリセット）
+  contradictedCount Int      @default(0) // 矛盾が起きた累計
+  lastConfirmedAt   DateTime @default(now())
+  isUserLocked      Boolean  @default(false) // 「学習内容の確認」画面で固定した
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([categoryId, ruleType, target, featureSignature])
+  @@index([categoryId, ruleType])
 }
 
 model FailureLog {

@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/prisma";
-import { generateChecklist } from "@/lib/generate";
-import { getLearning, type GeneratedItem } from "@/lib/learning";
+import { buildChecklistForEvent, type BuiltItem } from "@/lib/suggest";
 
-export interface DraftItem extends GeneratedItem {
+export interface DraftItem {
+  title: string;
+  timingLabel: string | null;
   isDone?: boolean;
   isUserAdded?: boolean;
 }
 
-/** 予定のチェックリスト項目を丸ごと置き換える。 */
+/** 予定のチェックリスト項目を丸ごと置き換える（ユーザー編集の保存用。提案メタは持たない）。 */
 export async function replaceChecklistItems(
   eventId: string,
   items: DraftItem[],
@@ -27,29 +28,26 @@ export async function replaceChecklistItems(
   ]);
 }
 
-/** カテゴリ学習を反映して準備リストを（再）生成し、保存する。 */
-export async function generateAndSaveChecklist(eventId: string): Promise<void> {
-  const event = await prisma.event.findUnique({
-    where: { id: eventId },
-    include: { category: true },
-  });
-  if (!event) throw new Error("予定が見つかりません。");
-
-  const learning = await getLearning(event.categoryId);
-  const { items } = await generateChecklist(
-    {
-      title: event.title,
-      categoryName: event.category?.name ?? "その他",
-      eventDatetime: event.eventDatetime,
-      memo: event.memo,
-    },
-    learning,
-  );
-
-  await replaceChecklistItems(
+function persistData(eventId: string, items: BuiltItem[]) {
+  return items.map((it, i) => ({
     eventId,
-    items.map((it) => ({ ...it, isUserAdded: false })),
-  );
+    title: it.title.trim(),
+    timingLabel: it.timingLabel?.trim() || null,
+    sortOrder: i,
+    isSuggested: it.isSuggested,
+    suggestionType: it.suggestionType,
+    suggestionRuleId: it.suggestionRuleId,
+    suggestionValue: it.suggestionValue,
+  }));
+}
+
+/** ベース生成＋学習ルール適用で準備リストを（再）生成し、丸ごと保存する。 */
+export async function generateAndSaveChecklist(eventId: string): Promise<void> {
+  const items = await buildChecklistForEvent(eventId);
+  await prisma.$transaction([
+    prisma.checklistItem.deleteMany({ where: { eventId } }),
+    prisma.checklistItem.createMany({ data: persistData(eventId, items) }),
+  ]);
 }
 
 /** チェックリストが未生成なら生成する（予定詳細を開いたときの遅延生成）。 */

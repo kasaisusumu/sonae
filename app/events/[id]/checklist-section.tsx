@@ -1,9 +1,12 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { ensureChecklistForEvent } from "@/lib/checklist";
-import { getLearning } from "@/lib/learning";
+import { extractEventFeature } from "@/lib/features";
+import { getApplicableRules } from "@/lib/learning";
 import { getWarningForEvent } from "@/lib/failures";
 import { regenerateChecklist } from "@/app/actions";
 import { ChecklistEditor } from "./checklist-editor";
+import { SuggestionList } from "./suggestion-list";
 import { WarningPanel } from "./warning-panel";
 import { SubmitButton } from "@/app/components/submit-button";
 
@@ -18,7 +21,9 @@ export async function ChecklistSection({
     id: string;
     userId: string;
     title: string;
+    memo: string | null;
     eventDatetime: Date;
+    endDatetime: Date | null;
     categoryId: string | null;
     failureWarningAckAt: Date | null;
     category: { name: string } | null;
@@ -36,10 +41,20 @@ export async function ChecklistSection({
     });
   }
 
-  const [learning, warning] = await Promise.all([
-    getLearning(event.categoryId),
+  const feature = extractEventFeature({
+    title: event.title,
+    memo: event.memo,
+    eventDatetime: event.eventDatetime,
+    endDatetime: event.endDatetime,
+  });
+  const [warning, rules] = await Promise.all([
     getWarningForEvent(event),
+    getApplicableRules(event.categoryId, feature),
   ]);
+  const forced = rules.filter((r) => r.forced);
+
+  const normal = items.filter((i) => !i.isSuggested);
+  const suggestions = items.filter((i) => i.isSuggested);
 
   return (
     <>
@@ -50,8 +65,7 @@ export async function ChecklistSection({
           <div>
             <h2 className="text-lg font-semibold">準備リスト</h2>
             <p className="text-xs text-muted">
-              編集すると「{event.category?.name ?? "カテゴリ"}
-              」の自分マニュアルに反映され、次回に活かされます。
+              追加・削除・タイミング変更は学習に使われ、次回以降の精度が上がります。
             </p>
           </div>
           <form action={regenerateChecklist}>
@@ -60,9 +74,27 @@ export async function ChecklistSection({
           </form>
         </div>
 
+        {suggestions.length > 0 && (
+          <div className="mb-3">
+            <SuggestionList
+              suggestions={suggestions.map((s) => ({
+                id: s.id,
+                title: s.title,
+                timingLabel: s.timingLabel,
+                suggestionType: s.suggestionType as
+                  | "exclude"
+                  | "add"
+                  | "timing"
+                  | null,
+                suggestionValue: s.suggestionValue,
+              }))}
+            />
+          </div>
+        )}
+
         <ChecklistEditor
           eventId={event.id}
-          initialItems={items.map((c) => ({
+          initialItems={normal.map((c) => ({
             id: c.id,
             title: c.title,
             timingLabel: c.timingLabel,
@@ -72,28 +104,37 @@ export async function ChecklistSection({
         />
       </section>
 
-      {(learning.excludedItems.length > 0 ||
-        learning.fixedItems.length > 0 ||
-        Object.keys(learning.timingOverrides).length > 0) && (
-        <section className="rounded-2xl bg-teal-soft p-5 text-sm">
-          <h3 className="font-semibold text-teal-dark">
-            このカテゴリで学習済みのこと
-          </h3>
+      {forced.length > 0 && (
+        <section className="rounded-2xl bg-teal-soft p-4 text-sm">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-teal-dark">
+              この種類の予定で学習済みのこと
+            </h3>
+            <Link
+              href="/settings/learning"
+              className="text-xs text-teal-dark underline"
+            >
+              確認・編集
+            </Link>
+          </div>
           <ul className="mt-2 space-y-1 text-teal-dark/90">
-            {learning.fixedItems.length > 0 && (
-              <li>毎回出す: {learning.fixedItems.map((f) => f.title).join(" / ")}</li>
-            )}
-            {learning.excludedItems.length > 0 && (
-              <li>もう出さない: {learning.excludedItems.join(" / ")}</li>
-            )}
-            {Object.keys(learning.timingOverrides).length > 0 && (
-              <li>
-                タイミング調整:{" "}
-                {Object.entries(learning.timingOverrides)
-                  .map(([t, v]) => `${t}→${v}`)
-                  .join(" / ")}
-              </li>
-            )}
+            {forced
+              .filter((r) => r.ruleType === "fixed_item")
+              .map((r) => (
+                <li key={r.id}>毎回入れる: {r.target}</li>
+              ))}
+            {forced
+              .filter((r) => r.ruleType === "exclude_item")
+              .map((r) => (
+                <li key={r.id}>出さない: {r.target}</li>
+              ))}
+            {forced
+              .filter((r) => r.ruleType === "timing_override")
+              .map((r) => (
+                <li key={r.id}>
+                  {r.target} → {r.value}
+                </li>
+              ))}
           </ul>
         </section>
       )}

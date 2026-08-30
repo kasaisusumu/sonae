@@ -1,12 +1,13 @@
 import OpenAI from "openai";
-import type { GeneratedItem, Learning } from "@/lib/learning";
-import { applyLearning } from "@/lib/learning";
+import type { GeneratedItem } from "@/lib/learning";
 
 export interface GenerateInput {
   title: string;
   categoryName: string;
   eventDatetime: Date;
   memo?: string | null;
+  isOverseas?: boolean | null;
+  durationNights?: number | null;
 }
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
@@ -15,13 +16,14 @@ const SYSTEM_PROMPT = `あなたは、段取りが苦手な人（ADHD傾向）�
 予定の情報から、その予定に向けて必要な「準備タスク」のチェックリストを作ります。
 
 ルール:
-- 5〜8 個。多すぎると圧になるので絞る。
+- 3〜7 個。多すぎると圧になるので絞る。一般的で確実に役立つものだけ。
 - 各タスクは具体的な行動 1 つ。「〜を確認する」「〜を準備する」「〜を予約する」のように動詞で終える短い文。
 - timing は準備を始める目安。「1週間前」「3日前」「前日夜」「当日朝」「出発1時間前」など短いラベル。
 - 責める表現・急かす表現は使わない。淡々と、実行しやすい粒度で。
+- 与えられた予定の性質（海外/国内、宿泊数など）に合った内容にする。推測が過ぎる項目は入れない。
 - 出力は必ず次の JSON のみ: {"items":[{"title":"...","timing":"..."}]}`;
 
-function buildUserPrompt(input: GenerateInput, learning: Learning): string {
+function buildUserPrompt(input: GenerateInput): string {
   const dt = input.eventDatetime.toLocaleString("ja-JP", {
     dateStyle: "full",
     timeStyle: "short",
@@ -32,16 +34,16 @@ function buildUserPrompt(input: GenerateInput, learning: Learning): string {
     `予定日時: ${dt}`,
   ];
   if (input.memo) lines.push(`メモ: ${input.memo}`);
-  if (learning.excludedItems.length) {
-    lines.push(
-      `このカテゴリで過去に不要と判断された項目（出さないこと）: ${learning.excludedItems.join(" / ")}`,
-    );
+  if (input.isOverseas === true) {
+    lines.push("これは海外の予定です（パスポート・ビザ・両替・海外通信などが関係しうる）。");
+  } else if (input.isOverseas === false) {
+    lines.push("これは国内の予定です（海外特有の準備は不要）。");
   }
-  if (learning.fixedItems.length) {
+  if (typeof input.durationNights === "number") {
     lines.push(
-      `このカテゴリで毎回必要な項目（必ず含めること）: ${learning.fixedItems
-        .map((f) => (f.timingLabel ? `${f.title}（${f.timingLabel}）` : f.title))
-        .join(" / ")}`,
+      input.durationNights <= 0
+        ? "これは日帰りの予定です（宿泊関連の準備は不要）。"
+        : `これは ${input.durationNights} 泊の予定です。`,
     );
   }
   return lines.join("\n");
@@ -77,7 +79,6 @@ function fallbackItems(input: GenerateInput): GeneratedItem[] {
       { title: "着替えと洗面用具をまとめる", timingLabel: "前日夜" },
       { title: "スマホと充電器・モバイルバッテリーを準備する", timingLabel: "前日夜" },
       { title: "家の戸締まりと家電の電源を確認する", timingLabel: "当日朝" },
-      { title: "出発時刻の1時間前に家を出る準備をする", timingLabel: "出発1時間前" },
     ],
     通院: [
       { title: "予約日時と診察券・保険証を確認する", timingLabel: "前日" },
@@ -90,14 +91,12 @@ function fallbackItems(input: GenerateInput): GeneratedItem[] {
       { title: "来客の人数・時間・目的を確認する", timingLabel: "前日" },
       { title: "部屋を片付け、必要な席を用意する", timingLabel: "前日夜" },
       { title: "お茶・お菓子など飲み物を準備する", timingLabel: "当日朝" },
-      { title: "配布資料やサンプルを印刷・用意する", timingLabel: "当日朝" },
       { title: "開始30分前に最終確認をする", timingLabel: "30分前" },
     ],
     "契約・手続き": [
       { title: "必要書類の一覧を確認する", timingLabel: "1週間前" },
       { title: "本人確認書類・印鑑を用意する", timingLabel: "前日" },
       { title: "記入が必要な書類を先に埋めておく", timingLabel: "前日夜" },
-      { title: "窓口の受付時間と場所を確認する", timingLabel: "前日夜" },
       { title: "手数料の現金を用意する", timingLabel: "当日朝" },
     ],
   };
@@ -107,19 +106,17 @@ function fallbackItems(input: GenerateInput): GeneratedItem[] {
       { title: "場所・時間・相手を確認する", timingLabel: "前日" },
       { title: "前日の夜に持ち物をまとめる", timingLabel: "前日夜" },
       { title: "当日の朝に最終確認をする", timingLabel: "当日朝" },
-      { title: "余裕をもって出発する", timingLabel: "当日" },
     ]
   );
 }
 
-/** 予定情報＋カテゴリ学習から準備リストを生成する。OpenAI 失敗時はテンプレートにフォールバック。 */
-export async function generateChecklist(
+/**
+ * 一般的な準備リスト（ベース）を生成する。学習は一切注入しない。
+ * OpenAI 失敗時はテンプレートにフォールバック。
+ */
+export async function generateBaseChecklist(
   input: GenerateInput,
-  learning: Learning,
 ): Promise<{ items: GeneratedItem[]; source: "openai" | "template" }> {
-  let items: GeneratedItem[] = [];
-  let source: "openai" | "template" = "template";
-
   if (process.env.OPENAI_API_KEY) {
     try {
       const client = new OpenAI({
@@ -133,21 +130,15 @@ export async function generateChecklist(
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: buildUserPrompt(input, learning) },
+          { role: "user", content: buildUserPrompt(input) },
         ],
       });
       const content = completion.choices[0]?.message?.content ?? "{}";
-      items = coerceItems(JSON.parse(content));
-      if (items.length > 0) source = "openai";
+      const items = coerceItems(JSON.parse(content));
+      if (items.length > 0) return { items, source: "openai" };
     } catch (err) {
       console.error("[generate] OpenAI 生成に失敗、テンプレートにフォールバック:", err);
     }
   }
-
-  if (items.length === 0) {
-    items = fallbackItems(input);
-    source = "template";
-  }
-
-  return { items: applyLearning(items, learning), source };
+  return { items: fallbackItems(input), source: "template" };
 }

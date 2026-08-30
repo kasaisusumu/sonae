@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -43,6 +44,16 @@ export default async function SettingsPage() {
           {user.name ? `${user.name}（${user.email}）` : user.email}
         </p>
       </section>
+
+      <Link
+        href="/settings/learning"
+        className="block rounded-2xl bg-surface p-5 no-underline transition-colors hover:bg-surface-muted"
+      >
+        <h2 className="text-sm font-semibold text-muted">学習内容の確認</h2>
+        <p className="mt-2 text-sm">
+          何を学習しているか（固定・除外・タイミング）を確認し、個別に固定/リセットできます →
+        </p>
+      </Link>
 
       <section className="rounded-2xl bg-surface p-5">
         <h2 className="text-sm font-semibold text-muted">Google カレンダー連携</h2>

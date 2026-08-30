@@ -76,7 +76,9 @@ export default async function EventDetailPage({
             id: event.id,
             userId: event.userId,
             title: event.title,
+            memo: event.memo,
             eventDatetime: event.eventDatetime,
+            endDatetime: event.endDatetime,
             categoryId: event.categoryId,
             failureWarningAckAt: event.failureWarningAckAt,
             category: event.category

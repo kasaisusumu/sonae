@@ -6,6 +6,7 @@ import {
   getApplicableRules,
   norm,
   parseNotifyValue,
+  suggestNotifyLead,
   type ApplicableRule,
   type GeneratedItem,
   type ItemKind,
@@ -46,6 +47,7 @@ function composeKind(
   kind: ItemKind,
   baseItems: GeneratedItem[],
   rules: ApplicableRule[],
+  opts: { autofillNotify?: boolean } = {},
 ): BuiltItem[] {
   const { min, max } = LIMITS[kind];
   let items: BuiltItem[] = baseItems.map((b) => ({
@@ -78,9 +80,21 @@ function composeKind(
     if (hit && r.value) hit.timingLabel = r.value;
   }
   // 通知リード時間（内容とセットで学習した値。"off" は通知しない）
+  const notifyLearned = new Set<string>();
   for (const r of byType(forced, "notify_override")) {
     const hit = items.find((it) => norm(it.title) === norm(r.target));
-    if (hit) hit.notifyLeadMinutes = parseNotifyValue(r.value);
+    if (hit) {
+      hit.notifyLeadMinutes = parseNotifyValue(r.value);
+      notifyLearned.add(norm(hit.title));
+    }
+  }
+  // 学習値が無い項目は、目安ラベルから通知時間も自動提案する
+  if (opts.autofillNotify) {
+    for (const it of items) {
+      if (it.notifyLeadMinutes === null && !notifyLearned.has(norm(it.title))) {
+        it.notifyLeadMinutes = suggestNotifyLead(it.timingLabel, kind);
+      }
+    }
   }
 
   // 仮ルール（提案。1タップで適用/却下）
@@ -207,12 +221,18 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
           isOverseas: feature.isOverseas,
           durationNights: feature.durationNights,
         }),
-    getApplicableRules(event.categoryId, feature, "task"),
-    getApplicableRules(event.categoryId, feature, "belonging"),
+    // 似た予定を思い出したときは、シグネチャ違いも含めて前回の学習を全部当てる。
+    // そこで今回の予定が違う形に編集されたら、初めてシグネチャごとに枝分かれする。
+    getApplicableRules(event.categoryId, feature, "task", { broad: !!recalled }),
+    getApplicableRules(event.categoryId, feature, "belonging", {
+      broad: !!recalled,
+    }),
   ]);
 
+  // recall 由来は前回の通知設定（"なし" 含む）をそのまま尊重。新規生成のみ自動提案。
+  const autofillNotify = !recalled;
   return [
-    ...composeKind("task", gen.tasks, taskRules),
-    ...composeKind("belonging", gen.belongings, belongingRules),
+    ...composeKind("task", gen.tasks, taskRules, { autofillNotify }),
+    ...composeKind("belonging", gen.belongings, belongingRules, { autofillNotify }),
   ];
 }

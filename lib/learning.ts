@@ -49,6 +49,7 @@ export interface ApplicableRule {
   confidence: number;
   effectiveConfidence: number;
   specificity: number;
+  signatureMatch: boolean;
   forced: boolean;
   isUserLocked: boolean;
   confirmedCount: number;
@@ -61,14 +62,17 @@ export async function getApplicableRules(
   categoryId: string | null,
   feature: EventFeatureData,
   itemKind: ItemKind = "task",
+  opts: { broad?: boolean } = {},
 ): Promise<ApplicableRule[]> {
   if (!categoryId) return [];
   const rows = await prisma.learnedRule.findMany({
     where: { categoryId, itemKind },
   });
   return rows
-    .filter((r) => signatureMatches(r.featureSignature, feature))
-    .map((r) => {
+    .map((r) => ({ r, match: signatureMatches(r.featureSignature, feature) }))
+    // 通常はシグネチャ一致のみ。broad（似た予定を思い出したとき）は全部拾う。
+    .filter(({ match }) => opts.broad || match)
+    .map(({ r, match }) => {
       const eff = r.isUserLocked
         ? 1
         : r.confidence * decayMultiplier(r.lastConfirmedAt);
@@ -81,6 +85,7 @@ export async function getApplicableRules(
         confidence: r.confidence,
         effectiveConfidence: Number(eff.toFixed(3)),
         specificity: signatureSpecificity(r.featureSignature),
+        signatureMatch: match,
         forced: r.isUserLocked || eff >= CONFIDENCE_THRESHOLD,
         isUserLocked: r.isUserLocked,
         confirmedCount: r.confirmedCount,
@@ -88,7 +93,41 @@ export async function getApplicableRules(
         lastConfirmedAt: r.lastConfirmedAt,
       };
     })
-    .sort((a, b) => b.specificity - a.specificity);
+    // シグネチャ一致を優先 → 具体的な署名 → 確信度
+    .sort(
+      (a, b) =>
+        Number(b.signatureMatch) - Number(a.signatureMatch) ||
+        b.specificity - a.specificity ||
+        b.effectiveConfidence - a.effectiveConfidence,
+    );
+}
+
+/**
+ * 準備の目安ラベルから、通知リード時間（分）を素直に提案する。
+ * 学習が無くても「時間も自動提案」するための初期値。
+ */
+export function suggestNotifyLead(
+  timingLabel: string | null,
+  kind: ItemKind,
+): number {
+  const CAP = 168 * 60; // 1 週間
+  const t = (timingLabel ?? "").replace(/\s/g, "");
+  let m = t.match(/(\d+)\s*週間?前/);
+  if (m) return Math.min(Number(m[1]) * 10080, CAP);
+  m = t.match(/(\d+)\s*日前/);
+  if (m) return Math.min(Number(m[1]) * 1440, CAP);
+  m = t.match(/(\d+)\s*時間前/);
+  if (m) return Math.min(Number(m[1]) * 60, CAP);
+  m = t.match(/(\d+)\s*分前/);
+  if (m) return Math.min(Number(m[1]), CAP);
+  if (/1週間前|一週間前/.test(t)) return 10080;
+  if (/3日前|三日前/.test(t)) return 4320;
+  if (/前日夜|前夜/.test(t)) return 15 * 60;
+  if (/前日/.test(t)) return 1440;
+  if (/当日朝|朝一/.test(t)) return 180;
+  if (/当日/.test(t)) return 120;
+  if (/直前|出発前/.test(t)) return 30;
+  return kind === "belonging" ? 15 * 60 : 180;
 }
 
 // ── ルールの確認 / 矛盾 ─────────────────────────────

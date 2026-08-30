@@ -12,7 +12,7 @@ interface Item {
   isDone: boolean;
   isUserAdded: boolean;
   notifyLeadMinutes: number | null; // 予定開始の何分前に通知するか。null = しない
-  notifyCustom: boolean; // カスタム入力（時間・分）を出しているか（UIのみ）
+  notifyDraft: number; // オフにしても覚えておく直近の設定（UIのみ）
 }
 
 interface InitialItem {
@@ -36,23 +36,11 @@ const TIMING_PRESETS = [
   "出発1時間前",
 ];
 
-const NOTIFY_PRESETS: { label: string; minutes: number | null }[] = [
-  { label: "通知なし", minutes: null },
-  { label: "10分前", minutes: 10 },
-  { label: "30分前", minutes: 30 },
-  { label: "1時間前", minutes: 60 },
-  { label: "2時間前", minutes: 120 },
-  { label: "3時間前", minutes: 180 },
-  { label: "6時間前", minutes: 360 },
-  { label: "12時間前", minutes: 720 },
-  { label: "前日（24時間前）", minutes: 1440 },
-  { label: "2日前", minutes: 2880 },
-  { label: "3日前", minutes: 4320 },
-  { label: "1週間前", minutes: 10080 },
-];
-
-const isNotifyPreset = (m: number | null) =>
-  NOTIFY_PRESETS.some((p) => p.minutes === m);
+// 通知リード時間のドラムロール（時間 0〜168 / 分 0〜59、1時間・1分単位）
+const HOUR_OPTS = Array.from({ length: 169 }, (_, i) => i);
+const MIN_OPTS = Array.from({ length: 60 }, (_, i) => i);
+const DEFAULT_LEAD = 180;
+const splitLead = (m: number) => ({ h: Math.floor(m / 60), mm: m % 60 });
 
 let counter = 0;
 const nextKey = () => `it-${counter++}`;
@@ -118,8 +106,7 @@ export function ChecklistEditor({
         isDone: it.isDone,
         isUserAdded: it.isUserAdded,
         notifyLeadMinutes: it.notifyLeadMinutes ?? null,
-        notifyCustom:
-          it.notifyLeadMinutes != null && !isNotifyPreset(it.notifyLeadMinutes),
+        notifyDraft: it.notifyLeadMinutes ?? DEFAULT_LEAD,
       })),
     [initialItems],
   );
@@ -170,25 +157,21 @@ export function ChecklistEditor({
     setSaved(false);
   }
 
-  // カスタムの「X時間 Y分前」→ 分に合成（両方 0 なら通知なし）
-  function setCustomLead(key: string, hoursRaw: string, minsRaw: string) {
-    const h = Math.max(0, Math.min(336, Math.floor(Number(hoursRaw) || 0)));
-    const m = Math.max(0, Math.min(59, Math.floor(Number(minsRaw) || 0)));
-    const total = h * 60 + m;
-    update(key, { notifyLeadMinutes: total > 0 ? total : null });
+  function setNotifyOn(it: Item, on: boolean) {
+    update(it.key, { notifyLeadMinutes: on ? it.notifyDraft : null });
   }
 
-  function onNotifySelect(it: Item, value: string) {
-    if (value === "custom") {
-      update(it.key, {
-        notifyCustom: true,
-        notifyLeadMinutes: it.notifyLeadMinutes ?? 60,
-      });
-    } else if (value === "none") {
-      update(it.key, { notifyCustom: false, notifyLeadMinutes: null });
-    } else {
-      update(it.key, { notifyCustom: false, notifyLeadMinutes: Number(value) });
-    }
+  function setNotifyPart(it: Item, part: "h" | "mm", value: string) {
+    const { h, mm } = splitLead(it.notifyLeadMinutes ?? it.notifyDraft);
+    const nh =
+      part === "h" ? Math.max(0, Math.min(168, Math.floor(Number(value) || 0))) : h;
+    const nm =
+      part === "mm" ? Math.max(0, Math.min(59, Math.floor(Number(value) || 0))) : mm;
+    const total = nh * 60 + nm;
+    update(it.key, {
+      notifyLeadMinutes: total,
+      notifyDraft: total > 0 ? total : it.notifyDraft,
+    });
   }
 
   // チェックはその場で保存（「保存する」ボタン不要）
@@ -224,7 +207,7 @@ export function ChecklistEditor({
         isDone: false,
         isUserAdded: true,
         notifyLeadMinutes: null,
-        notifyCustom: false,
+        notifyDraft: DEFAULT_LEAD,
       },
     ]);
     setSaved(false);
@@ -254,7 +237,7 @@ export function ChecklistEditor({
         isDone: false,
         isUserAdded: true,
         notifyLeadMinutes: null,
-        notifyCustom: false,
+        notifyDraft: DEFAULT_LEAD,
       })),
     ];
     setItems(merged);
@@ -308,63 +291,44 @@ export function ChecklistEditor({
                 )}
               </div>
 
-              {/* 通知（予定の何時間何分前 / なし）。内容とセットで学習される */}
-              <div className="flex flex-wrap items-center gap-1 text-xs text-muted">
-                <span className="text-[11px]">🔔 通知</span>
-                <select
-                  value={
-                    it.notifyCustom || !isNotifyPreset(it.notifyLeadMinutes)
-                      ? "custom"
-                      : it.notifyLeadMinutes === null
-                        ? "none"
-                        : String(it.notifyLeadMinutes)
-                  }
-                  onChange={(e) => onNotifySelect(it, e.target.value)}
-                  className="rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-border focus:border-border focus:bg-background"
-                >
-                  {NOTIFY_PRESETS.map((p) => (
-                    <option
-                      key={p.label}
-                      value={p.minutes === null ? "none" : String(p.minutes)}
-                    >
-                      {p.label}
-                    </option>
-                  ))}
-                  <option value="custom">カスタム…</option>
-                </select>
-                {(it.notifyCustom || !isNotifyPreset(it.notifyLeadMinutes)) && (
+              {/* 通知（予定の何時間何分前）。ドラムロールで選択。内容とセットで学習される */}
+              <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                <label className="inline-flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={it.notifyLeadMinutes !== null}
+                    onChange={(e) => setNotifyOn(it, e.target.checked)}
+                    className="h-3.5 w-3.5 accent-[var(--teal)]"
+                  />
+                  🔔 通知
+                </label>
+                {it.notifyLeadMinutes !== null && (
                   <span className="inline-flex items-center gap-1">
-                    <input
-                      type="number"
-                      min={0}
-                      max={336}
-                      value={Math.floor((it.notifyLeadMinutes ?? 0) / 60) || ""}
-                      onChange={(e) =>
-                        setCustomLead(
-                          it.key,
-                          e.target.value,
-                          String((it.notifyLeadMinutes ?? 0) % 60),
-                        )
-                      }
-                      className="w-12 rounded border bg-background px-1 py-0.5 text-xs"
+                    <select
+                      value={splitLead(it.notifyLeadMinutes).h}
+                      onChange={(e) => setNotifyPart(it, "h", e.target.value)}
+                      className="rounded-md border bg-background px-1 py-0.5 text-xs"
                       aria-label="時間"
-                    />
+                    >
+                      {HOUR_OPTS.map((h) => (
+                        <option key={h} value={h}>
+                          {h}
+                        </option>
+                      ))}
+                    </select>
                     時間
-                    <input
-                      type="number"
-                      min={0}
-                      max={59}
-                      value={(it.notifyLeadMinutes ?? 0) % 60 || ""}
-                      onChange={(e) =>
-                        setCustomLead(
-                          it.key,
-                          String(Math.floor((it.notifyLeadMinutes ?? 0) / 60)),
-                          e.target.value,
-                        )
-                      }
-                      className="w-12 rounded border bg-background px-1 py-0.5 text-xs"
+                    <select
+                      value={splitLead(it.notifyLeadMinutes).mm}
+                      onChange={(e) => setNotifyPart(it, "mm", e.target.value)}
+                      className="rounded-md border bg-background px-1 py-0.5 text-xs"
                       aria-label="分"
-                    />
+                    >
+                      {MIN_OPTS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
                     分前
                   </span>
                 )}

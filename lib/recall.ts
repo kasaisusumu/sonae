@@ -60,8 +60,6 @@ function sigOf(ef: StoredFeature): string | null {
   });
 }
 
-/** キーワード Jaccard がこの値以上なら「似た名前」とみなす。 */
-const SIMILAR_THRESHOLD = 0.6;
 
 /**
  * 同じユーザー・同じカテゴリで、名前がほぼ同じ／似ている過去の予定があれば、
@@ -142,6 +140,7 @@ export async function recallBaseChecklist(
     const pKey = titleKey(p.title);
     if (pKey.length < 2) continue;
 
+    const pKw = kwSetFromJson(p.feature?.keywords);
     let nameScore = 0;
     let exact = false;
     if (pKey === myKey) {
@@ -150,8 +149,9 @@ export async function recallBaseChecklist(
     } else if (pKey.includes(myKey) || myKey.includes(pKey)) {
       nameScore = 0.8;
     } else {
-      const j = jaccard(myKw, kwSetFromJson(p.feature?.keywords));
-      if (j >= SIMILAR_THRESHOLD) nameScore = 0.6 + j * 0.2;
+      // 「少しでも名前がかすっていれば」前回の内容を出す。1語でも共有していれば拾う。
+      const j = jaccard(myKw, pKw);
+      if (j > 0) nameScore = 0.55 + j * 0.3;
     }
     if (nameScore === 0) continue;
 

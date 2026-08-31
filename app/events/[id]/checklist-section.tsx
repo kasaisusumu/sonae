@@ -40,6 +40,10 @@ function KindBlock({
   const suggestions = mine.filter((r) => r.isSuggested);
   const normal = mine.filter((r) => !r.isSuggested);
 
+  // 提案を「入れる/残す」で確定すると normal の顔ぶれが変わる。
+  // ChecklistEditor は props を state に写して持つので、この key で作り直させて反映する。
+  const editorKey = normal.map((c) => c.title).join("");
+
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-semibold text-foreground">
@@ -61,6 +65,7 @@ function KindBlock({
         />
       )}
       <ChecklistEditor
+        key={editorKey}
         eventId={eventId}
         kind={kind}
         initialItems={normal.map((c) => ({

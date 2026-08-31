@@ -97,17 +97,28 @@ export function ChecklistEditor({
   );
 
   const [items, setItems] = useState<Item[]>(initial);
-  // 表示は「未チェックが上・チェック済みが下」（状態の並びは維持したまま表示だけ並べ替え）
-  const displayItems = useMemo(
-    () =>
-      items
-        .map((it, i) => ({ it, i }))
-        .sort(
-          (a, b) => (a.it.isDone ? 1 : 0) - (b.it.isDone ? 1 : 0) || a.i - b.i,
-        )
-        .map(({ it }) => it),
-    [items],
+
+  // 表示順は「このページを開いた時点の並び（未チェックが上・チェック済みが下）」で固定する。
+  // ページ内でチェックを付け外ししても順番は動かさない（誤タップをすぐ戻せる）。
+  // 次にこのページを開くと再ソートされる。カレンダー説明欄はトグルで即並べ替え。
+  const identity = (it: Item) => it.id ?? `t:${normTitle(it.title)}`;
+  const [frozenOrder] = useState<string[]>(() =>
+    initial
+      .map((it, i) => ({ it, i }))
+      .sort((a, b) => (a.it.isDone ? 1 : 0) - (b.it.isDone ? 1 : 0) || a.i - b.i)
+      .map(({ it }) => identity(it)),
   );
+  const displayItems = useMemo(() => {
+    const pos = new Map(frozenOrder.map((k, i) => [k, i]));
+    return items
+      .map((it, i) => ({ it, i }))
+      .sort((a, b) => {
+        const pa = pos.get(identity(a.it)) ?? 1e9;
+        const pb = pos.get(identity(b.it)) ?? 1e9;
+        return pa - pb || a.i - b.i;
+      })
+      .map(({ it }) => it);
+  }, [items, frozenOrder]);
   const [removedTitles, setRemovedTitles] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);

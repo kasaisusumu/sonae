@@ -89,59 +89,67 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
               </form>
             )}
 
-            {/* 防げた / 防げなかった */}
-            <div className="mt-3 flex flex-wrap items-center gap-3">
+            {/* 振り返り：防げた？ */}
+            <div className="mt-3 space-y-2">
               {log.prevented ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="text-xs text-teal-dark">
-                    ✓ 「防げた」として計上済み
+                <>
+                  <p className="text-sm font-medium text-teal-dark">
+                    ✓ 「防げた」で記録しました
                     {log.estimatedLossYen > 0
-                      ? `（${formatYen(log.estimatedLossYen)}）`
+                      ? `（${formatYen(log.estimatedLossYen)}を節約に計上）`
                       : ""}
-                  </span>
-                  <form
-                    action={updateFailureAmount}
-                    className="flex items-center gap-1"
-                  >
-                    <input type="hidden" name="failureLogId" value={log.id} />
-                    <span className="text-[11px] text-muted">金額を直す</span>
-                    <input
-                      type="number"
-                      name="estimatedLossYen"
-                      min={0}
-                      step={100}
-                      defaultValue={log.estimatedLossYen || ""}
-                      placeholder="円"
-                      className="w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground"
-                    />
-                    <button
-                      type="submit"
-                      className="text-[11px] text-teal-dark underline hover:text-foreground"
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <form
+                      action={updateFailureAmount}
+                      className="flex items-center gap-1"
                     >
-                      更新
-                    </button>
-                  </form>
-                  <form action={undoPrevented}>
-                    <input type="hidden" name="eventId" value={event.id} />
-                    <input type="hidden" name="failureLogId" value={log.id} />
-                    <button
-                      type="submit"
-                      className="text-xs text-muted underline hover:text-foreground"
-                    >
-                      取り消す
-                    </button>
-                  </form>
-                </div>
+                      <input type="hidden" name="failureLogId" value={log.id} />
+                      <span className="text-[11px] text-muted">金額</span>
+                      <input
+                        type="number"
+                        name="estimatedLossYen"
+                        min={0}
+                        step={100}
+                        defaultValue={log.estimatedLossYen || ""}
+                        placeholder="円"
+                        className="w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
+                      >
+                        更新
+                      </button>
+                    </form>
+                    <form action={undoPrevented}>
+                      <input type="hidden" name="eventId" value={event.id} />
+                      <input type="hidden" name="failureLogId" value={log.id} />
+                      <button
+                        type="submit"
+                        className="text-xs text-muted underline hover:text-foreground"
+                      >
+                        取り消す
+                      </button>
+                    </form>
+                  </div>
+                </>
+              ) : log.loggedThisEventCount > 0 ? (
+                <p className="text-sm font-medium text-warn">
+                  ✓ 「今回もやってしまった」を記録しました。次の似た予定で先回りします。
+                </p>
               ) : (
                 <>
-                  <form
-                    action={markPrevented}
-                    className="flex flex-wrap items-center gap-2"
-                  >
+                  {isPast && (
+                    <p className="text-xs text-warn/80">
+                      今回はどうでしたか？ どちらか押すだけでOKです。
+                    </p>
+                  )}
+                  <form action={markPrevented} className="space-y-1.5">
                     <input type="hidden" name="eventId" value={event.id} />
                     <input type="hidden" name="failureLogId" value={log.id} />
-                    <label className="flex items-center gap-1 text-[11px] text-muted">
-                      金額（任意）
+                    <label className="flex items-center gap-1.5 text-[11px] text-muted">
+                      防げた場合の金額（任意・あとで直せます）
                       <input
                         type="number"
                         name="estimatedLossYen"
@@ -153,8 +161,7 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                       />
                     </label>
                     <SubmitButton>
-                      {isPast ? "今回は防げた" : "これは防げた"}
-                      （節約に計上）
+                      {isPast ? "今回は防げた 🎉" : "これは防げた 🎉"}
                     </SubmitButton>
                   </form>
                   {isPast && (
@@ -163,9 +170,9 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                       <input type="hidden" name="failureLogId" value={log.id} />
                       <button
                         type="submit"
-                        className="rounded-lg border border-warn/40 px-3 py-1.5 text-xs text-warn hover:bg-warn-soft"
+                        className="block w-full rounded-lg border border-warn/50 bg-surface px-3 py-2.5 text-sm font-medium text-warn hover:bg-warn-soft sm:w-auto sm:px-4"
                       >
-                        今回もやってしまった（同じ内容で記録）
+                        今回もやってしまった 😢
                       </button>
                     </form>
                   )}

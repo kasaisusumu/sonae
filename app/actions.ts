@@ -16,6 +16,7 @@ import { ensureWatch, stopWatch } from "@/lib/google";
 import {
   ensureChecklistForEvent,
   generateAndSaveChecklist,
+  normTitle,
   propagateListToNameGroup,
   resolveNameGroupOnEdit,
 } from "@/lib/checklist";
@@ -63,7 +64,7 @@ function revalidateAppViews(eventId?: string) {
 
 export async function logout(): Promise<void> {
   await clearSession();
-  redirect("/");
+  redirect("/?loggedout=1");
 }
 
 /** Google 連携を解除する（トークンを削除）。予定データは残す。 */
@@ -938,5 +939,180 @@ export async function submitFeedback(formData: FormData): Promise<void> {
     data: { userId, wtpYen, comment, screen },
   });
 
+  revalidatePath("/settings");
+}
+
+// ─────────────────────────────────────────────
+// 準備リストのテンプレート（名前を付けて保存・再利用）＋他の予定からコピー
+// ─────────────────────────────────────────────
+
+type TemplateSeed = {
+  kind: "task" | "belonging";
+  title: string;
+  notifyLeadMinutes: number | null;
+};
+
+/** 予定の「いま」の準備リスト（提案は除く）を、名前を付けてテンプレート保存する。 */
+export async function saveListAsTemplate(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  const name = String(formData.get("name") ?? "")
+    .trim()
+    .slice(0, 60);
+  if (!eventId || !name) return;
+
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    include: {
+      checklistItems: {
+        where: { isSuggested: false },
+        orderBy: { sortOrder: "asc" },
+        select: { kind: true, title: true, notifyLeadMinutes: true },
+      },
+    },
+  });
+  if (!event || event.checklistItems.length === 0) return;
+
+  const items: TemplateSeed[] = event.checklistItems.map((it) => ({
+    kind: it.kind === "belonging" ? "belonging" : "task",
+    title: it.title,
+    notifyLeadMinutes: it.notifyLeadMinutes ?? null,
+  }));
+  const create = items.map((it, i) => ({ ...it, sortOrder: i }));
+
+  await prisma.listTemplate.upsert({
+    where: { userId_name: { userId, name } },
+    update: {
+      sourceEventId: eventId,
+      items: { deleteMany: {}, create },
+    },
+    create: { userId, name, sourceEventId: eventId, items: { create } },
+  });
+
+  revalidatePath("/settings");
+  revalidateAppViews(eventId);
+}
+
+/** テンプレート／他の予定の項目を、予定の準備リストに追加する（同じ種類・同じ名前はスキップ）。 */
+async function addSeedItemsToEvent(
+  userId: string,
+  eventId: string,
+  seeds: TemplateSeed[],
+): Promise<number> {
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    include: {
+      checklistItems: { select: { kind: true, title: true, sortOrder: true } },
+    },
+  });
+  if (!event) return 0;
+
+  const existing = new Set(
+    event.checklistItems.map((c) => `${c.kind}:${normTitle(c.title)}`),
+  );
+  const nextSort: Record<string, number> = { task: 0, belonging: 0 };
+  for (const c of event.checklistItems) {
+    const k = c.kind === "belonging" ? "belonging" : "task";
+    nextSort[k] = Math.max(nextSort[k], c.sortOrder + 1);
+  }
+
+  const fresh = seeds.filter(
+    (s) => s.title.trim() && !existing.has(`${s.kind}:${normTitle(s.title)}`),
+  );
+  if (fresh.length === 0) return 0;
+
+  await prisma.checklistItem.createMany({
+    data: fresh.map((s) => ({
+      eventId,
+      kind: s.kind,
+      title: s.title.trim().slice(0, 120),
+      notifyLeadMinutes: s.notifyLeadMinutes,
+      isUserAdded: true,
+      sortOrder: nextSort[s.kind]++,
+    })),
+  });
+
+  await markAutoManaged(eventId);
+  const twinIds = await resolveNameGroupOnEdit(eventId);
+  after(() => {
+    void syncEventDescription(eventId);
+    for (const id of twinIds) void syncEventDescription(id);
+  });
+  revalidateAppViews(eventId);
+  return fresh.length;
+}
+
+/** 保存済みテンプレートを予定の準備リストに追加する。 */
+export async function applyTemplateToEvent(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  const templateId = String(formData.get("templateId") ?? "");
+  if (!eventId || !templateId) return;
+
+  const template = await prisma.listTemplate.findFirst({
+    where: { id: templateId, userId },
+    include: { items: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (!template) return;
+
+  await addSeedItemsToEvent(
+    userId,
+    eventId,
+    template.items.map((it) => ({
+      kind: it.kind === "belonging" ? "belonging" : "task",
+      title: it.title,
+      notifyLeadMinutes: it.notifyLeadMinutes ?? null,
+    })),
+  );
+}
+
+/** 他の（過去の）予定の準備リストを、この予定にコピーする。 */
+export async function copyListFromEvent(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  const sourceEventId = String(formData.get("sourceEventId") ?? "");
+  if (!eventId || !sourceEventId || eventId === sourceEventId) return;
+
+  const source = await prisma.event.findFirst({
+    where: { id: sourceEventId, userId },
+    include: {
+      checklistItems: {
+        where: { isSuggested: false },
+        orderBy: { sortOrder: "asc" },
+        select: { kind: true, title: true, notifyLeadMinutes: true },
+      },
+    },
+  });
+  if (!source) return;
+
+  await addSeedItemsToEvent(
+    userId,
+    eventId,
+    source.checklistItems.map((it) => ({
+      kind: it.kind === "belonging" ? "belonging" : "task",
+      title: it.title,
+      notifyLeadMinutes: it.notifyLeadMinutes ?? null,
+    })),
+  );
+}
+
+/** テンプレートの名前を変更する。 */
+export async function renameListTemplate(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "")
+    .trim()
+    .slice(0, 60);
+  if (!id || !name) return;
+  await prisma.listTemplate.updateMany({ where: { id, userId }, data: { name } });
+  revalidatePath("/settings");
+}
+
+/** テンプレートを削除する。 */
+export async function deleteListTemplate(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  await prisma.listTemplate.deleteMany({ where: { id, userId } });
   revalidatePath("/settings");
 }

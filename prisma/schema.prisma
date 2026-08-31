@@ -27,6 +27,7 @@ model User {
   savingsEntries SavingsEntry[]
   feedback       Feedback[]
   pushSubscriptions PushSubscription[]
+  listTemplates  ListTemplate[]
 }
 
 // Web Push の購読情報（1 ユーザーが複数端末を持てる）
@@ -257,4 +258,34 @@ model Feedback {
   comment   String?
   screen    String? // どの画面から送信されたか
   createdAt DateTime @default(now())
+}
+
+// 名前を付けて保存できる準備リストのテンプレート（準備すること＋持ち物）。
+// 予定の現在のリストから作れる。別の予定にまとめて適用できる。
+model ListTemplate {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  note          String?
+  sourceEventId String? // どの予定のリストから作ったか（参照用）
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items ListTemplateItem[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model ListTemplateItem {
+  id                String       @id @default(cuid())
+  templateId        String
+  template          ListTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  kind              String       @default("task") // "task" | "belonging"
+  title             String
+  notifyLeadMinutes Int?
+  sortOrder         Int          @default(0)
+
+  @@index([templateId])
 }

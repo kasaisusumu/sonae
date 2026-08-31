@@ -6,6 +6,7 @@ import { isDevLoginEnabled } from "@/lib/dev-login";
 import { getUpcomingWarnings } from "@/lib/failures";
 import { primeNotifiedChecklists } from "@/lib/checklist";
 import { SavingsDashboard } from "@/app/components/savings-dashboard";
+import { GettingStarted } from "@/app/components/getting-started";
 
 export const maxDuration = 60;
 
@@ -45,9 +46,9 @@ function HowTo({ open = false }: { open?: boolean }) {
 export default async function HomePage({
   searchParams,
 }: {
-  searchParams: Promise<{ auth?: string }>;
+  searchParams: Promise<{ auth?: string; loggedout?: string }>;
 }) {
-  const { auth } = await searchParams;
+  const { auth, loggedout } = await searchParams;
   const user = await getCurrentUser();
   const authMessage =
     auth === "config"
@@ -64,8 +65,32 @@ export default async function HomePage({
             予定の準備を、わすれない。
           </h1>
           <p className="mt-4 text-muted">
-            「私のマネージャー」が、予定ごとに必要な準備と持ち物を用意します。あなたの直しを覚えて、少しずつ的確になっていきます。
+            カレンダーに予定を入れるだけ。「準備すること」と「持ち物」が自動で用意されて、
+            当日までに通知します。
           </p>
+
+          <ol className="mx-auto mt-6 max-w-xs space-y-2 text-left text-sm">
+            {[
+              "Google でログイン（約30秒）",
+              "予定ごとに準備リストが出る",
+              "いる／いらないを直すと、次から賢くなる",
+            ].map((s, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-soft text-xs font-semibold text-teal-dark">
+                  {i + 1}
+                </span>
+                <span className="text-muted">{s}</span>
+              </li>
+            ))}
+          </ol>
+
+          {loggedout && (
+            <p className="mt-4 rounded-lg bg-accent-soft px-4 py-3 text-sm text-teal-dark">
+              ログアウトしました。データは保存されています。
+              <br />
+              同じ Google アカウントで入り直すと、そのまま元に戻ります。
+            </p>
+          )}
           {authMessage && (
             <p className="mt-4 rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">
               {authMessage}
@@ -73,12 +98,16 @@ export default async function HomePage({
           )}
           <a
             href="/api/auth/google"
-            className="mt-8 inline-flex items-center justify-center rounded-xl bg-teal px-6 py-3 font-medium text-white no-underline transition-colors hover:bg-teal-dark"
+            className="mt-7 inline-flex w-full items-center justify-center rounded-xl bg-teal px-6 py-3.5 font-medium text-white no-underline transition-colors hover:bg-teal-dark"
           >
-            Google でログイン
+            {loggedout ? "Google で入り直す" : "Google ではじめる"}
           </a>
           <p className="mt-3 text-xs text-muted">
-            カレンダーは基本は読み取りのみ。設定でオンにしたときだけ、予定の説明欄に準備リストを追記します。
+            カレンダーは読み取りのみ。設定でオンにしたときだけ、予定の説明欄に準備リストを書き込みます。
+          </p>
+          <p className="mt-2 text-xs text-muted">
+            途中で「このアプリは確認されていません」と出たら、「詳細」→「
+            {"（アプリ名）"}に移動」で進めます（検証中のため）。
           </p>
           {isDevLoginEnabled() && (
             <p className="mt-6 text-xs text-muted">
@@ -88,9 +117,6 @@ export default async function HomePage({
               （本番では無効）
             </p>
           )}
-        </div>
-        <div className="mt-8">
-          <HowTo open />
         </div>
       </div>
     );
@@ -118,6 +144,8 @@ export default async function HomePage({
 
   return (
     <div className="space-y-6">
+      <GettingStarted userId={user.id} />
+
       <HowTo open={upcoming.length === 0} />
 
       <SavingsDashboard userId={user.id} />

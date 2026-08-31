@@ -92,8 +92,11 @@ export default async function EventsPage({
         )}
       </section>
 
-      {/* 手動登録（折りたたみ） */}
-      <details className="rounded-2xl bg-surface p-4">
+      {/* 手動登録（予定がまだ無いときは開いておく） */}
+      <details
+        className="rounded-2xl bg-surface p-4"
+        open={events.length === 0}
+      >
         <summary className="cursor-pointer text-sm font-medium text-teal-dark">
           ＋ 手動で予定を追加
         </summary>
@@ -148,9 +151,17 @@ export default async function EventsPage({
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">これからの予定</h2>
         {upcoming.length === 0 ? (
-          <p className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">
-            まだありません。
-          </p>
+          <div className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">
+            {account ? (
+              <>
+                これからの予定がありません。
+                <br />
+                上の「カレンダーから取り込む」を押すか、予定を1件追加してみてください。
+              </>
+            ) : (
+              <>まず上の「接続する」で Google カレンダーをつないでください。</>
+            )}
+          </div>
         ) : (
           <ul className="space-y-2">
             {upcoming.map((ev) => (

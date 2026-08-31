@@ -11,6 +11,7 @@ import { regenerateChecklist } from "@/app/actions";
 import { ChecklistEditor } from "./checklist-editor";
 import { SuggestionList } from "./suggestion-list";
 import { WarningPanel } from "./warning-panel";
+import { ListToolbox } from "./list-toolbox";
 import { SubmitButton } from "@/app/components/submit-button";
 
 type Row = {
@@ -143,6 +144,8 @@ export async function ChecklistSection({
 
         <KindBlock eventId={event.id} kind="task" rows={rows} />
         <KindBlock eventId={event.id} kind="belonging" rows={rows} />
+
+        <ListToolbox eventId={event.id} userId={event.userId} />
       </section>
 
       {forced.length > 0 && (

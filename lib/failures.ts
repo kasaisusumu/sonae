@@ -23,6 +23,7 @@ export interface WarningCluster {
   lastOccurredAt: Date;
   weight: number; // 表示順・足切り用（経年劣化込み）
   prevented: boolean; // この予定で「防げた」計上済みか
+  loggedThisEventCount: number; // 「今回もやってしまった」でこの予定に記録済みの回数
   fromEventTitle: string | null;
 }
 
@@ -159,6 +160,7 @@ function buildClusters(
   logs: LogRow[],
   preventedCountByLogId: Map<string, number>,
   preventedThisEventLogIds: Set<string>,
+  thisEventId: string | null = null,
 ): WarningCluster[] {
   const sorted = [...logs].sort(
     (a, b) => b.occurredAt.getTime() - a.occurredAt.getTime(),
@@ -185,6 +187,9 @@ function buildClusters(
     const prevented = g.members.some((x) =>
       preventedThisEventLogIds.has(x.id),
     );
+    const loggedThisEventCount = thisEventId
+      ? g.members.filter((x) => x.eventId === thisEventId).length
+      : 0;
     // computeConfidence と同じ気持ち: 繰り返しで重く、経年で薄れる
     const base = 0.4 + 0.18 * Math.min(occurredCount, 3);
     const weight = Number(
@@ -199,6 +204,7 @@ function buildClusters(
       lastOccurredAt,
       weight,
       prevented,
+      loggedThisEventCount,
       fromEventTitle: g.rep.event?.title ?? null,
     };
   });
@@ -279,6 +285,7 @@ export async function getWarningForEvent(
     applicable,
     preventedCountByLogId,
     preventedThisEvent,
+    event.id,
   );
   if (clusters.length === 0) return null;
 

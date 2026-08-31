@@ -1,0 +1,71 @@
+import { prisma } from "@/lib/prisma";
+
+export type TemplateSummary = {
+  id: string;
+  name: string;
+  taskCount: number;
+  belongingCount: number;
+  updatedAt: Date;
+};
+
+export type PastEventWithList = {
+  id: string;
+  title: string;
+  eventDatetime: Date;
+  taskCount: number;
+  belongingCount: number;
+};
+
+/** ユーザーの保存済みテンプレート一覧（新しい順・件数つき）。 */
+export async function getUserTemplates(
+  userId: string,
+): Promise<TemplateSummary[]> {
+  const rows = await prisma.listTemplate.findMany({
+    where: { userId },
+    orderBy: { updatedAt: "desc" },
+    include: { items: { select: { kind: true } } },
+  });
+  return rows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    updatedAt: t.updatedAt,
+    taskCount: t.items.filter((i) => i.kind !== "belonging").length,
+    belongingCount: t.items.filter((i) => i.kind === "belonging").length,
+  }));
+}
+
+/**
+ * 準備リストのある予定（提案でない項目が1つ以上）を新しい順に。
+ * 「他の予定からコピー」「過去のデータ参照」用。excludeId は一覧から外す。
+ */
+export async function getEventsWithLists(
+  userId: string,
+  excludeId?: string,
+  limit = 60,
+): Promise<PastEventWithList[]> {
+  const rows = await prisma.event.findMany({
+    where: {
+      userId,
+      ...(excludeId ? { id: { not: excludeId } } : {}),
+      checklistItems: { some: { isSuggested: false } },
+    },
+    orderBy: { eventDatetime: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      title: true,
+      eventDatetime: true,
+      checklistItems: {
+        where: { isSuggested: false },
+        select: { kind: true },
+      },
+    },
+  });
+  return rows.map((e) => ({
+    id: e.id,
+    title: e.title,
+    eventDatetime: e.eventDatetime,
+    taskCount: e.checklistItems.filter((i) => i.kind !== "belonging").length,
+    belongingCount: e.checklistItems.filter((i) => i.kind === "belonging").length,
+  }));
+}

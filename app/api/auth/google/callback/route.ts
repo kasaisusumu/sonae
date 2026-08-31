@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { exchangeCode, ensureWatch } from "@/lib/google";
 import { setSession } from "@/lib/session";
 import { ensureDefaultCategories } from "@/lib/categories";
+import { syncUserCalendar } from "@/lib/sync";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 function appBase(req: NextRequest): string {
   return process.env.APP_BASE_URL || req.nextUrl.origin;
@@ -67,6 +68,12 @@ export async function GET(req: NextRequest) {
     // カレンダー変更の即時通知（push watch）を登録。失敗してもポーリングで代替。
     await ensureWatch(user.id).catch((e) =>
       console.error("[auth/callback] ensureWatch 失敗:", e),
+    );
+
+    // 接続直後に 1 回だけ取り込み、初回から予定が並んで見えるようにする。
+    // （初回同期は通知しない。準備リスト生成は開いたとき／LiveSync に任せる。）
+    await syncUserCalendar(user.id, { skipAiCategory: true }).catch((e) =>
+      console.error("[auth/callback] 初回同期に失敗:", e),
     );
 
     const dest = wantedWrite ? "/settings" : "/events?connected=1";

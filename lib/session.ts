@@ -3,8 +3,9 @@ import { cookies } from "next/headers";
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
 
-const COOKIE_NAME = "sonae_session";
-const MAX_AGE = 60 * 60 * 24 * 30; // 30 日
+export const COOKIE_NAME = "sonae_session";
+export const SESSION_MAX_AGE = 60 * 60 * 24 * 180; // 180 日（middleware でアクセスのたびに延長）
+const MAX_AGE = SESSION_MAX_AGE;
 
 function secret(): string {
   const s = process.env.SESSION_SECRET;

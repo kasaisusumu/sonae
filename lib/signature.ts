@@ -41,6 +41,38 @@ function parseSig(raw: string): Sig {
   }
 }
 
+const DURATION_JP: Record<string, string> = {
+  day: "日帰り",
+  short: "1〜2泊",
+  multi: "3泊以上",
+};
+const TIMEBUCKET_JP: Record<string, string> = {
+  morning: "午前",
+  afternoon: "午後",
+  evening: "夕方以降",
+  allday: "終日",
+};
+
+export interface SignatureDescription {
+  parts: string[]; // 例: ["海外", "3泊以上", "平日", "午前"]
+  text: string; // 例: "海外・3泊以上・平日・午前"、空なら "すべての予定に共通"
+}
+
+/** 特徴シグネチャを日本語の「どの場合」ラベルに変換する（学習内容の樹形図表示用）。 */
+export function describeSignature(raw: string): SignatureDescription {
+  const sig = parseSig(raw);
+  const parts: string[] = [];
+  if (sig.o === true) parts.push("海外");
+  else if (sig.o === false) parts.push("国内");
+  if (sig.d && sig.d !== "unknown" && DURATION_JP[sig.d]) {
+    parts.push(DURATION_JP[sig.d]);
+  }
+  if (sig.w === true) parts.push("平日");
+  else if (sig.w === false) parts.push("休日");
+  if (sig.t && TIMEBUCKET_JP[sig.t]) parts.push(TIMEBUCKET_JP[sig.t]);
+  return { parts, text: parts.length ? parts.join("・") : "すべての予定に共通" };
+}
+
 /**
  * ルールの署名が、対象イベントの特徴に当てはまるか。
  * - "{}"（ワイルドカード）は何にでも当たる

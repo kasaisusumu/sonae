@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { EventFeatureData } from "@/lib/features";
 import {
+  describeSignature,
   featureSignature,
   signatureMatches,
   signatureSpecificity,
@@ -338,57 +339,162 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
   }
 }
 
-// ── 「学習内容の確認」画面用 ─────────────────────────
+// ── 「学習内容の確認」画面用: カテゴリ → 状況(特徴シグネチャ) → 学習内容 の樹形図 ──
 
-export async function getLearningOverview(userId: string) {
+export interface LearnedRuleView {
+  id: string;
+  itemKind: ItemKind;
+  ruleType: RuleType;
+  target: string;
+  value: string | null;
+  confidence: number;
+  effectiveConfidence: number;
+  confirmedCount: number;
+  contradictedCount: number;
+  lastConfirmedAt: Date;
+  isUserLocked: boolean;
+  forced: boolean;
+}
+
+export interface LearningKindGroup {
+  kind: ItemKind;
+  fixed: LearnedRuleView[];
+  excluded: LearnedRuleView[];
+  timing: LearnedRuleView[];
+  notify: LearnedRuleView[];
+  tentative: LearnedRuleView[];
+}
+
+export interface LearningSituation {
+  signature: string;
+  /** "海外・3泊以上・平日・午前"、共通なら "すべての予定に共通" */
+  label: string;
+  parts: string[];
+  ruleCount: number;
+  kinds: LearningKindGroup[];
+}
+
+export interface LearningCategoryTree {
+  categoryId: string;
+  categoryName: string;
+  ruleCount: number;
+  editCount: number;
+  situations: LearningSituation[];
+}
+
+function ruleView(r: {
+  id: string;
+  itemKind: string;
+  ruleType: string;
+  target: string;
+  value: string | null;
+  confidence: number;
+  confirmedCount: number;
+  contradictedCount: number;
+  lastConfirmedAt: Date;
+  isUserLocked: boolean;
+}): LearnedRuleView {
+  const eff = r.isUserLocked
+    ? 1
+    : r.confidence * decayMultiplier(r.lastConfirmedAt);
+  return {
+    id: r.id,
+    itemKind: r.itemKind as ItemKind,
+    ruleType: r.ruleType as RuleType,
+    target: r.target,
+    value: r.value,
+    confidence: r.confidence,
+    effectiveConfidence: Number(eff.toFixed(3)),
+    confirmedCount: r.confirmedCount,
+    contradictedCount: r.contradictedCount,
+    lastConfirmedAt: r.lastConfirmedAt,
+    isUserLocked: r.isUserLocked,
+    forced: r.isUserLocked || eff >= CONFIDENCE_THRESHOLD,
+  };
+}
+
+export async function getLearningTree(
+  userId: string,
+): Promise<LearningCategoryTree[]> {
   const categories = await prisma.category.findMany({
     where: { userId },
     orderBy: { createdAt: "asc" },
-    include: { learnedRules: { orderBy: { confidence: "desc" } } },
+    include: {
+      learnedRules: true,
+      _count: { select: { editRecords: true } },
+    },
   });
-
-  function shape(rows: (typeof categories)[number]["learnedRules"]) {
-    return rows.map((r) => {
-      const eff = r.isUserLocked
-        ? 1
-        : r.confidence * decayMultiplier(r.lastConfirmedAt);
-      return {
-        id: r.id,
-        itemKind: r.itemKind as ItemKind,
-        ruleType: r.ruleType as RuleType,
-        target: r.target,
-        value: r.value,
-        effectiveConfidence: Number(eff.toFixed(3)),
-        specificity: signatureSpecificity(r.featureSignature),
-        isUserLocked: r.isUserLocked,
-        confirmedCount: r.confirmedCount,
-        contradictedCount: r.contradictedCount,
-        lastConfirmedAt: r.lastConfirmedAt,
-        forced: r.isUserLocked || eff >= CONFIDENCE_THRESHOLD,
-      };
-    });
-  }
 
   return categories
     .map((c) => {
-      const rules = shape(c.learnedRules);
+      const bySig = new Map<string, LearnedRuleView[]>();
+      for (const r of c.learnedRules) {
+        const arr = bySig.get(r.featureSignature) ?? [];
+        arr.push(ruleView(r));
+        bySig.set(r.featureSignature, arr);
+      }
+
+      const situations: LearningSituation[] = [...bySig.entries()]
+        .map(([signature, rules]) => {
+          const d = describeSignature(signature);
+          const kinds: LearningKindGroup[] = (
+            ["task", "belonging"] as ItemKind[]
+          )
+            .map((kind) => {
+              const rs = rules
+                .filter((r) => r.itemKind === kind)
+                .sort(
+                  (a, b) =>
+                    Number(b.forced) - Number(a.forced) ||
+                    b.effectiveConfidence - a.effectiveConfidence,
+                );
+              return {
+                kind,
+                fixed: rs.filter(
+                  (r) => r.ruleType === "fixed_item" && r.forced,
+                ),
+                excluded: rs.filter(
+                  (r) => r.ruleType === "exclude_item" && r.forced,
+                ),
+                timing: rs.filter(
+                  (r) => r.ruleType === "timing_override" && r.forced,
+                ),
+                notify: rs.filter(
+                  (r) => r.ruleType === "notify_override" && r.forced,
+                ),
+                tentative: rs.filter((r) => !r.forced),
+              } satisfies LearningKindGroup;
+            })
+            .filter(
+              (k) =>
+                k.fixed.length +
+                  k.excluded.length +
+                  k.timing.length +
+                  k.notify.length +
+                  k.tentative.length >
+                0,
+            );
+          return {
+            signature,
+            label: d.text,
+            parts: d.parts,
+            ruleCount: rules.length,
+            kinds,
+          };
+        })
+        // 具体的な状況を先に、"すべて共通" を後ろに。次に件数の多い順。
+        .sort(
+          (a, b) =>
+            b.parts.length - a.parts.length || b.ruleCount - a.ruleCount,
+        );
+
       return {
         categoryId: c.id,
         categoryName: c.name,
-        fixed: rules.filter((r) => r.ruleType === "fixed_item" && r.forced),
-        excluded: rules.filter((r) => r.ruleType === "exclude_item" && r.forced),
-        timing: rules.filter((r) => r.ruleType === "timing_override" && r.forced),
-        notify: rules.filter((r) => r.ruleType === "notify_override" && r.forced),
-        tentative: rules.filter((r) => !r.forced),
+        ruleCount: c.learnedRules.length,
+        editCount: c._count.editRecords,
+        situations,
       };
     })
-    .filter(
-      (g) =>
-        g.fixed.length +
-          g.excluded.length +
-          g.timing.length +
-          g.notify.length +
-          g.tentative.length >
-        0,
-    );
+    .filter((c) => c.ruleCount > 0);
 }

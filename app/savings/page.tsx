@@ -7,7 +7,7 @@ import {
   type NameTreeNode,
 } from "@/lib/learning";
 import { formatYen } from "@/lib/format";
-import { leadLabel } from "@/lib/notify-items";
+import { formatLead } from "@/lib/lead-time";
 import { LearningSearch } from "./learning-search";
 import { LazyLeaf } from "./lazy-leaf";
 import { LeafBody, type LeafItem } from "./leaf-body";
@@ -63,18 +63,14 @@ function Keywords({ words }: { words: string[] }) {
 }
 
 function CompactLine({ it }: { it: LeafItem }) {
-  const bits: string[] = [];
-  if (it.timingLabel) bits.push(it.timingLabel);
-  if (it.notifyLeadMinutes != null)
-    bits.push(`🔔${leadLabel(it.notifyLeadMinutes)}`);
+  const lead =
+    it.notifyLeadMinutes != null ? `🔔${formatLead(it.notifyLeadMinutes)}` : "";
   return (
     <li
       className={`text-[11px] ${it.isDone ? "text-muted line-through" : ""}`}
     >
       {it.title}
-      {bits.length > 0 && (
-        <span className="text-muted">（{bits.join(" ・ ")}）</span>
-      )}
+      {lead && <span className="text-muted">（{lead}）</span>}
       {it.isUserAdded && <span className="ml-1 text-teal-dark">＋追加</span>}
     </li>
   );
@@ -118,7 +114,6 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
     leaf.list[kind].map((it) => ({
       id: it.id,
       title: it.title,
-      timingLabel: it.timingLabel,
       comment: it.comment,
       isDone: it.isDone,
       isUserAdded: it.isUserAdded,

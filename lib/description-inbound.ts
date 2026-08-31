@@ -87,10 +87,14 @@ export async function applyInboundDescription(
   // 差分（種別ごと）
   const diffs: Record<
     ItemKind,
-    { removed: string[]; added: GeneratedItem[]; retimed: { title: string; timingLabel: string }[] }
+    {
+      removed: string[];
+      added: GeneratedItem[];
+      renotified: { title: string; leadMinutes: number | null }[];
+    }
   > = {
-    task: { removed: [], added: [], retimed: [] },
-    belonging: { removed: [], added: [], retimed: [] },
+    task: { removed: [], added: [], renotified: [] },
+    belonging: { removed: [], added: [], renotified: [] },
   };
   let doneOrCommentChanged = false;
 
@@ -106,10 +110,23 @@ export async function applyInboundDescription(
     for (const i of next) {
       const p = prevByTitle.get(norm(i.title));
       if (!p) {
-        diffs[kind].added.push({ title: i.title, timingLabel: i.timingLabel });
+        diffs[kind].added.push({
+          title: i.title,
+          timingLabel: null,
+          notifyLeadMinutes: i.notifyLeadMinutes,
+        });
+        if (i.notifyLeadMinutes != null) {
+          diffs[kind].renotified.push({
+            title: i.title,
+            leadMinutes: i.notifyLeadMinutes,
+          });
+        }
       } else {
-        if (i.timingLabel && (p.timingLabel ?? null) !== i.timingLabel) {
-          diffs[kind].retimed.push({ title: i.title, timingLabel: i.timingLabel });
+        if ((p.notifyLeadMinutes ?? null) !== i.notifyLeadMinutes) {
+          diffs[kind].renotified.push({
+            title: i.title,
+            leadMinutes: i.notifyLeadMinutes,
+          });
         }
         if (
           p.isDone !== i.isDone ||
@@ -123,7 +140,9 @@ export async function applyInboundDescription(
 
   const structural = kinds.some(
     (k) =>
-      diffs[k].removed.length || diffs[k].added.length || diffs[k].retimed.length,
+      diffs[k].removed.length ||
+      diffs[k].added.length ||
+      diffs[k].renotified.length,
   );
   const memoChanged = memoPart !== event.memo;
 
@@ -140,17 +159,19 @@ export async function applyInboundDescription(
   let order = 0;
   const rows = parsed.items.map((i: ParsedItem) => {
     const p = prevKindByTitle.get(`${i.kind}:${norm(i.title)}`);
+    const leadUnchanged =
+      p && (p.notifyLeadMinutes ?? null) === i.notifyLeadMinutes;
     return {
       eventId,
       kind: i.kind,
       title: i.title,
-      timingLabel: i.timingLabel,
+      timingLabel: p ? p.timingLabel : null,
       comment: i.comment,
       isDone: i.isDone,
       isUserAdded: p ? p.isUserAdded : true,
-      // 通知リード時間は説明欄に出さないので、既存項目の設定を引き継ぐ
-      notifyLeadMinutes: p ? p.notifyLeadMinutes : null,
-      notifiedAt: p ? p.notifiedAt : null,
+      // 説明欄の「（3時間前）」からリード時間を取り込む。変わっていなければ送信済みを引き継ぐ。
+      notifyLeadMinutes: i.notifyLeadMinutes,
+      notifiedAt: leadUnchanged ? p.notifiedAt : null,
       sortOrder: order++,
     };
   });
@@ -176,7 +197,7 @@ export async function applyInboundDescription(
     });
     for (const kind of kinds) {
       const d = diffs[kind];
-      if (d.removed.length || d.added.length || d.retimed.length) {
+      if (d.removed.length || d.added.length || d.renotified.length) {
         await recordEdit({
           eventId,
           categoryId: event.categoryId,
@@ -184,7 +205,8 @@ export async function applyInboundDescription(
           feature,
           removed: d.removed,
           added: d.added,
-          retimed: d.retimed,
+          retimed: [],
+          renotified: d.renotified,
         });
       }
     }

@@ -351,7 +351,6 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
 export interface LeafListItem {
   id: string;
   title: string;
-  timingLabel: string | null;
   comment: string | null;
   isDone: boolean;
   isUserAdded: boolean;
@@ -566,7 +565,6 @@ export async function getLearningNameTree(userId: string): Promise<{
               id: true,
               kind: true,
               title: true,
-              timingLabel: true,
               comment: true,
               isDone: true,
               notifyLeadMinutes: true,
@@ -607,7 +605,6 @@ export async function getLearningNameTree(userId: string): Promise<{
         const toItem = (i: {
           id: string;
           title: string;
-          timingLabel: string | null;
           comment: string | null;
           isDone: boolean;
           isUserAdded: boolean;
@@ -615,7 +612,6 @@ export async function getLearningNameTree(userId: string): Promise<{
         }): LeafListItem => ({
           id: i.id,
           title: i.title,
-          timingLabel: i.timingLabel,
           comment: i.comment,
           isDone: i.isDone,
           isUserAdded: i.isUserAdded,

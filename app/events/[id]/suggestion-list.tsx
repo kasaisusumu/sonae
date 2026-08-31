@@ -3,10 +3,11 @@
 import { useState, useTransition } from "react";
 import { acceptSuggestion, rejectSuggestion } from "@/app/actions";
 
+import { formatLead, parseLead } from "@/lib/lead-time";
+
 export interface SuggestionItem {
   id: string;
   title: string;
-  timingLabel: string | null;
   suggestionType: "exclude" | "add" | "timing" | null;
   suggestionValue: string | null;
 }
@@ -25,12 +26,14 @@ function describe(s: SuggestionItem): { text: string; yes: string; no: string } 
         yes: "入れる",
         no: "不要",
       };
-    case "timing":
+    case "timing": {
+      const lead = formatLead(parseLead(s.suggestionValue)) || "前回の設定";
       return {
-        text: `「${s.title}」のタイミングを${s.suggestionValue ?? "前回の設定"}にしますか？`,
-        yes: `${s.suggestionValue ?? "変更"}にする`,
+        text: `「${s.title}」の通知を${lead}にしますか？`,
+        yes: `${lead}にする`,
         no: "このまま",
       };
+    }
     default:
       return { text: s.title, yes: "適用", no: "却下" };
   }

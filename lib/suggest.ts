@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { extractEventFeature, type EventFeatureData } from "@/lib/features";
 import { generateBaseChecklist, type GeneratedBase } from "@/lib/generate";
 import { recallBaseChecklist } from "@/lib/recall";
+import { parseLead } from "@/lib/lead-time";
 import {
   getApplicableRules,
   norm,
@@ -75,10 +76,6 @@ function composeKind(
       items.push({ ...base(kind, r.target, r.value), priority: 1 });
     }
   }
-  for (const r of byType(forced, "timing_override")) {
-    const hit = items.find((it) => norm(it.title) === norm(r.target));
-    if (hit && r.value) hit.timingLabel = r.value;
-  }
   // 通知リード時間（内容とセットで学習した値。"off" は通知しない）
   const notifyLearned = new Set<string>();
   for (const r of byType(forced, "notify_override")) {
@@ -88,7 +85,19 @@ function composeKind(
       notifyLearned.add(norm(hit.title));
     }
   }
-  // 学習値が無い項目は、目安ラベルから通知時間も自動提案する
+  // 旧「タイミング」学習は通知リード時間として引き継ぐ
+  for (const r of byType(forced, "timing_override")) {
+    const hit = items.find((it) => norm(it.title) === norm(r.target));
+    if (hit && r.value) {
+      hit.timingLabel = r.value;
+      const lead = parseLead(r.value);
+      if (lead != null && !notifyLearned.has(norm(hit.title))) {
+        hit.notifyLeadMinutes = lead;
+        notifyLearned.add(norm(hit.title));
+      }
+    }
+  }
+  // 学習値が無い項目は、目安（生成時のラベル）から通知時間を自動提案する
   if (opts.autofillNotify) {
     for (const it of items) {
       if (it.notifyLeadMinutes === null && !notifyLearned.has(norm(it.title))) {
@@ -123,7 +132,8 @@ function composeKind(
     const hit = items.find(
       (it) => norm(it.title) === norm(r.target) && !it.isSuggested,
     );
-    if (hit && r.value && norm(hit.timingLabel ?? "") !== norm(r.value)) {
+    const lead = parseLead(r.value);
+    if (hit && lead != null && hit.notifyLeadMinutes !== lead) {
       hit.isSuggested = true;
       hit.suggestionType = "timing";
       hit.suggestionRuleId = r.id;

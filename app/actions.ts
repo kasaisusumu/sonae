@@ -27,6 +27,7 @@ import {
 } from "@/lib/learning";
 import { extractEventFeature } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
+import { parseLead } from "@/lib/lead-time";
 
 async function requireUserId(): Promise<string> {
   const userId = await getSessionUserId();
@@ -225,11 +226,10 @@ interface SaveChecklistInput {
   kind: "task" | "belonging";
   items: {
     title: string;
-    timingLabel: string | null;
     comment: string | null;
     isDone: boolean;
     isUserAdded: boolean;
-    // 予定開始の何分前に通知するか。null = 通知しない。
+    // 予定開始の何分前に通知するか。null = 通知しない。項目の「いつ」はこれ 1 本。
     notifyLeadMinutes: number | null;
   }[];
   removedTitles: string[];
@@ -254,7 +254,6 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   const cleanItems = input.items
     .map((it) => ({
       title: it.title.trim(),
-      timingLabel: it.timingLabel?.trim() || null,
       comment: it.comment?.trim() || null,
       isDone: Boolean(it.isDone),
       isUserAdded: Boolean(it.isUserAdded),
@@ -272,14 +271,14 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   const removed = [...prevByTitle.keys()].filter((t) => !nextTitles.has(t));
   const added: GeneratedItem[] = cleanItems
     .filter((it) => it.isUserAdded || !prevByTitle.has(it.title))
-    .map((it) => ({ title: it.title, timingLabel: it.timingLabel }));
-  const retimed: { title: string; timingLabel: string }[] = [];
+    .map((it) => ({
+      title: it.title,
+      timingLabel: null,
+      notifyLeadMinutes: it.notifyLeadMinutes,
+    }));
   const renotified: { title: string; leadMinutes: number | null }[] = [];
   for (const it of cleanItems) {
     const p = prevByTitle.get(it.title);
-    if (p && (p.timingLabel ?? null) !== it.timingLabel && it.timingLabel) {
-      retimed.push({ title: it.title, timingLabel: it.timingLabel });
-    }
     // 通知リード時間の変更、または通知付きで新規追加 → 内容とセットで学習
     const prevLead = p ? (p.notifyLeadMinutes ?? null) : null;
     if (
@@ -308,7 +307,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
           eventId: input.eventId,
           kind,
           title: it.title,
-          timingLabel: it.timingLabel,
+          timingLabel: p ? p.timingLabel : null,
           comment: it.comment,
           isDone: it.isDone,
           isUserAdded: it.isUserAdded,
@@ -323,7 +322,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
 
   if (
     event.categoryId &&
-    (removed.length || added.length || retimed.length || renotified.length)
+    (removed.length || added.length || renotified.length)
   ) {
     await recordEdit({
       eventId: event.id,
@@ -337,19 +336,16 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
       }),
       removed,
       added,
-      retimed,
+      retimed: [],
       renotified,
     });
   }
 
   await markAutoManaged(input.eventId);
 
-  // 内容（項目・タイミング・通知）が変わった編集なら、同名グループの扱いを更新する。
+  // 内容（項目・通知時間）が変わった編集なら、同名グループの扱いを更新する。
   const contentChanged =
-    removed.length > 0 ||
-    added.length > 0 ||
-    retimed.length > 0 ||
-    renotified.length > 0;
+    removed.length > 0 || added.length > 0 || renotified.length > 0;
   const twinIds = contentChanged
     ? await resolveNameGroupOnEdit(input.eventId)
     : [];
@@ -387,7 +383,8 @@ export async function acceptSuggestion(itemId: string): Promise<void> {
     await prisma.checklistItem.update({
       where: { id: itemId },
       data: {
-        timingLabel: item.suggestionValue ?? item.timingLabel,
+        notifyLeadMinutes:
+          parseLead(item.suggestionValue) ?? item.notifyLeadMinutes,
         isSuggested: false,
         suggestionType: null,
         suggestionRuleId: null,
@@ -642,7 +639,7 @@ export async function addPreventionItem(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const eventId = String(formData.get("eventId") ?? "");
   const label = String(formData.get("label") ?? "").trim();
-  const timingLabel = String(formData.get("timingLabel") ?? "前日").trim() || null;
+  const notifyLeadMinutes = cleanLead(formData.get("notifyLeadMinutes")) ?? 1440;
   if (!label) return;
 
   const event = await prisma.event.findFirst({ where: { id: eventId, userId } });
@@ -657,7 +654,7 @@ export async function addPreventionItem(formData: FormData): Promise<void> {
     data: {
       eventId,
       title: `【再発防止】${label}`,
-      timingLabel,
+      notifyLeadMinutes,
       isUserAdded: true,
       sortOrder: (max._max.sortOrder ?? -1) + 1,
     },

@@ -6,7 +6,6 @@ import { ChecklistEditor } from "@/app/events/[id]/checklist-editor";
 export interface LeafItem {
   id: string;
   title: string;
-  timingLabel: string | null;
   comment: string | null;
   isDone: boolean;
   isUserAdded: boolean;

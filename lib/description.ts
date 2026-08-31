@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { formatLead, parseLead } from "@/lib/lead-time";
 
 const START = "--- 私のマネージャー ---";
 const START_ALT = "--- そなえ ---"; // 旧マーカー（互換のため除去対象に含める）
@@ -38,14 +39,16 @@ export function stripSonaeBlock(desc: string | null | undefined): string {
 export interface DescItem {
   kind?: "task" | "belonging";
   title: string;
-  timingLabel: string | null;
+  /** 予定開始の何分前に通知するか。null = 通知なし。説明欄では「（3時間前）」等で表示。 */
+  notifyLeadMinutes?: number | null;
   isDone?: boolean;
   comment?: string | null;
 }
 
 function bullet(it: DescItem): string {
-  const label = it.timingLabel
-    ? `${oneLine(it.title)}（${oneLine(it.timingLabel)}）`
+  const lead = formatLead(it.notifyLeadMinutes ?? null);
+  const label = lead
+    ? `${oneLine(it.title)}（${lead}）`
     : oneLine(it.title);
   // 完了はチェック済みアイコン、未完了は空ボックス。取り消し線などの装飾は使わない
   const main = `${it.isDone ? CHECK_DONE : CHECK_TODO} ${label}`;
@@ -93,7 +96,8 @@ export function hashDescription(s: string): string {
 export interface ParsedItem {
   kind: "task" | "belonging";
   title: string;
-  timingLabel: string | null;
+  /** 末尾「（3時間前）」等から解釈した通知リード時間（分）。解釈できなければ null。 */
+  notifyLeadMinutes: number | null;
   isDone: boolean;
   comment: string | null;
 }
@@ -184,14 +188,19 @@ export function parseSonaeBlock(desc: string | null | undefined): {
       .replace(/(?:^|\s)済(?:$|\s)/g, " ")
       .trim();
 
-    let timingLabel: string | null = null;
+    let notifyLeadMinutes: number | null = null;
     const tm = t.match(/^(.*)[（(]\s*([^（()）]+?)\s*[）)]\s*$/);
     if (tm) {
-      t = tm[1].trim();
-      timingLabel = tm[2].trim() || null;
+      const inner = tm[2].trim();
+      const lead = parseLead(inner);
+      // 「（3時間前）」等はリード時間として取り込む。解釈できない括弧はタイトルの一部として残す。
+      if (lead !== null || /なし|前|開始/.test(inner)) {
+        t = tm[1].trim();
+        notifyLeadMinutes = lead;
+      }
     }
     if (!t) continue;
-    items.push({ kind, title: t, timingLabel, isDone, comment: null });
+    items.push({ kind, title: t, notifyLeadMinutes, isDone, comment: null });
   }
 
   return { hasBlock: true, items };

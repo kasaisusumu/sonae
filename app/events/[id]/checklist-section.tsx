@@ -17,7 +17,6 @@ type Row = {
   id: string;
   kind: string;
   title: string;
-  timingLabel: string | null;
   comment: string | null;
   isDone: boolean;
   isUserAdded: boolean;
@@ -51,7 +50,6 @@ function KindBlock({
           suggestions={suggestions.map((s) => ({
             id: s.id,
             title: s.title,
-            timingLabel: s.timingLabel,
             suggestionType: s.suggestionType as
               | "exclude"
               | "add"
@@ -67,7 +65,6 @@ function KindBlock({
         initialItems={normal.map((c) => ({
           id: c.id,
           title: c.title,
-          timingLabel: c.timingLabel,
           comment: c.comment,
           isDone: c.isDone,
           isUserAdded: c.isUserAdded,

@@ -6,10 +6,9 @@ import {
   undoPrevented,
 } from "@/app/actions";
 import { formatYen } from "@/lib/format";
+import { LEAD_PRESETS } from "@/lib/lead-time";
 import { SubmitButton } from "@/app/components/submit-button";
 import type { EventWarning } from "@/lib/failures";
-
-const TIMING_PRESETS = ["1週間前", "3日前", "前日", "前日夜", "当日朝", "出発1時間前"];
 
 export function WarningPanel({ warning }: { warning: EventWarning }) {
   const { event, logs, isPast } = warning;
@@ -74,13 +73,14 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                   />
                 </label>
                 <select
-                  name="timingLabel"
-                  defaultValue="前日"
+                  name="notifyLeadMinutes"
+                  defaultValue="1440"
                   className="rounded-md border bg-background px-2 py-1 text-sm"
+                  aria-label="通知"
                 >
-                  {TIMING_PRESETS.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
+                  {LEAD_PRESETS.filter((p) => p.minutes != null).map((p) => (
+                    <option key={p.label} value={String(p.minutes)}>
+                      {p.label}
                     </option>
                   ))}
                 </select>

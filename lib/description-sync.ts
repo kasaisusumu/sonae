@@ -23,7 +23,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
         select: {
           kind: true,
           title: true,
-          timingLabel: true,
+          notifyLeadMinutes: true,
           isDone: true,
           comment: true,
         },
@@ -52,7 +52,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
     event.checklistItems.map((c) => ({
       kind: c.kind === "belonging" ? "belonging" : "task",
       title: c.title,
-      timingLabel: c.timingLabel,
+      notifyLeadMinutes: c.notifyLeadMinutes,
       isDone: c.isDone,
       comment: c.comment,
     })),

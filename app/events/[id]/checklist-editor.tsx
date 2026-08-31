@@ -1,92 +1,67 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-} from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { saveChecklist, toggleChecklistItemDone } from "@/app/actions";
+import { LEAD_PRESETS, isLeadPreset } from "@/lib/lead-time";
 
 interface Item {
   key: string;
   id: string | null;
   title: string;
-  timingLabel: string;
   comment: string;
   isDone: boolean;
   isUserAdded: boolean;
-  notifyLeadMinutes: number | null; // 予定開始の何分前に通知するか。null = しない
-  notifyDraft: number; // オフにしても覚えておく直近の設定（UIのみ）
+  notifyLeadMinutes: number | null; // 予定開始の何分前に通知するか。null = 通知なし
+  notifyCustom: boolean; // カスタム入力（日・時・分）を出しているか（UIのみ）
 }
 
 interface InitialItem {
   id: string | null;
   title: string;
-  timingLabel: string | null;
   comment: string | null;
   isDone: boolean;
   isUserAdded: boolean;
   notifyLeadMinutes: number | null;
 }
 
-const TIMING_PRESETS = [
-  "1週間前",
-  "3日前",
-  "前日",
-  "前日夜",
-  "当日朝",
-  "当日",
-  "30分前",
-  "出発1時間前",
-];
-
-// 通知リード時間のドラムロール（時間 0〜168 / 分 0〜59、1時間・1分単位）
-const HOUR_OPTS = Array.from({ length: 169 }, (_, i) => i);
-const MIN_OPTS = Array.from({ length: 60 }, (_, i) => i);
-const DEFAULT_LEAD = 180;
-const splitLead = (m: number) => ({ h: Math.floor(m / 60), mm: m % 60 });
+const DEFAULT_LEAD = 180; // 3時間前
+const splitLead = (m: number) => ({
+  d: Math.floor(m / 1440),
+  h: Math.floor((m % 1440) / 60),
+  mm: m % 60,
+});
+const clamp = (n: number, hi: number) =>
+  Math.max(0, Math.min(hi, Math.floor(Number.isFinite(n) ? n : 0)));
 
 let counter = 0;
 const nextKey = () => `it-${counter++}`;
-
 const normTitle = (s: string) => s.toLowerCase().replace(/\s+/g, "").trim();
 
-/** メモ帳などから貼り付けたテキストを、1行1項目に分解する。記号・番号・末尾の（目安）は落とす。 */
-function parseBulk(text: string): { title: string; timingLabel: string }[] {
+/** メモ帳などから貼り付けたテキストを 1 行 1 項目に。記号・番号は落とす。 */
+function parseBulk(text: string): { title: string }[] {
   let lines = text.split(/\r?\n/);
-  // 1行だけで「、」や「,」区切りなら、それで分ける
   if (lines.length === 1 && /[、,]/.test(lines[0])) {
     lines = lines[0].split(/[、,]/);
   }
-  const out: { title: string; timingLabel: string }[] = [];
+  const out: { title: string }[] = [];
   const seen = new Set<string>();
   for (const raw of lines) {
-    let line = raw.replace(/[　 ]/g, " ").trim();
+    let line = raw.replace(/[　 ]/g, " ").trim();
     if (!line) continue;
-    // 行頭の箇条書き記号・チェックボックス・番号
     line = line
       .replace(
         /^(?:[-*・•‣▸▹>＞○●◦]|\[[ xX]\]|[☐☑✅⬜◻◼■□▪▫]|\d+[.)、]|[（(]\d+[）)])\s*/,
         "",
       )
       .trim();
-    // 行頭の「済 / done / ✓」など
     line = line.replace(/^(?:済み?|done|[✓✔☑])\s*[:：\-]?\s*/i, "").trim();
-    if (!line) continue;
-    // 末尾の（目安）→ タイミングに
-    let timingLabel = "";
-    const m = line.match(/^(.*?)[（(]\s*([^（()）]{1,16})\s*[）)]\s*$/);
-    if (m && m[1].trim()) {
-      line = m[1].trim();
-      timingLabel = m[2].trim();
-    }
+    // 末尾の「（…前）」等はもう使わないので落とす
+    line = line.replace(/[（(]\s*[^（()）]{1,16}\s*[）)]\s*$/, "").trim();
     if (!line) continue;
     const key = normTitle(line);
     if (!key || seen.has(key)) continue;
     seen.add(key);
-    out.push({ title: line.slice(0, 120), timingLabel });
+    out.push({ title: line.slice(0, 120) });
   }
   return out;
 }
@@ -107,12 +82,12 @@ export function ChecklistEditor({
         key: nextKey(),
         id: it.id,
         title: it.title,
-        timingLabel: it.timingLabel ?? "",
         comment: it.comment ?? "",
         isDone: it.isDone,
         isUserAdded: it.isUserAdded,
         notifyLeadMinutes: it.notifyLeadMinutes ?? null,
-        notifyDraft: it.notifyLeadMinutes ?? DEFAULT_LEAD,
+        notifyCustom:
+          it.notifyLeadMinutes != null && !isLeadPreset(it.notifyLeadMinutes),
       })),
     [initialItems],
   );
@@ -130,26 +105,21 @@ export function ChecklistEditor({
     [initialItems],
   );
 
-  // isDone は個別に自動保存するので dirty 判定から除外
   const dirty =
     JSON.stringify(items.map(strip)) !== JSON.stringify(initial.map(strip)) ||
     removedTitles.length > 0;
 
-  // items が最後に同期した initial（＝サーバー値）。未保存編集の有無を判定するのに使う。
   const syncedRef = useRef(initial);
-  // サーバーの最新（initialItems）が差し替わったとき、未保存の編集が無ければ取り込む。
-  // 別画面での編集（樹形図など）や保存直後の結果を、このエディタにも反映するため。
   useEffect(() => {
     const userEdited =
       JSON.stringify(items.map(strip)) !==
         JSON.stringify(syncedRef.current.map(strip)) ||
       removedTitles.length > 0;
     syncedRef.current = initial;
-    if (userEdited) return; // 未保存の編集は上書きしない
+    if (userEdited) return;
     setItems(initial);
     setRemovedTitles([]);
     setSaved(false);
-    // initial が変わったときだけ動かす（items/removedTitles は現在値の読み取りに使うだけ）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
@@ -158,7 +128,6 @@ export function ChecklistEditor({
       .filter((it) => it.title.trim())
       .map((it) => ({
         title: it.title.trim(),
-        timingLabel: it.timingLabel.trim() || null,
         comment: it.comment.trim() || null,
         isDone: it.isDone,
         isUserAdded: it.isUserAdded,
@@ -168,12 +137,7 @@ export function ChecklistEditor({
 
   function persist(list: Item[]) {
     startTransition(async () => {
-      await saveChecklist({
-        eventId,
-        kind,
-        items: toPayload(list),
-        removedTitles,
-      });
+      await saveChecklist({ eventId, kind, items: toPayload(list), removedTitles });
       setRemovedTitles([]);
       setSaved(true);
     });
@@ -186,24 +150,28 @@ export function ChecklistEditor({
     setSaved(false);
   }
 
-  function setNotifyOn(it: Item, on: boolean) {
-    update(it.key, { notifyLeadMinutes: on ? it.notifyDraft : null });
+  function onNotifySelect(it: Item, value: string) {
+    if (value === "custom") {
+      update(it.key, {
+        notifyCustom: true,
+        notifyLeadMinutes: it.notifyLeadMinutes ?? DEFAULT_LEAD,
+      });
+    } else if (value === "none") {
+      update(it.key, { notifyCustom: false, notifyLeadMinutes: null });
+    } else {
+      update(it.key, { notifyCustom: false, notifyLeadMinutes: Number(value) });
+    }
   }
 
-  function setNotifyPart(it: Item, part: "h" | "mm", value: string) {
-    const { h, mm } = splitLead(it.notifyLeadMinutes ?? it.notifyDraft);
-    const nh =
-      part === "h" ? Math.max(0, Math.min(168, Math.floor(Number(value) || 0))) : h;
-    const nm =
-      part === "mm" ? Math.max(0, Math.min(59, Math.floor(Number(value) || 0))) : mm;
-    const total = nh * 60 + nm;
-    update(it.key, {
-      notifyLeadMinutes: total,
-      notifyDraft: total > 0 ? total : it.notifyDraft,
-    });
+  function setCustomPart(it: Item, part: "d" | "h" | "mm", value: string) {
+    const cur = splitLead(it.notifyLeadMinutes ?? DEFAULT_LEAD);
+    const d = part === "d" ? clamp(Number(value), 30) : cur.d;
+    const h = part === "h" ? clamp(Number(value), 23) : cur.h;
+    const mm = part === "mm" ? clamp(Number(value), 59) : cur.mm;
+    const total = d * 1440 + h * 60 + mm;
+    update(it.key, { notifyLeadMinutes: total > 0 ? total : null });
   }
 
-  // チェックはその場で保存（「保存する」ボタン不要）
   function toggleDone(it: Item, next: boolean) {
     setItems((prev) =>
       prev.map((x) => (x.key === it.key ? { ...x, isDone: next } : x)),
@@ -231,12 +199,11 @@ export function ChecklistEditor({
         key: nextKey(),
         id: null,
         title: "",
-        timingLabel: "",
         comment: "",
         isDone: false,
         isUserAdded: true,
         notifyLeadMinutes: null,
-        notifyDraft: DEFAULT_LEAD,
+        notifyCustom: false,
       },
     ]);
     setSaved(false);
@@ -261,12 +228,11 @@ export function ChecklistEditor({
         key: nextKey(),
         id: null,
         title: p.title,
-        timingLabel: p.timingLabel,
         comment: "",
         isDone: false,
         isUserAdded: true,
         notifyLeadMinutes: null,
-        notifyDraft: DEFAULT_LEAD,
+        notifyCustom: false,
       })),
     ];
     setItems(merged);
@@ -285,108 +251,117 @@ export function ChecklistEditor({
   return (
     <div className="rounded-2xl bg-surface p-4">
       <ul className="divide-y divide-border">
-        {items.map((it) => (
-          <li key={it.key} className="flex items-start gap-3 py-3">
-            <input
-              type="checkbox"
-              checked={it.isDone}
-              onChange={(e) => toggleDone(it, e.target.checked)}
-              className="mt-2 h-4 w-4 shrink-0 accent-[var(--teal)]"
-              aria-label="完了"
-            />
-            <div className="flex-1 space-y-1">
+        {items.map((it) => {
+          const c = splitLead(it.notifyLeadMinutes ?? DEFAULT_LEAD);
+          const showCustom =
+            it.notifyCustom ||
+            (it.notifyLeadMinutes != null && !isLeadPreset(it.notifyLeadMinutes));
+          const selValue = showCustom
+            ? "custom"
+            : it.notifyLeadMinutes == null
+              ? "none"
+              : String(it.notifyLeadMinutes);
+          return (
+            <li key={it.key} className="flex items-start gap-2.5 py-2.5">
               <input
-                value={it.title}
-                onChange={(e) => update(it.key, { title: e.target.value })}
-                placeholder={isBelonging ? "持ち物を書く" : "準備することを書く"}
-                className={`w-full rounded-md border border-transparent bg-transparent px-1 py-1 text-sm hover:border-border focus:border-border focus:bg-background ${
-                  it.isDone ? "text-muted line-through" : ""
-                }`}
+                type="checkbox"
+                checked={it.isDone}
+                onChange={(e) => toggleDone(it, e.target.checked)}
+                className="mt-1.5 h-4 w-4 shrink-0 accent-[var(--teal)]"
+                aria-label="完了"
               />
-              <div className="flex items-center gap-2">
-                <input
-                  value={it.timingLabel}
-                  onChange={(e) =>
-                    update(it.key, { timingLabel: e.target.value })
-                  }
-                  list={`timing-presets-${kind}`}
-                  placeholder={isBelonging ? "用意する目安" : "タイミング"}
-                  className="w-32 rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted hover:border-border focus:border-border focus:bg-background"
-                />
-                {it.isUserAdded && (
-                  <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] text-teal-dark">
-                    追加
-                  </span>
-                )}
-              </div>
-
-              {/* 通知（予定の何時間何分前）。ドラムロールで選択。内容とセットで学習される */}
-              <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
-                <label className="inline-flex items-center gap-1">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
                   <input
-                    type="checkbox"
-                    checked={it.notifyLeadMinutes !== null}
-                    onChange={(e) => setNotifyOn(it, e.target.checked)}
-                    className="h-3.5 w-3.5 accent-[var(--teal)]"
+                    value={it.title}
+                    onChange={(e) => update(it.key, { title: e.target.value })}
+                    placeholder={
+                      isBelonging ? "持ち物を書く" : "準備することを書く"
+                    }
+                    className={`min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-1 text-sm hover:border-border focus:border-border focus:bg-background ${
+                      it.isDone ? "text-muted line-through" : ""
+                    }`}
                   />
-                  🔔 通知
-                </label>
-                {it.notifyLeadMinutes !== null && (
-                  <span className="inline-flex items-center gap-1">
-                    <select
-                      value={splitLead(it.notifyLeadMinutes).h}
-                      onChange={(e) => setNotifyPart(it, "h", e.target.value)}
-                      className="rounded-md border bg-background px-1 py-0.5 text-xs"
-                      aria-label="時間"
-                    >
-                      {HOUR_OPTS.map((h) => (
-                        <option key={h} value={h}>
-                          {h}
-                        </option>
-                      ))}
-                    </select>
-                    時間
-                    <select
-                      value={splitLead(it.notifyLeadMinutes).mm}
-                      onChange={(e) => setNotifyPart(it, "mm", e.target.value)}
-                      className="rounded-md border bg-background px-1 py-0.5 text-xs"
-                      aria-label="分"
-                    >
-                      {MIN_OPTS.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                    分前
-                  </span>
-                )}
+                  {it.isUserAdded && (
+                    <span className="shrink-0 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] text-teal-dark">
+                      追加
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => remove(it.key)}
+                    className="shrink-0 rounded px-1.5 py-0.5 text-xs text-muted hover:bg-warn-soft hover:text-warn"
+                    aria-label="削除"
+                  >
+                    削除
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                  <span>🔔 通知</span>
+                  <select
+                    value={selValue}
+                    onChange={(e) => onNotifySelect(it, e.target.value)}
+                    className="rounded-md border bg-background px-1.5 py-0.5 text-xs"
+                    aria-label="通知タイミング"
+                  >
+                    {LEAD_PRESETS.map((p) => (
+                      <option
+                        key={p.label}
+                        value={p.minutes == null ? "none" : String(p.minutes)}
+                      >
+                        {p.label}
+                      </option>
+                    ))}
+                    <option value="custom">カスタム…</option>
+                  </select>
+                  {showCustom && (
+                    <span className="inline-flex items-center gap-0.5">
+                      <input
+                        type="number"
+                        min={0}
+                        max={30}
+                        value={c.d || ""}
+                        onChange={(e) => setCustomPart(it, "d", e.target.value)}
+                        className="w-10 rounded border bg-background px-1 py-0.5 text-xs"
+                        aria-label="日"
+                      />
+                      日
+                      <input
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={c.h || ""}
+                        onChange={(e) => setCustomPart(it, "h", e.target.value)}
+                        className="w-10 rounded border bg-background px-1 py-0.5 text-xs"
+                        aria-label="時間"
+                      />
+                      時間
+                      <input
+                        type="number"
+                        min={0}
+                        max={59}
+                        value={c.mm || ""}
+                        onChange={(e) => setCustomPart(it, "mm", e.target.value)}
+                        className="w-10 rounded border bg-background px-1 py-0.5 text-xs"
+                        aria-label="分"
+                      />
+                      分前
+                    </span>
+                  )}
+                </div>
+
+                <input
+                  value={it.comment}
+                  onChange={(e) => update(it.key, { comment: e.target.value })}
+                  placeholder="メモ（任意・学習しません）"
+                  className="w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted hover:border-border focus:border-border focus:bg-background"
+                />
               </div>
-
-              <input
-                value={it.comment}
-                onChange={(e) => update(it.key, { comment: e.target.value })}
-                placeholder="コメント（任意・学習しません）"
-                className="w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted hover:border-border focus:border-border focus:bg-background"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => remove(it.key)}
-              className="mt-1 shrink-0 rounded px-1.5 py-0.5 text-xs text-muted hover:bg-warn-soft hover:text-warn"
-              aria-label="削除"
-            >
-              削除
-            </button>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
-
-      <datalist id={`timing-presets-${kind}`}>
-        {TIMING_PRESETS.map((t) => (
-          <option key={t} value={t} />
-        ))}
-      </datalist>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
@@ -432,13 +407,13 @@ export function ChecklistEditor({
             rows={5}
             placeholder={
               isBelonging
-                ? "メモを貼り付け。1行に1つ。例:\n充電器\nモバイルバッテリー\n常備薬（前日夜）"
-                : "メモを貼り付け。1行に1つ。例:\n宿の予約を確認する（1週間前）\n・切符を用意する\n1. 戸締まりチェック"
+                ? "メモを貼り付け。1行に1つ。\n充電器\nモバイルバッテリー\n常備薬"
+                : "メモを貼り付け。1行に1つ。\n宿の予約を確認する\n・切符を用意する\n1. 戸締まりチェック"
             }
             className="w-full rounded-lg border bg-surface px-3 py-2 text-sm"
           />
           <p className="mt-1 text-[11px] text-muted">
-            行頭の「・」「-」「1.」やチェック記号、末尾の（目安）は自動で取り除きます。重複はスキップします。
+            行頭の「・」「-」「1.」やチェック記号は自動で取り除きます。重複はスキップします。通知タイミングは追加後に設定できます。
           </p>
           <div className="mt-2 flex items-center gap-2">
             <button
@@ -465,7 +440,7 @@ export function ChecklistEditor({
       {bulkNote && <p className="mt-2 text-xs text-teal-dark">{bulkNote}</p>}
 
       <p className="mt-2 text-[11px] text-muted">
-        チェックは自動保存。文言・タイミング・コメントの変更は「保存する」で反映（コメントは学習しません）。
+        チェックは自動保存。文言・通知・メモの変更は「保存する」で反映（メモは学習しません）。
       </p>
     </div>
   );
@@ -474,7 +449,6 @@ export function ChecklistEditor({
 function strip(it: Item) {
   return {
     title: it.title.trim(),
-    timingLabel: it.timingLabel.trim(),
     comment: it.comment.trim(),
     notifyLeadMinutes: it.notifyLeadMinutes,
   };

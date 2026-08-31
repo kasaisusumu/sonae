@@ -5,6 +5,7 @@ import {
 } from "@/app/actions";
 import type { TemplateDetail } from "@/lib/templates";
 import { SubmitButton } from "@/app/components/submit-button";
+import { ConfirmButton } from "@/app/components/confirm-button";
 import { TemplateEditor } from "./template-editor";
 
 const KIND_LABEL = { task: "準備すること", belonging: "持ち物" } as const;
@@ -40,12 +41,12 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
         </form>
         <form action={deleteListTemplate}>
           <input type="hidden" name="id" value={t.id} />
-          <button
-            type="submit"
+          <ConfirmButton
+            message={`テンプレート「${t.name}」を削除しますか？`}
             className="text-[11px] text-muted underline hover:text-warn"
           >
             削除
-          </button>
+          </ConfirmButton>
         </form>
       </div>
 

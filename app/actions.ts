@@ -51,14 +51,15 @@ function markAutoManaged(eventId: string) {
 }
 
 /**
- * チェックリスト・失敗ログ・カテゴリを変えたとき、影響しうる画面をまとめて再検証する。
- * （ホーム＝節約ダッシュボード、予定一覧、予定詳細、失敗ログ、学習の樹形図＝/savings）
+ * 何かを編集したら、影響しうる画面を「すべて」その場で再検証する。
+ * 予定ページと学習ページ（/savings）・設定・カレンダー連携表示など、
+ * どこを編集しても他方が即座に最新になるよう、ルート全体を revalidate する。
+ * （ユーザー要望: ずれより即時同期を優先）
  */
 function revalidateAppViews(eventId?: string) {
-  revalidatePath("/");
-  revalidatePath("/events");
-  revalidatePath("/failures");
-  revalidatePath("/savings");
+  // ルートレイアウト配下の全ページ（動的セグメント含む）＋クライアントのルーターキャッシュを無効化
+  revalidatePath("/", "layout");
+  // 個別の動的パスも明示（保険）
   if (eventId) revalidatePath(`/events/${eventId}`);
   revalidatePath("/events/[id]", "page");
 }
@@ -1000,8 +1001,6 @@ export async function saveListAsTemplate(formData: FormData): Promise<void> {
     create: { userId, kind, name, sourceEventId: eventId, items: { create } },
   });
 
-  revalidatePath("/settings");
-  revalidatePath("/savings");
   revalidateAppViews(eventId);
 }
 
@@ -1034,8 +1033,7 @@ export async function createListTemplate(formData: FormData): Promise<void> {
     },
   });
 
-  revalidatePath("/savings");
-  revalidatePath("/settings");
+  revalidateAppViews();
 }
 
 /** 名前を付けたリストの中身を丸ごと置き換える（学習内容ページのエディタから）。 */
@@ -1077,8 +1075,7 @@ export async function saveTemplateItems(
     }),
   ]);
 
-  revalidatePath("/savings");
-  revalidatePath("/settings");
+  revalidateAppViews();
 }
 
 /** 名前を付けたリストに、一括貼り付けで項目を追記する。 */
@@ -1112,8 +1109,7 @@ export async function addTemplateItemsBulk(formData: FormData): Promise<void> {
     data: { updatedAt: new Date() },
   });
 
-  revalidatePath("/savings");
-  revalidatePath("/settings");
+  revalidateAppViews();
 }
 
 /** テンプレート／他の予定の項目を、予定の準備リストに追加する（同じ種類・同じ名前はスキップ）。 */
@@ -1228,8 +1224,7 @@ export async function renameListTemplate(formData: FormData): Promise<void> {
     .slice(0, 60);
   if (!id || !name) return;
   await prisma.listTemplate.updateMany({ where: { id, userId }, data: { name } });
-  revalidatePath("/settings");
-  revalidatePath("/savings");
+  revalidateAppViews();
 }
 
 /** テンプレートを削除する。 */
@@ -1238,6 +1233,5 @@ export async function deleteListTemplate(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await prisma.listTemplate.deleteMany({ where: { id, userId } });
-  revalidatePath("/settings");
-  revalidatePath("/savings");
+  revalidateAppViews();
 }

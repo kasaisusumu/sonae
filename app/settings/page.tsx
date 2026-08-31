@@ -103,7 +103,12 @@ export default async function SettingsPage() {
                 再接続する
               </a>
               <form action={disconnectGoogle}>
-                <SubmitButton variant="ghost">連携を解除する</SubmitButton>
+                <SubmitButton
+                  variant="ghost"
+                  confirm="Google カレンダーの連携を解除しますか？（取り込んだ予定と学習内容は残ります）"
+                >
+                  連携を解除する
+                </SubmitButton>
               </form>
             </div>
 

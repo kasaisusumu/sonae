@@ -10,6 +10,7 @@ import {
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
 import { formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
+import { ConfirmButton } from "@/app/components/confirm-button";
 
 function todayValue(): string {
   const d = new Date();
@@ -78,12 +79,12 @@ function FailureRow({ log: l }: { log: LogRow }) {
         </div>
         <form action={deleteFailureLog}>
           <input type="hidden" name="id" value={l.id} />
-          <button
-            type="submit"
+          <ConfirmButton
+            message="この失敗ログを削除しますか？"
             className="shrink-0 rounded px-2 py-1 text-xs text-muted hover:bg-warn-soft hover:text-warn"
           >
             削除
-          </button>
+          </ConfirmButton>
         </form>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">

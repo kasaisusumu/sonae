@@ -2,12 +2,48 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import {
   getLearningNameTree,
+  type LeafFailure,
   type NameTreeLeaf,
   type NameTreeNode,
 } from "@/lib/learning";
+import { formatYen } from "@/lib/format";
 import { ChecklistEditor } from "@/app/events/[id]/checklist-editor";
 import { LearningSearch } from "./learning-search";
 import { LazyLeaf } from "./lazy-leaf";
+
+const OUTCOME_LABEL: Record<string, string> = {
+  prevented: "防げた",
+  not_prevented: "防げなかった",
+};
+
+function FailureList({ failures }: { failures: LeafFailure[] }) {
+  if (failures.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <p className="text-[11px] font-semibold text-warn">
+        失敗ログ（{failures.length}）
+      </p>
+      <ul className="mt-0.5 space-y-1">
+        {failures.map((f) => (
+          <li
+            key={f.id}
+            className="rounded bg-warn-soft px-2 py-1 text-[11px]"
+          >
+            <p className="whitespace-pre-wrap break-words">{f.description}</p>
+            <p className="mt-0.5 text-muted">
+              {f.occurredAt.toLocaleDateString("ja-JP")}
+              {f.estimatedLossYen > 0
+                ? ` ・ 推定 ${formatYen(f.estimatedLossYen)}`
+                : ""}
+              {" ・ "}
+              {f.outcome ? OUTCOME_LABEL[f.outcome] ?? "未選択" : "未選択"}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function Keywords({ words }: { words: string[] }) {
   if (words.length === 0) return null;
@@ -49,6 +85,9 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
           <span className="ml-1 font-normal text-muted">
             {leaf.situationLabel}
           </span>
+          {leaf.failures.length > 0 && (
+            <span className="ml-1 text-warn">⚠{leaf.failures.length}</span>
+          )}
           <Keywords words={leaf.keywords} />
         </>
       }
@@ -75,6 +114,7 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
         initialItems={initial("belonging")}
         applyToEventIds={siblings}
       />
+      <FailureList failures={leaf.failures} />
     </LazyLeaf>
   );
 }

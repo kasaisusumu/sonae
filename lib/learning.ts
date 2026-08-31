@@ -358,6 +358,14 @@ export interface LeafListItem {
   notifyLeadMinutes: number | null;
 }
 
+export interface LeafFailure {
+  id: string;
+  description: string; // 全文（切らない）
+  occurredAt: Date;
+  estimatedLossYen: number;
+  outcome: string | null; // "prevented" | "not_prevented" | null
+}
+
 /** 樹形図の葉 = 実際に学習した予定（内容が同じものはまとめて 1 つ） */
 export interface NameTreeLeaf {
   eventId: string; // 代表（最新）の予定
@@ -368,6 +376,7 @@ export interface NameTreeLeaf {
   situationLabel: string;
   keywords: string[];
   list: { task: LeafListItem[]; belonging: LeafListItem[] };
+  failures: LeafFailure[];
 }
 
 /** 樹形図の枝 = 予定名の語による分岐 */
@@ -431,6 +440,7 @@ interface RawLeaf {
   sig: string;
   keywords: string[];
   list: { task: LeafListItem[]; belonging: LeafListItem[] };
+  failures: LeafFailure[];
 }
 
 type RawNode = { children: Map<string, RawNode>; leaves: RawLeaf[] };
@@ -467,6 +477,11 @@ function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
   return [...groups.values()]
     .map((g) => {
       const rep = g[0];
+      const seen = new Set<string>();
+      const failures = g
+        .flatMap((x) => x.failures)
+        .filter((f) => (seen.has(f.id) ? false : (seen.add(f.id), true)))
+        .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
       return {
         eventId: rep.eventId,
         siblingEventIds: g.slice(1).map((x) => x.eventId),
@@ -478,6 +493,7 @@ function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
             : describeSignature(rep.sig).text,
         keywords: rep.keywords,
         list: rep.list,
+        failures,
       } satisfies NameTreeLeaf;
     })
     .sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
@@ -527,7 +543,12 @@ export async function getLearningNameTree(userId: string): Promise<{
     orderBy: { createdAt: "asc" },
     include: {
       events: {
-        where: { checklistItems: { some: { isSuggested: false } } },
+        where: {
+          OR: [
+            { checklistItems: { some: { isSuggested: false } } },
+            { failureLogs: { some: {} } },
+          ],
+        },
         orderBy: { eventDatetime: "desc" },
         take: 400,
         select: {
@@ -554,6 +575,16 @@ export async function getLearningNameTree(userId: string): Promise<{
               isDone: true,
               notifyLeadMinutes: true,
               isUserAdded: true,
+            },
+          },
+          failureLogs: {
+            orderBy: { occurredAt: "desc" },
+            select: {
+              id: true,
+              description: true,
+              occurredAt: true,
+              estimatedLossYen: true,
+              outcome: true,
             },
           },
         },
@@ -608,6 +639,13 @@ export async function getLearningNameTree(userId: string): Promise<{
               .filter((i) => i.kind === "belonging")
               .map(toItem),
           },
+          failures: ev.failureLogs.map((f) => ({
+            id: f.id,
+            description: f.description,
+            occurredAt: f.occurredAt,
+            estimatedLossYen: f.estimatedLossYen,
+            outcome: f.outcome,
+          })),
         };
 
         const path = orderKeywords(evKw.get(ev.id) ?? [], freq);

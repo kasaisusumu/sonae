@@ -1,9 +1,18 @@
-/* 私のマネージャー Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） */
+/* 私のマネージャー Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v3 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
+
+function urlFromTag(tag) {
+  if (!tag) return null;
+  let m = tag.match(/^(?:event|prep)-(.+)$/);
+  if (m) return "/events/" + m[1];
+  m = tag.match(/^failcheck-(.+)$/);
+  if (m) return "/events/" + m[1] + "#failure-check";
+  return null;
+}
 
 self.addEventListener("push", (event) => {
   let data = {};
@@ -13,6 +22,7 @@ self.addEventListener("push", (event) => {
     data = { title: "私のマネージャー", body: event.data ? event.data.text() : "" };
   }
   const title = data.title || "私のマネージャー";
+  const url = data.url || urlFromTag(data.tag) || "/";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",
@@ -20,24 +30,17 @@ self.addEventListener("push", (event) => {
       badge: "/icons/badge-72.png",
       tag: data.tag || undefined,
       renotify: Boolean(data.tag),
-      data: { url: data.url || "/" },
+      data: { url },
     }),
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const rawUrl =
-    (event.notification.data && event.notification.data.url) || "/";
+  const d = event.notification.data || {};
+  const rawUrl = d.url || urlFromTag(event.notification.tag) || "/";
   const target = new URL(rawUrl, self.location.origin);
   const targetHref = target.href;
-  const samePath = (u) => {
-    try {
-      return new URL(u).pathname === target.pathname;
-    } catch {
-      return false;
-    }
-  };
 
   event.waitUntil(
     (async () => {
@@ -45,25 +48,26 @@ self.addEventListener("notificationclick", (event) => {
         type: "window",
         includeUncontrolled: true,
       });
-      const sameOrigin = all.filter((c) => c.url.startsWith(self.location.origin));
+      const sameOrigin = all.filter((c) =>
+        c.url.startsWith(self.location.origin),
+      );
 
-      // 1) すでに目的のページを開いている窓 → フォーカスするだけ
-      const onTarget = sameOrigin.find((c) => samePath(c.url));
-      if (onTarget) {
-        await onTarget.focus().catch(() => {});
+      // 1) まったく同じ URL（ハッシュまで一致）を開いている窓 → フォーカスするだけ
+      const exact = sameOrigin.find((c) => c.url === targetHref);
+      if (exact) {
+        await exact.focus().catch(() => {});
         return;
       }
 
-      // 2) 別ページを開いている窓 → その窓を目的ページへ移動（できる環境なら）
-      for (const c of sameOrigin) {
-        if (typeof c.navigate === "function") {
-          try {
-            const nav = await c.navigate(targetHref);
-            await (nav || c).focus().catch(() => {});
-            return;
-          } catch {
-            /* iOS PWA など navigate 不可 → 下の openWindow へ */
-          }
+      // 2) navigate できる同一オリジンの窓があれば、そこを目的ページへ移動する
+      const navigable = sameOrigin.find((c) => typeof c.navigate === "function");
+      if (navigable) {
+        try {
+          await navigable.focus().catch(() => {});
+          await navigable.navigate(targetHref);
+          return;
+        } catch {
+          /* navigate 不可 → 下へ */
         }
       }
 

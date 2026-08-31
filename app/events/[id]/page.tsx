@@ -11,6 +11,7 @@ import {
   ChecklistSectionSkeleton,
 } from "./checklist-section";
 import { EventFailureLog } from "./event-failure-log";
+import { ScrollToHash } from "./scroll-to-hash";
 
 // 初回表示時に準備リストを OpenAI で生成することがあるため長めに
 export const maxDuration = 60;
@@ -42,6 +43,7 @@ export default async function EventDetailPage({
 
   return (
     <div className="space-y-6">
+      <ScrollToHash />
       <Link
         href="/events"
         className="text-sm text-muted no-underline hover:text-teal-dark"

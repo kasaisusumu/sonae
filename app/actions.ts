@@ -788,6 +788,43 @@ export async function updateFailureAmount(formData: FormData): Promise<void> {
   revalidateAppViews(log.eventId ?? undefined);
 }
 
+/** 失敗ログの内容（説明・金額・日付）をまとめて編集する。 */
+export async function updateFailureLog(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const log = await prisma.failureLog.findFirst({
+    where: { id, userId },
+    select: { id: true, eventId: true },
+  });
+  if (!log) return;
+
+  const description = String(formData.get("description") ?? "").trim();
+  const rawAmount = formData.get("estimatedLossYen");
+  const hasAmount = rawAmount !== null && String(rawAmount).trim() !== "";
+  const amount = hasAmount ? parseYen(rawAmount) : null;
+  const occurredAtRaw = String(formData.get("occurredAt") ?? "").trim();
+  const occurredAt = occurredAtRaw ? parseJstDate(occurredAtRaw) : null;
+
+  await prisma.failureLog.update({
+    where: { id },
+    data: {
+      ...(description ? { description } : {}),
+      ...(hasAmount ? { estimatedLossYen: amount! } : {}),
+      ...(occurredAt ? { occurredAt } : {}),
+    },
+  });
+  if (hasAmount) {
+    await prisma.savingsEntry.updateMany({
+      where: { userId, failureLogId: id },
+      data: { amountYen: amount! },
+    });
+  }
+
+  revalidateAppViews(log.eventId ?? undefined);
+}
+
 /** 予定の再発防止警告を「確認した」ことにして畳む。 */
 export async function ackEventWarning(formData: FormData): Promise<void> {
   const userId = await requireUserId();

@@ -5,10 +5,15 @@ import {
   createFailureLog,
   deleteFailureLog,
   setFailureOutcome,
-  updateFailureAmount,
+  updateFailureLog,
 } from "@/app/actions";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
-import { formatDateOnly, formatYen, jstToday } from "@/lib/format";
+import {
+  formatDateOnly,
+  formatYen,
+  jstToday,
+  toDateInputValue,
+} from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 
@@ -100,25 +105,47 @@ function FailureRow({ log: l }: { log: LogRow }) {
           label="防げなかった"
           tone="warn"
         />
-        <form action={updateFailureAmount} className="flex items-center gap-1">
-          <input type="hidden" name="failureLogId" value={l.id} />
-          <input
-            type="number"
-            name="estimatedLossYen"
-            min={0}
-            step={100}
-            defaultValue={l.estimatedLossYen || ""}
-            placeholder="金額（円）"
-            className="w-28 rounded-full border border-border bg-background px-3 py-1 text-xs"
-          />
-          <button
-            type="submit"
-            className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:border-foreground/40"
-          >
-            金額を更新
-          </button>
-        </form>
       </div>
+
+      <details className="mt-2 [&_summary::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none text-[11px] text-teal-dark">
+          内容・金額・日付を編集
+        </summary>
+        <form action={updateFailureLog} className="mt-2 space-y-2">
+          <input type="hidden" name="id" value={l.id} />
+          <textarea
+            name="description"
+            required
+            rows={2}
+            defaultValue={l.description}
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs text-muted">
+              金額（円）
+              <input
+                type="number"
+                name="estimatedLossYen"
+                min={0}
+                step={100}
+                defaultValue={l.estimatedLossYen || ""}
+                placeholder="任意"
+                className="ml-1 w-24 rounded-md border bg-background px-2 py-1 text-sm"
+              />
+            </label>
+            <label className="text-xs text-muted">
+              日付
+              <input
+                type="date"
+                name="occurredAt"
+                defaultValue={toDateInputValue(l.occurredAt)}
+                className="ml-1 rounded-md border bg-background px-2 py-1 text-sm"
+              />
+            </label>
+            <SubmitButton variant="ghost">更新</SubmitButton>
+          </div>
+        </form>
+      </details>
     </li>
   );
 }

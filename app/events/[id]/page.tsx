@@ -92,7 +92,9 @@ export default async function EventDetailPage({
         />
       </Suspense>
 
-      <EventFailureLog eventId={event.id} />
+      <Suspense fallback={null}>
+        <EventFailureLog eventId={event.id} userId={event.userId} />
+      </Suspense>
     </div>
   );
 }

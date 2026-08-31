@@ -1,23 +1,119 @@
-import { createFailureLog } from "@/app/actions";
+import { prisma } from "@/lib/prisma";
+import {
+  createFailureLog,
+  deleteFailureLog,
+  logRepeatedFailure,
+  updateFailureLog,
+} from "@/app/actions";
+import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
+import { ConfirmButton } from "@/app/components/confirm-button";
 
 /**
- * 予定詳細ページから、その予定の「うっかり失敗」を直接記録するフォーム。
- * カテゴリと日付は予定から自動で入るので、内容（と任意で金額）だけ書けばよい。
+ * 予定詳細ページの失敗ログ。
+ * - この予定に紐づく失敗ログの一覧（説明・金額・日付をその場で編集／削除）
+ * - 新しく記録する
+ * - 既存の失敗から選んでこの予定にも紐づける
  */
-export function EventFailureLog({ eventId }: { eventId: string }) {
+export async function EventFailureLog({
+  eventId,
+  userId,
+}: {
+  eventId: string;
+  userId: string;
+}) {
+  const [linked, others] = await Promise.all([
+    prisma.failureLog.findMany({
+      where: { userId, eventId },
+      orderBy: { occurredAt: "desc" },
+    }),
+    prisma.failureLog.findMany({
+      where: { userId, eventId: { not: eventId } },
+      orderBy: { occurredAt: "desc" },
+      take: 60,
+      include: { event: { select: { title: true } } },
+    }),
+  ]);
+
+  // 既に同じ内容がこの予定にあるものは候補から除く
+  const linkedDesc = new Set(linked.map((l) => l.description.trim()));
+  const candidates = others.filter((o) => !linkedDesc.has(o.description.trim()));
+
   return (
     <details className="rounded-2xl bg-surface p-5 [&_summary::-webkit-details-marker]:hidden">
       <summary className="cursor-pointer list-none text-sm font-semibold text-muted">
-        この予定で失敗を記録する
+        この予定の失敗ログ（{linked.length}）
       </summary>
       <p className="mt-2 text-xs text-muted">
         責めるためではなく、次に似た予定が来たときに先回りするためです。金額は分からなければ空でOK。
       </p>
-      <form action={createFailureLog} className="mt-3 space-y-3">
+
+      {/* 紐づく失敗ログ：その場で編集・削除 */}
+      {linked.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {linked.map((l) => (
+            <li key={l.id} className="rounded-xl bg-surface-muted p-3">
+              <form action={updateFailureLog} className="space-y-2">
+                <input type="hidden" name="id" value={l.id} />
+                <textarea
+                  name="description"
+                  required
+                  rows={2}
+                  defaultValue={l.description}
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs text-muted">
+                    金額（円）
+                    <input
+                      type="number"
+                      name="estimatedLossYen"
+                      min={0}
+                      step={100}
+                      defaultValue={l.estimatedLossYen || ""}
+                      placeholder="任意"
+                      className="ml-1 w-24 rounded-md border bg-background px-2 py-1 text-sm"
+                    />
+                  </label>
+                  <label className="text-xs text-muted">
+                    日付
+                    <input
+                      type="date"
+                      name="occurredAt"
+                      defaultValue={toDateInputValue(l.occurredAt)}
+                      className="ml-1 rounded-md border bg-background px-2 py-1 text-sm"
+                    />
+                  </label>
+                  <SubmitButton variant="ghost">更新</SubmitButton>
+                </div>
+              </form>
+              <div className="mt-1.5 flex items-center gap-3 text-[11px] text-muted">
+                <span>
+                  {formatDateOnly(l.occurredAt)}
+                  {l.estimatedLossYen > 0
+                    ? ` ・ 推定 ${formatYen(l.estimatedLossYen)}`
+                    : ""}
+                </span>
+                <form action={deleteFailureLog}>
+                  <input type="hidden" name="id" value={l.id} />
+                  <ConfirmButton
+                    message="この失敗ログを削除しますか？"
+                    className="underline hover:text-warn"
+                  >
+                    削除
+                  </ConfirmButton>
+                </form>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* 新しく記録する */}
+      <form action={createFailureLog} className="mt-4 space-y-3">
         <input type="hidden" name="eventId" value={eventId} />
         <label className="block text-sm">
-          <span className="text-muted">何が起きた？</span>
+          <span className="text-muted">新しく記録する — 何が起きた？</span>
           <textarea
             name="description"
             required
@@ -39,6 +135,39 @@ export function EventFailureLog({ eventId }: { eventId: string }) {
         </label>
         <SubmitButton>記録する</SubmitButton>
       </form>
+
+      {/* 既存の失敗から選んで、この予定にも紐づける */}
+      {candidates.length > 0 && (
+        <form action={logRepeatedFailure} className="mt-4 space-y-2">
+          <input type="hidden" name="eventId" value={eventId} />
+          <p className="text-sm text-muted">既存の失敗から選ぶ</p>
+          <div className="flex flex-wrap gap-2">
+            <select
+              name="failureLogId"
+              required
+              defaultValue=""
+              className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 text-sm"
+            >
+              <option value="" disabled>
+                これまでの失敗ログから選ぶ
+              </option>
+              {candidates.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {formatDateOnly(o.occurredAt)}
+                  {o.event ? ` ・「${o.event.title}」` : ""} ・{" "}
+                  {o.description.length > 30
+                    ? `${o.description.slice(0, 30)}…`
+                    : o.description}
+                </option>
+              ))}
+            </select>
+            <SubmitButton variant="ghost">この予定にも紐づける</SubmitButton>
+          </div>
+          <p className="text-[11px] text-muted">
+            同じ内容がこの予定に追加され、次の似た予定で先回りできるようになります。
+          </p>
+        </form>
+      )}
     </details>
   );
 }

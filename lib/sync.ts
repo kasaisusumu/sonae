@@ -441,21 +441,26 @@ export async function syncAndNotify(
   });
   if (result.isFirstSync) return { ...result, generated: 0 };
 
-  // まず通知（生成を待たない）。
+  // まず通知（生成を待たない）。プッシュは全件並列で送り、既読印(notifiedAt)は
+  // 送信後に 1 回の updateMany でまとめる（送信の合間に DB 往復を挟まない＝最速）。
   if (result.newEvents.length > 0) {
     const notifiable = await pickNotifiable(userId, result.newEvents);
-    for (const ev of notifiable) {
-      const isSeries = Boolean(ev.recurringEventId);
-      await sendPushToUser(userId, {
-        title: isSeries
-          ? "繰り返しの予定が追加されました"
-          : "新しい予定が追加されました",
-        body: `「${ev.title}」を追加しました。準備リストを用意します`,
-        url: `/events/${ev.id}`,
-        tag: isSeries ? `series-${ev.recurringEventId}` : `event-${ev.id}`,
-      });
-      await prisma.event.update({
-        where: { id: ev.id },
+    if (notifiable.length > 0) {
+      await Promise.all(
+        notifiable.map((ev) => {
+          const isSeries = Boolean(ev.recurringEventId);
+          return sendPushToUser(userId, {
+            title: isSeries
+              ? "繰り返しの予定が追加されました"
+              : "新しい予定が追加されました",
+            body: `「${ev.title}」を追加しました。準備リストを用意します`,
+            url: `/events/${ev.id}`,
+            tag: isSeries ? `series-${ev.recurringEventId}` : `event-${ev.id}`,
+          });
+        }),
+      );
+      await prisma.event.updateMany({
+        where: { id: { in: notifiable.map((ev) => ev.id) } },
         data: { notifiedAt: new Date() },
       });
     }

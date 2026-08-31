@@ -4,6 +4,7 @@ import {
   saveListAsTemplate,
 } from "@/app/actions";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
+import { formatDateOnly } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 
 const KIND_LABEL = { task: "準備すること", belonging: "持ち物" } as const;
@@ -118,7 +119,7 @@ export async function ListToolbox({
                 </option>
                 {pastEvents.map((e) => (
                   <option key={e.id} value={e.id}>
-                    {e.eventDatetime.toLocaleDateString("ja-JP")} {e.title}（準備
+                    {formatDateOnly(e.eventDatetime)} {e.title}（準備
                     {e.taskCount}・持ち物{e.belongingCount}）
                   </option>
                 ))}

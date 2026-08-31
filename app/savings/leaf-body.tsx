@@ -53,13 +53,12 @@ export function LeafBody({
       >
         閉じる
       </button>
-      <p className="text-[11px] font-semibold text-teal-dark">準備すること</p>
       <ChecklistEditor
         eventId={eventId}
         kind="task"
         initialItems={taskInitial}
       />
-      <p className="mt-3 text-[11px] font-semibold text-teal-dark">持ち物</p>
+      <div className="mt-3" />
       <ChecklistEditor
         eventId={eventId}
         kind="belonging"

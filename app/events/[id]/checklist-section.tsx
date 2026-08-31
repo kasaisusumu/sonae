@@ -7,7 +7,7 @@ import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
 import { getWarningForEvent } from "@/lib/failures";
 import { refreshEventFromGoogle } from "@/lib/sync";
-import { regenerateChecklist } from "@/app/actions";
+import { markListReviewed, regenerateChecklist } from "@/app/actions";
 import { ChecklistEditor } from "./checklist-editor";
 import { SuggestionList } from "./suggestion-list";
 import { WarningPanel } from "./warning-panel";
@@ -43,9 +43,6 @@ function KindBlock({
 
   return (
     <div className="space-y-2">
-      <h3 className="text-sm font-semibold text-foreground">
-        {kind === "task" ? "準備すること" : "持ち物"}
-      </h3>
       {suggestions.length > 0 && (
         <SuggestionList
           suggestions={suggestions.map((s) => ({
@@ -115,13 +112,27 @@ export async function ChecklistSection({
     eventDatetime: event.eventDatetime,
     endDatetime: event.endDatetime,
   });
-  const [warning, taskRules, belongingRules] = await Promise.all([
+  const [warning, taskRules, belongingRules, reviewState] = await Promise.all([
     getWarningForEvent(event),
     getApplicableRules(event.categoryId, feature, "task"),
     getApplicableRules(event.categoryId, feature, "belonging"),
+    prisma.event.findUnique({
+      where: { id: event.id },
+      select: {
+        listReviewedAt: true,
+        listCustomized: true,
+        _count: { select: { editRecords: true } },
+      },
+    }),
   ]);
   const forced = [...taskRules, ...belongingRules].filter((r) => r.forced);
   const rows = items as unknown as Row[];
+  const unreviewed =
+    !!reviewState &&
+    !reviewState.listReviewedAt &&
+    !reviewState.listCustomized &&
+    reviewState._count.editRecords === 0 &&
+    items.length > 0;
 
   return (
     <>
@@ -141,6 +152,18 @@ export async function ChecklistSection({
             <SubmitButton variant="ghost">作り直す</SubmitButton>
           </form>
         </div>
+
+        {unreviewed && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal/30 bg-teal-soft px-4 py-3">
+            <p className="text-xs text-teal-dark">
+              このリストはまだ確認されていません。中身を見て問題なければ「確認しました」を押してください（編集しても消えます）。
+            </p>
+            <form action={markListReviewed}>
+              <input type="hidden" name="eventId" value={event.id} />
+              <SubmitButton>確認しました</SubmitButton>
+            </form>
+          </div>
+        )}
 
         <KindBlock eventId={event.id} kind="task" rows={rows} />
         <KindBlock eventId={event.id} kind="belonging" rows={rows} />

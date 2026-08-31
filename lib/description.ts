@@ -62,15 +62,44 @@ function bullet(it: DescItem): string {
  * 完了項目は行頭を「☑」、未完了は「☐」で示す（HTML の装飾は入れない）。
  * HTML を入れると Google カレンダーの編集画面で書式警告やカクつきが出るため。
  */
-export function buildSonaeBlock(url: string, items: DescItem[]): string {
-  const tasks = items.filter((i) => (i.kind ?? "task") === "task");
-  const belongings = items.filter((i) => i.kind === "belonging");
+/** 未チェックを上、チェック済みを下へ（同グループ内の並びは維持＝安定ソート）。 */
+export function checkedLast<T extends { isDone?: boolean }>(a: T, b: T): number {
+  return (a.isDone ? 1 : 0) - (b.isDone ? 1 : 0);
+}
+
+const UNREVIEWED_NOTE =
+  "※ このリストはまだ確認されていません。アプリで「確認しました」を押すか、内容を編集すると消えます。";
+
+/** 「done/total」表記（total 0 なら空）。 */
+function progress(items: DescItem[]): string {
+  if (items.length === 0) return "";
+  const done = items.filter((i) => i.isDone).length;
+  return ` ${done}/${items.length}`;
+}
+
+export interface BuildBlockOpts {
+  /** 生成後まだ確認も編集もされていない → 冒頭に注記を入れる。 */
+  unreviewed?: boolean;
+}
+
+export function buildSonaeBlock(
+  url: string,
+  items: DescItem[],
+  opts: BuildBlockOpts = {},
+): string {
+  const tasks = items
+    .filter((i) => (i.kind ?? "task") === "task")
+    .sort(checkedLast);
+  const belongings = items
+    .filter((i) => i.kind === "belonging")
+    .sort(checkedLast);
 
   const lines = [START, `準備リスト: ${url}`];
-  lines.push("", "【準備すること】");
+  if (opts.unreviewed) lines.push("", UNREVIEWED_NOTE);
+  lines.push("", `【準備すること】${progress(tasks)}`);
   lines.push(...(tasks.length ? tasks.map(bullet) : [`${CHECK_TODO} （なし）`]));
   if (belongings.length) {
-    lines.push("", "【持ち物】");
+    lines.push("", `【持ち物】${progress(belongings)}`);
     lines.push(...belongings.map(bullet));
   }
   lines.push(END);
@@ -81,9 +110,10 @@ export function composeDescription(
   originalMemo: string | null,
   url: string,
   items: DescItem[],
+  opts: BuildBlockOpts = {},
 ): string {
   const base = stripSonaeBlock(originalMemo);
-  const block = buildSonaeBlock(url, items);
+  const block = buildSonaeBlock(url, items, opts);
   return base ? `${base}\n\n${block}` : block;
 }
 
@@ -140,14 +170,17 @@ export function parseSonaeBlock(desc: string | null | undefined): {
     const line = probe.trim();
     if (!line) continue;
 
-    if (/^【\s*準備すること\s*】$/.test(line)) {
+    // 見出し（末尾に「 2/5」等の進捗が付くことがあるので $ で固定しない）
+    if (/^【\s*準備すること\s*】/.test(line)) {
       kind = "task";
       continue;
     }
-    if (/^【\s*持ち物\s*】$/.test(line)) {
+    if (/^【\s*持ち物\s*】/.test(line)) {
       kind = "belonging";
       continue;
     }
+    // 「未確認」注記行は取り込み対象外
+    if (/^※/.test(line)) continue;
     if (/^準備リスト\s*[:：]/.test(line) || /^https?:\/\//.test(line)) continue;
 
     // 行頭が記号（チェックボックス・箇条書き・番号）、または末尾が「（…）」＝タイミング付き項目

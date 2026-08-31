@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getSavingsSummary, getFailureRetrospective } from "@/lib/savings";
-import { formatYen } from "@/lib/format";
+import { formatDateOnly, formatYen } from "@/lib/format";
 import { setFailureOutcome, updateFailureAmount } from "@/app/actions";
 
 /** ホームに表示する節約額ダッシュボード。防げたことも並べる。 */
@@ -173,7 +173,7 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
                                 {it.description}
                               </p>
                               <p className="text-[11px] text-muted">
-                                {it.occurredAt.toLocaleDateString("ja-JP")}
+                                {formatDateOnly(it.occurredAt)}
                                 {it.eventTitle ? ` ・ 「${it.eventTitle}」` : ""}
                               </p>
                             </div>

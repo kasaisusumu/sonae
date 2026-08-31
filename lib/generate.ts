@@ -32,6 +32,7 @@ const SYSTEM_PROMPT = `あなたは、段取りが苦手な人（ADHD傾向）�
 
 function buildUserPrompt(input: GenerateInput): string {
   const dt = input.eventDatetime.toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo",
     dateStyle: "full",
     timeStyle: "short",
   });

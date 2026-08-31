@@ -6,7 +6,7 @@ import {
   type NameTreeLeaf,
   type NameTreeNode,
 } from "@/lib/learning";
-import { formatYen } from "@/lib/format";
+import { formatDateOnly, formatYen } from "@/lib/format";
 import { formatLead } from "@/lib/lead-time";
 import { getUserTemplates } from "@/lib/templates";
 import { LearningSearch } from "./learning-search";
@@ -34,7 +34,7 @@ function FailureList({ failures }: { failures: LeafFailure[] }) {
           >
             <p className="whitespace-pre-wrap break-words">{f.description}</p>
             <p className="mt-0.5 text-muted">
-              {f.occurredAt.toLocaleDateString("ja-JP")}
+              {formatDateOnly(f.occurredAt)}
               {f.estimatedLossYen > 0
                 ? ` ・ 推定 ${formatYen(f.estimatedLossYen)}`
                 : ""}
@@ -85,10 +85,14 @@ function CompactList({
   task: LeafItem[];
   belonging: LeafItem[];
 }) {
+  const prog = (arr: LeafItem[]) =>
+    arr.length ? ` ${arr.filter((i) => i.isDone).length}/${arr.length}` : "";
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       <div>
-        <p className="text-[11px] font-semibold text-teal-dark">準備すること</p>
+        <p className="text-[11px] font-semibold text-teal-dark">
+          準備すること<span className="text-muted">{prog(task)}</span>
+        </p>
         <ul className="mt-0.5 space-y-0.5">
           {task.length === 0 ? (
             <li className="text-[11px] text-muted">（なし）</li>
@@ -98,7 +102,9 @@ function CompactList({
         </ul>
       </div>
       <div>
-        <p className="text-[11px] font-semibold text-teal-dark">持ち物</p>
+        <p className="text-[11px] font-semibold text-teal-dark">
+          持ち物<span className="text-muted">{prog(belonging)}</span>
+        </p>
         <ul className="mt-0.5 space-y-0.5">
           {belonging.length === 0 ? (
             <li className="text-[11px] text-muted">（なし）</li>
@@ -113,14 +119,17 @@ function CompactList({
 
 function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
   const pick = (kind: "task" | "belonging"): LeafItem[] =>
-    leaf.list[kind].map((it) => ({
-      id: it.id,
-      title: it.title,
-      comment: it.comment,
-      isDone: it.isDone,
-      isUserAdded: it.isUserAdded,
-      notifyLeadMinutes: it.notifyLeadMinutes,
-    }));
+    leaf.list[kind]
+      .map((it) => ({
+        id: it.id,
+        title: it.title,
+        comment: it.comment,
+        isDone: it.isDone,
+        isUserAdded: it.isUserAdded,
+        notifyLeadMinutes: it.notifyLeadMinutes,
+      }))
+      // 未チェックを上・チェック済みを下（安定ソート）
+      .sort((a, b) => (a.isDone ? 1 : 0) - (b.isDone ? 1 : 0));
   const task = pick("task");
   const belonging = pick("belonging");
 

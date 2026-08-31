@@ -156,7 +156,10 @@ export async function applyInboundDescription(
   const prevKindByTitle = new Map(
     prevAll.map((c) => [`${c.kind}:${norm(c.title)}`, c]),
   );
-  let order = 0;
+  // 既存項目は「作成時の並び順（sortOrder）」を保つ。説明欄では完了項目が下に
+  // 回るが、それは表示上の並べ替えであって authored order は動かさない
+  //（アプリ側でチェックを外したときに元の位置へ戻れるように）。
+  let maxPrevSort = prevAll.reduce((m, c) => Math.max(m, c.sortOrder), -1);
   const rows = parsed.items.map((i: ParsedItem) => {
     const p = prevKindByTitle.get(`${i.kind}:${norm(i.title)}`);
     const leadUnchanged =
@@ -172,7 +175,7 @@ export async function applyInboundDescription(
       // 説明欄の「（3時間前）」からリード時間を取り込む。変わっていなければ送信済みを引き継ぐ。
       notifyLeadMinutes: i.notifyLeadMinutes,
       notifiedAt: leadUnchanged ? p.notifiedAt : null,
-      sortOrder: order++,
+      sortOrder: p ? p.sortOrder : ++maxPrevSort,
     };
   });
 

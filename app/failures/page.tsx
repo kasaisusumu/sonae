@@ -8,14 +8,12 @@ import {
   updateFailureAmount,
 } from "@/app/actions";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
-import { formatYen } from "@/lib/format";
+import { formatDateOnly, formatYen, jstToday } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 
 function todayValue(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return jstToday();
 }
 
 type LogRow = {
@@ -69,7 +67,7 @@ function FailureRow({ log: l }: { log: LogRow }) {
         <div className="min-w-0">
           <p className="whitespace-pre-wrap text-sm">{l.description}</p>
           <p className="mt-1 text-xs text-muted">
-            {l.occurredAt.toLocaleDateString("ja-JP")}
+            {formatDateOnly(l.occurredAt)}
             {l.category ? ` ・ ${l.category.name}` : " ・ カテゴリなし"}
             {l.event ? ` ・ 「${l.event.title}」` : ""}
             {l.estimatedLossYen > 0
@@ -187,7 +185,7 @@ export default async function FailuresPage() {
               <option value="">— 予定に紐づけない（カテゴリ全体の記録）—</option>
               {events.map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.eventDatetime.toLocaleDateString("ja-JP")} {e.title}
+                  {formatDateOnly(e.eventDatetime)} {e.title}
                 </option>
               ))}
             </select>

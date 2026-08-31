@@ -6,7 +6,7 @@ import {
   undoPrevented,
   updateFailureAmount,
 } from "@/app/actions";
-import { formatYen } from "@/lib/format";
+import { formatDateOnly, formatYen } from "@/lib/format";
 import { LEAD_PRESETS } from "@/lib/lead-time";
 import { SubmitButton } from "@/app/components/submit-button";
 import type { EventWarning } from "@/lib/failures";
@@ -50,7 +50,7 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
               )}
             </div>
             <p className="mt-1 text-xs text-muted">
-              直近 {log.lastOccurredAt.toLocaleDateString("ja-JP")}
+              直近 {formatDateOnly(log.lastOccurredAt)}
               {log.fromEventTitle ? ` ・ 「${log.fromEventTitle}」のとき` : ""}
               {log.estimatedLossYen > 0
                 ? ` ・ 推定損失 ${formatYen(log.estimatedLossYen)}`

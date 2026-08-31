@@ -11,7 +11,7 @@ import {
 } from "@/app/actions";
 import { listCalendars, type CalendarChoice } from "@/lib/google";
 import { getUserTemplates } from "@/lib/templates";
-import { formatDateTime, formatYen } from "@/lib/format";
+import { formatDateOnly, formatDateTime, formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { PushControls } from "@/app/components/push-controls";
 
@@ -220,7 +220,7 @@ export default async function SettingsPage() {
           <ul className="mt-4 space-y-1 text-xs text-muted">
             {feedback.map((f) => (
               <li key={f.id}>
-                {f.createdAt.toLocaleDateString("ja-JP")}:{" "}
+                {formatDateOnly(f.createdAt)}:{" "}
                 {f.wtpYen !== null ? `月 ${formatYen(f.wtpYen)}` : "金額なし"}
                 {f.comment ? ` — ${f.comment}` : ""}
               </li>

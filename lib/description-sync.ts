@@ -28,6 +28,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
           comment: true,
         },
       },
+      _count: { select: { editRecords: true } },
     },
   });
   if (
@@ -45,6 +46,12 @@ export async function syncEventDescription(eventId: string): Promise<void> {
   });
   if (!account?.writeDescriptionEnabled) return;
 
+  // 生成後まだ「確認しました」も編集もされていないか
+  const unreviewed =
+    !event.listReviewedAt &&
+    !event.listCustomized &&
+    event._count.editRecords === 0;
+
   const url = `${appBaseUrl()}/events/${eventId}`;
   const description = composeDescription(
     event.memo,
@@ -56,6 +63,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
       isDone: c.isDone,
       comment: c.comment,
     })),
+    { unreviewed },
   );
   const hash = hashDescription(description);
   if (hash === event.lastWrittenHash) return;

@@ -97,6 +97,17 @@ export function ChecklistEditor({
   );
 
   const [items, setItems] = useState<Item[]>(initial);
+  // 表示は「未チェックが上・チェック済みが下」（状態の並びは維持したまま表示だけ並べ替え）
+  const displayItems = useMemo(
+    () =>
+      items
+        .map((it, i) => ({ it, i }))
+        .sort(
+          (a, b) => (a.it.isDone ? 1 : 0) - (b.it.isDone ? 1 : 0) || a.i - b.i,
+        )
+        .map(({ it }) => it),
+    [items],
+  );
   const [removedTitles, setRemovedTitles] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -196,6 +207,7 @@ export function ChecklistEditor({
   }
 
   function remove(key: string) {
+    if (!window.confirm("削除しますか？")) return;
     setItems((prev) => {
       const target = prev.find((it) => it.key === key);
       if (target && originalTitles.has(target.title)) {
@@ -264,10 +276,20 @@ export function ChecklistEditor({
     persist(merged);
   }
 
+  const doneCount = items.filter((it) => it.isDone).length;
+
   return (
     <div className="rounded-2xl bg-surface p-4">
+      <div className="mb-2 flex items-baseline gap-2">
+        <h3 className="text-sm font-semibold text-foreground">
+          {isBelonging ? "持ち物" : "準備すること"}
+        </h3>
+        <span className="text-xs text-muted tabular-nums">
+          {doneCount}/{items.length}
+        </span>
+      </div>
       <ul className="divide-y divide-border">
-        {items.map((it) => {
+        {displayItems.map((it) => {
           const c = splitLead(it.notifyLeadMinutes ?? DEFAULT_LEAD);
           const showCustom =
             it.notifyCustom ||

@@ -101,6 +101,9 @@ model Event {
   // この予定の準備リストを個別に編集して、同名グループから切り離したか。
   // false = 同名の未編集予定と内容を共有（一方の編集は全体に波及）。
   listCustomized Boolean  @default(false)
+  // 生成されたリストを、編集せずに「確認しました」と押した日時。
+  // これが null かつ EditRecord も無いと「未確認」表示（説明欄にも注記）。
+  listReviewedAt DateTime?
   source        String    @default("manual") // "google" | "manual"
   // 再発防止の警告をユーザーが確認・了承した日時（設定されると警告は畳まれる）
   failureWarningAckAt DateTime?

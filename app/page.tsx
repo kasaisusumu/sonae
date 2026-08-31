@@ -229,6 +229,7 @@ export default async function HomePage({
 
 function formatDateTime(d: Date): string {
   return d.toLocaleString("ja-JP", {
+    timeZone: "Asia/Tokyo",
     month: "numeric",
     day: "numeric",
     weekday: "short",

@@ -33,6 +33,7 @@ export function TemplateEditor({
     setSaved(false);
   }
   function remove(key: string) {
+    if (!window.confirm("削除しますか？")) return;
     setRows((r) => r.filter((x) => x.key !== key));
     setSaved(false);
   }

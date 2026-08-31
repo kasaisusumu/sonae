@@ -30,6 +30,7 @@ import { extractEventFeature } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
 import { parseLead } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
+import { parseJstDate, parseJstDateTimeLocal } from "@/lib/format";
 
 async function requireUserId(): Promise<string> {
   const userId = await getSessionUserId();
@@ -161,6 +162,10 @@ export async function createManualEvent(formData: FormData): Promise<void> {
 
   if (!title || !datetimeRaw) redirect("/events?error=missing");
 
+  // datetime-local は「日本時間の壁時計」として解釈する（サーバーは UTC のため）
+  const eventDatetime = parseJstDateTimeLocal(datetimeRaw);
+  if (!eventDatetime) redirect("/events?error=missing");
+
   // カテゴリ未指定なら自動判定（キーワード→AIで新カテゴリも作られる）
   const category = categoryName
     ? await getOrCreateCategory(userId, categoryName)
@@ -170,7 +175,7 @@ export async function createManualEvent(formData: FormData): Promise<void> {
       userId,
       categoryId: category.id,
       title,
-      eventDatetime: new Date(datetimeRaw),
+      eventDatetime,
       memo,
       source: "manual",
     },
@@ -257,6 +262,25 @@ export async function toggleChecklistItemDone(
   await markAutoManaged(item.eventId);
   after(() => syncEventDescription(item.eventId));
   revalidateAppViews(item.eventId);
+}
+
+/**
+ * 生成されたリストを「確認しました」と記録する（編集はしていない）。
+ * これで「未確認」表示（アプリ・カレンダー説明欄）が消える。
+ * 内容を編集した場合は EditRecord ができるので、このボタンは自然に不要になる。
+ */
+export async function markListReviewed(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  if (!eventId) return;
+  const res = await prisma.event.updateMany({
+    where: { id: eventId, userId, listReviewedAt: null },
+    data: { listReviewedAt: new Date() },
+  });
+  if (res.count === 0) return;
+  await markAutoManaged(eventId);
+  after(() => syncEventDescription(eventId));
+  revalidateAppViews(eventId);
 }
 
 /**
@@ -600,9 +624,10 @@ export async function createFailureLog(formData: FormData): Promise<void> {
       featureSignature: featureSig,
       description,
       estimatedLossYen,
-      occurredAt: occurredAtRaw
-        ? new Date(occurredAtRaw)
-        : (linkedEvent?.eventDatetime ?? new Date()),
+      occurredAt:
+        (occurredAtRaw ? parseJstDate(occurredAtRaw) : null) ??
+        linkedEvent?.eventDatetime ??
+        new Date(),
     },
   });
 

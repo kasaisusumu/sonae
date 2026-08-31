@@ -438,6 +438,7 @@ interface RawLeaf {
   eventId: string;
   title: string;
   sig: string;
+  customized: boolean; // 個別編集で同名グループから切り離されたか
   keywords: string[];
   list: { task: LeafListItem[]; belonging: LeafListItem[] };
   failures: LeafFailure[];
@@ -451,25 +452,17 @@ function orderKeywords(kws: string[], freq: Map<string, number>): string[] {
   );
 }
 
-/** リストの「内容」だけを表す文字列（完了状態やコメントは無視）。 */
-function listSignature(list: {
-  task: LeafListItem[];
-  belonging: LeafListItem[];
-}): string {
-  const one = (arr: LeafListItem[]) =>
-    arr
-      .map((i) =>
-        [norm(i.title), i.timingLabel ?? "", i.notifyLeadMinutes ?? ""].join("~"),
-      )
-      .join("|");
-  return `${one(list.task)}#${one(list.belonging)}`;
-}
-
-/** 同名・同内容（時間帯・長さ違いだけ）の葉をまとめる。 */
+/**
+ * 葉をまとめる。
+ * - 同名で「未編集（listCustomized=false）」の予定は、内容の細かな差に関わらず 1 つにまとめる。
+ * - 個別編集で切り離した予定は、それぞれ独立した葉にする（＝編集で分かれたときだけ分かれる）。
+ */
 function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
   const groups = new Map<string, RawLeaf[]>();
   for (const l of raw) {
-    const key = `${norm(l.title)}${listSignature(l.list)}`;
+    const key = l.customized
+      ? `${norm(l.title)}#${l.eventId}`
+      : `${norm(l.title)}#shared`;
     const arr = groups.get(key);
     if (arr) arr.push(l);
     else groups.set(key, [l]);
@@ -489,8 +482,10 @@ function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
         title: rep.title,
         situationLabel:
           g.length > 1
-            ? `同じ内容 ${g.length}件（時間帯・長さ違い）`
-            : describeSignature(rep.sig).text,
+            ? `同じ名前の未編集 ${g.length}件`
+            : rep.customized
+              ? `${describeSignature(rep.sig).text}（個別編集）`
+              : describeSignature(rep.sig).text,
         keywords: rep.keywords,
         list: rep.list,
         failures,
@@ -554,6 +549,7 @@ export async function getLearningNameTree(userId: string): Promise<{
         select: {
           id: true,
           title: true,
+          listCustomized: true,
           feature: {
             select: {
               isOverseas: true,
@@ -630,6 +626,7 @@ export async function getLearningNameTree(userId: string): Promise<{
           eventId: ev.id,
           title: ev.title,
           sig: signatureFromFeatureRow(ev.feature ?? null),
+          customized: ev.listCustomized,
           keywords: evKw.get(ev.id) ?? [],
           list: {
             task: ev.checklistItems

@@ -95,13 +95,10 @@ export function ChecklistEditor({
   eventId,
   kind = "task",
   initialItems,
-  applyToEventIds,
 }: {
   eventId: string;
   kind?: "task" | "belonging";
   initialItems: InitialItem[];
-  /** 「同じ内容」としてまとめられた他の予定にも保存時に反映する */
-  applyToEventIds?: string[];
 }) {
   const isBelonging = kind === "belonging";
   const initial = useMemo<Item[]>(
@@ -176,7 +173,6 @@ export function ChecklistEditor({
         kind,
         items: toPayload(list),
         removedTitles,
-        applyToEventIds,
       });
       setRemovedTitles([]);
       setSaved(true);

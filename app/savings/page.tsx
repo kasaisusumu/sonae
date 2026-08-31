@@ -72,8 +72,6 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
       isUserAdded: it.isUserAdded,
       notifyLeadMinutes: it.notifyLeadMinutes,
     }));
-  const siblings = leaf.siblingEventIds;
-
   return (
     <LazyLeaf
       id={`ev-${leaf.eventId}`}
@@ -90,10 +88,10 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
         </>
       }
     >
-      {siblings.length > 0 && (
+      {leaf.mergedCount > 1 && (
         <p className="mb-2 text-[11px] text-muted">
-          時間帯・長さ違いで {leaf.mergedCount} 件をまとめています。ここでの編集は
-          その全部に反映されます。
+          同じ名前の未編集の予定 {leaf.mergedCount} 件をまとめています。ここでの編集は
+          その全部に反映され、別の 1 件を違う内容に編集するとそこで分かれます。
         </p>
       )}
       <p className="text-[11px] font-semibold text-teal-dark">準備すること</p>
@@ -101,14 +99,12 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
         eventId={leaf.eventId}
         kind="task"
         initialItems={initial("task")}
-        applyToEventIds={siblings}
       />
       <p className="mt-3 text-[11px] font-semibold text-teal-dark">持ち物</p>
       <ChecklistEditor
         eventId={leaf.eventId}
         kind="belonging"
         initialItems={initial("belonging")}
-        applyToEventIds={siblings}
       />
       <FailureList failures={leaf.failures} />
     </LazyLeaf>

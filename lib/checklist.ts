@@ -51,8 +51,23 @@ function persistData(
   }));
 }
 
-/** ベース生成＋学習ルール適用で準備リストを（再）生成し、丸ごと保存する。既存コメントは引き継ぐ。 */
-export async function generateAndSaveChecklist(eventId: string): Promise<void> {
+/**
+ * ベース生成＋学習ルール適用で準備リストを（再）生成し、丸ごと保存する。既存コメントは引き継ぐ。
+ * force=false（既定）: 同名・未編集の予定が既にリストを持っていれば、生成せずコピーする
+ *   （AI 節約＋同名グループの内容を揃える）。force=true: 必ず生成する（作り直す用）。
+ */
+export async function generateAndSaveChecklist(
+  eventId: string,
+  opts: { force?: boolean } = {},
+): Promise<void> {
+  if (!opts.force) {
+    const twinId = await findNameGroupTwinWithList(eventId);
+    if (twinId) {
+      await copyChecklistItems(twinId, eventId);
+      return;
+    }
+  }
+
   const existing = await prisma.checklistItem.findMany({
     where: { eventId, comment: { not: null } },
     select: { kind: true, title: true, comment: true },
@@ -82,7 +97,8 @@ export async function ensureChecklistForEvent(eventId: string): Promise<void> {
   if (count === 0) await generateAndSaveChecklist(eventId);
 }
 
-const normTitle = (s: string) => s.toLowerCase().replace(/\s+/g, "").trim();
+export const normTitle = (s: string) =>
+  s.toLowerCase().replace(/\s+/g, "").trim();
 
 /** ある予定のチェックリスト（提案含む全部）を、別の予定にそのままコピーする（AI 不要）。 */
 async function copyChecklistItems(
@@ -112,6 +128,98 @@ async function copyChecklistItems(
       })),
     }),
   ]);
+}
+
+/**
+ * source と同名（完全一致）で listCustomized=false の予定すべてに、source の内容を配る。
+ * source 自身が listCustomized（切り離し済み）なら何もしない。
+ */
+export async function propagateListToNameGroup(
+  sourceEventId: string,
+): Promise<string[]> {
+  const src = await prisma.event.findUnique({
+    where: { id: sourceEventId },
+    select: { userId: true, title: true, listCustomized: true },
+  });
+  if (!src || src.listCustomized) return [];
+  const twins = await prisma.event.findMany({
+    where: {
+      userId: src.userId,
+      id: { not: sourceEventId },
+      title: src.title,
+      listCustomized: false,
+    },
+    select: { id: true },
+  });
+  for (const t of twins) {
+    try {
+      await copyChecklistItems(sourceEventId, t.id);
+    } catch (e) {
+      console.error("[propagate] コピー失敗 eventId=%s", t.id, e);
+    }
+  }
+  return twins.map((t) => t.id);
+}
+
+/**
+ * 準備リストの内容編集が起きたときの、同名グループの扱いを決める。
+ * - この予定が既に切り離し済み（listCustomized）→ 何もしない。
+ * - 同名で「未編集扱い」かつ編集履歴のある別予定がいる（＝グループの source が別）
+ *   → この予定を切り離す（listCustomized=true）。
+ * - いなければ、この予定が source → 同名の未編集予定にこの内容を配る。
+ * 影響を受けた（内容をコピーした）予定 id の配列を返す（説明欄同期用）。
+ * ※ EditRecord をこの予定に作った「後」に呼ぶこと。
+ */
+export async function resolveNameGroupOnEdit(
+  eventId: string,
+): Promise<string[]> {
+  const me = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { userId: true, title: true, listCustomized: true },
+  });
+  if (!me || me.listCustomized) return [];
+
+  const otherSource = await prisma.event.findFirst({
+    where: {
+      userId: me.userId,
+      id: { not: eventId },
+      title: me.title,
+      listCustomized: false,
+      editRecords: { some: {} },
+    },
+    select: { id: true },
+  });
+  if (otherSource) {
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { listCustomized: true },
+    });
+    return [];
+  }
+  return propagateListToNameGroup(eventId);
+}
+
+/** 同名・未編集の予定が既にリストを持っていれば、そのイベント id を返す。 */
+async function findNameGroupTwinWithList(
+  eventId: string,
+): Promise<string | null> {
+  const me = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { userId: true, title: true, listCustomized: true },
+  });
+  if (!me || me.listCustomized) return null;
+  const twin = await prisma.event.findFirst({
+    where: {
+      userId: me.userId,
+      id: { not: eventId },
+      title: me.title,
+      listCustomized: false,
+      checklistItems: { some: { isSuggested: false } },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  return twin?.id ?? null;
 }
 
 /**

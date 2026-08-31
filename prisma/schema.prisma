@@ -97,6 +97,9 @@ model Event {
   // 自動で準備リスト生成・説明欄書き込みの対象にするか。
   // 連携時に既にあった予定は false（無視）。連携後に追加された予定・アプリで編集した予定は true。
   autoManaged   Boolean   @default(true)
+  // この予定の準備リストを個別に編集して、同名グループから切り離したか。
+  // false = 同名の未編集予定と内容を共有（一方の編集は全体に波及）。
+  listCustomized Boolean  @default(false)
   source        String    @default("manual") // "google" | "manual"
   // 再発防止の警告をユーザーが確認・了承した日時（設定されると警告は畳まれる）
   failureWarningAckAt DateTime?

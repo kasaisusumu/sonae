@@ -16,6 +16,8 @@ import { ensureWatch, stopWatch } from "@/lib/google";
 import {
   ensureChecklistForEvent,
   generateAndSaveChecklist,
+  propagateListToNameGroup,
+  resolveNameGroupOnEdit,
 } from "@/lib/checklist";
 import {
   recordEdit,
@@ -177,9 +179,15 @@ export async function regenerateChecklist(formData: FormData): Promise<void> {
   const event = await prisma.event.findFirst({ where: { id: eventId, userId } });
   if (!event) return;
 
-  await generateAndSaveChecklist(eventId);
+  // 「作り直す」は必ず生成し直す（同名コピーはしない）
+  await generateAndSaveChecklist(eventId, { force: true });
   await markAutoManaged(eventId);
-  after(() => syncEventDescription(eventId));
+  // この予定が同名グループに属している（未編集）なら、作り直した内容を同名の未編集予定にも配る
+  const twinIds = await propagateListToNameGroup(eventId);
+  after(() => {
+    void syncEventDescription(eventId);
+    for (const id of twinIds) void syncEventDescription(id);
+  });
   revalidateAppViews(eventId);
 }
 
@@ -225,8 +233,6 @@ interface SaveChecklistInput {
     notifyLeadMinutes: number | null;
   }[];
   removedTitles: string[];
-  // 「同じ内容」としてまとめられた他の予定にも同じリストを反映する（学習ページから）
-  applyToEventIds?: string[];
 }
 
 function cleanLead(v: unknown): number | null {
@@ -337,40 +343,21 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   }
 
   await markAutoManaged(input.eventId);
-  after(() => syncEventDescription(input.eventId));
 
-  // まとめ表示された他の予定にも、同じ内容（非提案項目）をコピーする
-  const siblingIds = [...new Set(input.applyToEventIds ?? [])].filter(
-    (id) => id && id !== input.eventId,
-  );
-  if (siblingIds.length > 0) {
-    const sibs = await prisma.event.findMany({
-      where: { id: { in: siblingIds }, userId },
-      select: { id: true },
-    });
-    for (const sib of sibs) {
-      await prisma.$transaction([
-        prisma.checklistItem.deleteMany({
-          where: { eventId: sib.id, isSuggested: false, kind },
-        }),
-        prisma.checklistItem.createMany({
-          data: cleanItems.map((it, i) => ({
-            eventId: sib.id,
-            kind,
-            title: it.title,
-            timingLabel: it.timingLabel,
-            comment: it.comment,
-            isDone: it.isDone,
-            isUserAdded: it.isUserAdded,
-            notifyLeadMinutes: it.notifyLeadMinutes,
-            sortOrder: (kind === "belonging" ? 1000 : 0) + i,
-          })),
-        }),
-      ]);
-      await markAutoManaged(sib.id);
-      after(() => syncEventDescription(sib.id));
-    }
-  }
+  // 内容（項目・タイミング・通知）が変わった編集なら、同名グループの扱いを更新する。
+  const contentChanged =
+    removed.length > 0 ||
+    added.length > 0 ||
+    retimed.length > 0 ||
+    renotified.length > 0;
+  const twinIds = contentChanged
+    ? await resolveNameGroupOnEdit(input.eventId)
+    : [];
+
+  after(() => {
+    void syncEventDescription(input.eventId);
+    for (const id of twinIds) void syncEventDescription(id);
+  });
 
   revalidateAppViews(input.eventId);
 }

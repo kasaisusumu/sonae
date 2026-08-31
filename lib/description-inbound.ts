@@ -6,6 +6,7 @@ import {
   type ParsedItem,
 } from "@/lib/description";
 import { syncEventDescription } from "@/lib/description-sync";
+import { resolveNameGroupOnEdit } from "@/lib/checklist";
 import { extractEventFeature } from "@/lib/features";
 import { recordEdit, type GeneratedItem, type ItemKind } from "@/lib/learning";
 
@@ -186,6 +187,16 @@ export async function applyInboundDescription(
           retimed: d.retimed,
         });
       }
+    }
+  }
+
+  // 内容が変わったら、同名グループの扱い（波及 or 切り離し）を更新する。
+  if (structural) {
+    try {
+      const twinIds = await resolveNameGroupOnEdit(eventId);
+      for (const id of twinIds) await syncEventDescription(id);
+    } catch (e) {
+      console.error("[inbound] 同名グループ処理に失敗 eventId=%s", eventId, e);
     }
   }
 

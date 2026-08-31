@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { getSavingsSummary } from "@/lib/savings";
+import { getSavingsSummary, getFailureRetrospective } from "@/lib/savings";
 import { formatYen } from "@/lib/format";
 
 export default async function SavingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/");
 
-  const s = await getSavingsSummary(user.id);
+  const [s, retro] = await Promise.all([
+    getSavingsSummary(user.id),
+    getFailureRetrospective(user.id),
+  ]);
   const maxMonthly = Math.max(1, ...s.monthly.map((m) => m.amountYen));
   const maxCategory = Math.max(1, ...s.byCategory.map((c) => c.amountYen));
 
@@ -137,6 +140,95 @@ export default async function SavingsPage() {
             </ul>
           </section>
         </>
+      )}
+
+      {retro.totalCount > 0 && (
+        <section className="rounded-2xl bg-surface p-5">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-sm font-semibold text-muted">
+              これまでの失敗ログの振り返り
+            </h2>
+            <Link
+              href="/failures"
+              className="text-xs text-muted underline hover:text-foreground"
+            >
+              失敗ログを開く
+            </Link>
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            責めるためではありません。溜まった記録を見返して、次に先回りするための場所です。
+          </p>
+          <p className="mt-3 text-sm">
+            合計 <strong>{retro.totalCount}件</strong>
+            {retro.totalEstimatedLossYen > 0 && (
+              <>
+                {" "}
+                ・ 推定損失の累計 {formatYen(retro.totalEstimatedLossYen)}
+              </>
+            )}
+            {retro.preventedTotal > 0 && (
+              <>
+                {" "}
+                ・ うち「防げた」{retro.preventedTotal}回
+              </>
+            )}
+          </p>
+
+          <div className="mt-4 space-y-3">
+            {retro.byCategory.map((c) => (
+              <details
+                key={c.categoryName}
+                className="rounded-xl bg-background p-3 [&_summary::-webkit-details-marker]:hidden"
+              >
+                <summary className="flex cursor-pointer list-none items-baseline justify-between gap-3 text-sm">
+                  <span className="font-medium">{c.categoryName}</span>
+                  <span className="text-xs text-muted">
+                    {c.count}件
+                    {c.estimatedLossYen > 0
+                      ? ` ・ 推定 ${formatYen(c.estimatedLossYen)}`
+                      : ""}{" "}
+                    ・ 直近 {c.lastOccurredAt.toLocaleDateString("ja-JP")}
+                  </span>
+                </summary>
+                <ul className="mt-2 divide-y divide-border">
+                  {c.items.slice(0, 8).map((it) => (
+                    <li
+                      key={it.id}
+                      className="flex items-start justify-between gap-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="whitespace-pre-wrap text-sm">
+                          {it.description}
+                        </p>
+                        <p className="text-[11px] text-muted">
+                          {it.occurredAt.toLocaleDateString("ja-JP")}
+                          {it.eventTitle ? ` ・ 「${it.eventTitle}」` : ""}
+                          {it.preventedTimes > 0
+                            ? ` ・ 防げた ${it.preventedTimes}回`
+                            : ""}
+                        </p>
+                      </div>
+                      {it.estimatedLossYen > 0 && (
+                        <span className="shrink-0 text-xs text-muted tabular-nums">
+                          {formatYen(it.estimatedLossYen)}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {c.items.length > 8 && (
+                  <p className="mt-2 text-[11px] text-muted">
+                    ほか {c.items.length - 8} 件（
+                    <Link href="/failures" className="underline">
+                      失敗ログ
+                    </Link>
+                    で全部見られます）
+                  </p>
+                )}
+              </details>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

@@ -36,6 +36,93 @@ export interface SavingsSummary {
   }[];
 }
 
+export interface FailureRetroItem {
+  id: string;
+  description: string;
+  occurredAt: Date;
+  estimatedLossYen: number;
+  eventTitle: string | null;
+  preventedTimes: number; // この記録が「防げた」に計上された延べ回数
+}
+
+export interface FailureRetroCategory {
+  categoryName: string;
+  count: number;
+  estimatedLossYen: number;
+  lastOccurredAt: Date;
+  items: FailureRetroItem[];
+}
+
+export interface FailureRetro {
+  totalCount: number;
+  totalEstimatedLossYen: number;
+  preventedTotal: number;
+  byCategory: FailureRetroCategory[];
+}
+
+/** 節約ダッシュボードで、これまで溜まった失敗ログをカテゴリごとに振り返る。 */
+export async function getFailureRetrospective(
+  userId: string,
+): Promise<FailureRetro> {
+  const logs = await prisma.failureLog.findMany({
+    where: { userId },
+    orderBy: { occurredAt: "desc" },
+    include: {
+      category: true,
+      event: { select: { title: true } },
+      savingsEntries: {
+        where: { confirmedByUser: true },
+        select: { id: true },
+      },
+    },
+  });
+
+  const groups = new Map<string, FailureRetroCategory>();
+  let totalEstimatedLossYen = 0;
+  let preventedTotal = 0;
+
+  for (const l of logs) {
+    totalEstimatedLossYen += l.estimatedLossYen;
+    preventedTotal += l.savingsEntries.length;
+
+    const name = l.category?.name ?? "カテゴリなし";
+    const g =
+      groups.get(name) ??
+      ({
+        categoryName: name,
+        count: 0,
+        estimatedLossYen: 0,
+        lastOccurredAt: l.occurredAt,
+        items: [],
+      } satisfies FailureRetroCategory);
+    g.count += 1;
+    g.estimatedLossYen += l.estimatedLossYen;
+    if (l.occurredAt > g.lastOccurredAt) g.lastOccurredAt = l.occurredAt;
+    g.items.push({
+      id: l.id,
+      description: l.description,
+      occurredAt: l.occurredAt,
+      estimatedLossYen: l.estimatedLossYen,
+      eventTitle: l.event?.title ?? null,
+      preventedTimes: l.savingsEntries.length,
+    });
+    groups.set(name, g);
+  }
+
+  const byCategory = [...groups.values()].sort(
+    (a, b) =>
+      b.count - a.count ||
+      b.lastOccurredAt.getTime() - a.lastOccurredAt.getTime(),
+  );
+
+  return {
+    totalCount: logs.length,
+    totalEstimatedLossYen,
+    preventedTotal,
+    byCategory,
+  };
+}
+
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }

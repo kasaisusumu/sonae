@@ -27,9 +27,17 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetPath =
+  const rawUrl =
     (event.notification.data && event.notification.data.url) || "/";
-  const targetUrl = new URL(targetPath, self.location.origin).href;
+  const target = new URL(rawUrl, self.location.origin);
+  const targetHref = target.href;
+  const samePath = (u) => {
+    try {
+      return new URL(u).pathname === target.pathname;
+    } catch {
+      return false;
+    }
+  };
 
   event.waitUntil(
     (async () => {
@@ -37,31 +45,37 @@ self.addEventListener("notificationclick", (event) => {
         type: "window",
         includeUncontrolled: true,
       });
+      const sameOrigin = all.filter((c) => c.url.startsWith(self.location.origin));
 
-      // 1) 既に目的のページを開いている窓があればフォーカスするだけ
-      for (const c of all) {
-        if (c.url === targetUrl && "focus" in c) return c.focus();
+      // 1) すでに目的のページを開いている窓 → フォーカスするだけ
+      const onTarget = sameOrigin.find((c) => samePath(c.url));
+      if (onTarget) {
+        await onTarget.focus().catch(() => {});
+        return;
       }
 
-      // 2) 同一オリジンの窓があれば、その窓を目的ページへ移動する
-      for (const c of all) {
-        if (!c.url.startsWith(self.location.origin)) continue;
+      // 2) 別ページを開いている窓 → その窓を目的ページへ移動（できる環境なら）
+      for (const c of sameOrigin) {
         if (typeof c.navigate === "function") {
           try {
-            await c.navigate(targetUrl);
-            return c.focus();
+            const nav = await c.navigate(targetHref);
+            await (nav || c).focus().catch(() => {});
+            return;
           } catch {
-            /* navigate 不可の環境（iOS PWA 等）は下のフォールバックへ */
+            /* iOS PWA など navigate 不可 → 下の openWindow へ */
           }
         }
-        await c.focus().catch(() => {});
-        return self.clients.openWindow
-          ? self.clients.openWindow(targetUrl)
-          : undefined;
       }
 
-      // 3) 開いている窓が無ければ新しく開く（インストール済み PWA なら PWA で開く）
-      if (self.clients.openWindow) return self.clients.openWindow(targetUrl);
+      // 3) 目的 URL を開く（インストール済み PWA なら PWA 内で開く）
+      if (self.clients.openWindow) {
+        const w = await self.clients.openWindow(targetHref);
+        if (w && typeof w.focus === "function") await w.focus().catch(() => {});
+        return;
+      }
+
+      // 4) 最後の手段: 既存窓をフォーカスだけでもする
+      if (sameOrigin[0]) await sameOrigin[0].focus().catch(() => {});
     })(),
   );
 });

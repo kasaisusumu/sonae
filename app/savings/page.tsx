@@ -7,9 +7,10 @@ import {
   type NameTreeNode,
 } from "@/lib/learning";
 import { formatYen } from "@/lib/format";
-import { ChecklistEditor } from "@/app/events/[id]/checklist-editor";
+import { leadLabel } from "@/lib/notify-items";
 import { LearningSearch } from "./learning-search";
 import { LazyLeaf } from "./lazy-leaf";
+import { LeafBody, type LeafItem } from "./leaf-body";
 
 const OUTCOME_LABEL: Record<string, string> = {
   prevented: "防げた",
@@ -61,8 +62,59 @@ function Keywords({ words }: { words: string[] }) {
   );
 }
 
+function CompactLine({ it }: { it: LeafItem }) {
+  const bits: string[] = [];
+  if (it.timingLabel) bits.push(it.timingLabel);
+  if (it.notifyLeadMinutes != null)
+    bits.push(`🔔${leadLabel(it.notifyLeadMinutes)}`);
+  return (
+    <li
+      className={`text-[11px] ${it.isDone ? "text-muted line-through" : ""}`}
+    >
+      {it.title}
+      {bits.length > 0 && (
+        <span className="text-muted">（{bits.join(" ・ ")}）</span>
+      )}
+      {it.isUserAdded && <span className="ml-1 text-teal-dark">＋追加</span>}
+    </li>
+  );
+}
+
+function CompactList({
+  task,
+  belonging,
+}: {
+  task: LeafItem[];
+  belonging: LeafItem[];
+}) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      <div>
+        <p className="text-[11px] font-semibold text-teal-dark">準備すること</p>
+        <ul className="mt-0.5 space-y-0.5">
+          {task.length === 0 ? (
+            <li className="text-[11px] text-muted">（なし）</li>
+          ) : (
+            task.map((it) => <CompactLine key={it.id} it={it} />)
+          )}
+        </ul>
+      </div>
+      <div>
+        <p className="text-[11px] font-semibold text-teal-dark">持ち物</p>
+        <ul className="mt-0.5 space-y-0.5">
+          {belonging.length === 0 ? (
+            <li className="text-[11px] text-muted">（なし）</li>
+          ) : (
+            belonging.map((it) => <CompactLine key={it.id} it={it} />)
+          )}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
-  const initial = (kind: "task" | "belonging") =>
+  const pick = (kind: "task" | "belonging"): LeafItem[] =>
     leaf.list[kind].map((it) => ({
       id: it.id,
       title: it.title,
@@ -72,6 +124,9 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
       isUserAdded: it.isUserAdded,
       notifyLeadMinutes: it.notifyLeadMinutes,
     }));
+  const task = pick("task");
+  const belonging = pick("belonging");
+
   return (
     <LazyLeaf
       id={`ev-${leaf.eventId}`}
@@ -94,17 +149,11 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
           その全部に反映され、別の 1 件を違う内容に編集するとそこで分かれます。
         </p>
       )}
-      <p className="text-[11px] font-semibold text-teal-dark">準備すること</p>
-      <ChecklistEditor
+      <LeafBody
         eventId={leaf.eventId}
-        kind="task"
-        initialItems={initial("task")}
-      />
-      <p className="mt-3 text-[11px] font-semibold text-teal-dark">持ち物</p>
-      <ChecklistEditor
-        eventId={leaf.eventId}
-        kind="belonging"
-        initialItems={initial("belonging")}
+        compact={<CompactList task={task} belonging={belonging} />}
+        taskInitial={task}
+        belongingInitial={belonging}
       />
       <FailureList failures={leaf.failures} />
     </LazyLeaf>
@@ -147,9 +196,9 @@ export default async function LearningTreePage() {
         <h1 className="text-xl font-semibold">学習内容</h1>
         <p className="mt-1 text-sm text-muted">
           <strong>カテゴリ → 予定名（語で枝分かれ）→ その予定</strong>
-          をたどると、その予定で出てくる準備リスト・持ち物が見られます。
-          ここでそのまま編集でき、編集は学習にも反映されます。同じ名前で同じ内容の予定
-          （時間帯や長さだけ違うもの）は 1 つにまとめて表示します。上の検索バーに予定名を入れると、その枝へ飛べます。
+          をたどると、その予定で出てくる準備リスト・持ち物をコンパクトに確認できます。
+          「編集」を押すとその場で編集でき、編集は学習にも反映されます。同じ名前の未編集の予定は
+          1 つにまとめて表示します。上の検索バーに予定名を入れると、その枝へ飛べます。
         </p>
       </div>
 

@@ -112,6 +112,41 @@ export async function syncCalendar(): Promise<void> {
   revalidatePath("/settings");
 }
 
+/**
+ * アプリを開いている間の“生同期”。クライアントの <LiveSync> が
+ * マウント時・タブ復帰時・数十秒おきに呼ぶ。
+ * - Google からの差分をその場で取り込み（説明欄の直接編集も即反映）
+ * - 新規予定があれば通知（webhook/cron を待たない）
+ * - 生成(OpenAI)は回さない＝軽い。watch チャンネルの張り直しだけ after() で。
+ * 変化があったときだけ changed:true を返し、呼び出し側が router.refresh() する。
+ */
+export async function pullCalendarChanges(): Promise<{ changed: boolean }> {
+  const userId = await getSessionUserId();
+  if (!userId) return { changed: false };
+  const account = await prisma.userGoogleAccount.findUnique({
+    where: { userId },
+    select: { userId: true },
+  });
+  if (!account) return { changed: false };
+
+  try {
+    const result = await syncAndNotify(userId, {
+      deferGeneration: true,
+      skipAiCategory: true,
+    });
+    after(() => {
+      void ensureWatch(userId).catch(() => {});
+    });
+    const changed =
+      result.newEvents.length + result.updatedCount + result.deletedCount > 0;
+    if (changed) revalidateAppViews();
+    return { changed };
+  } catch (e) {
+    console.error("[pullCalendarChanges] userId=%s", userId, e);
+    return { changed: false };
+  }
+}
+
 /** 手動で予定を登録し、準備リストを生成する。 */
 export async function createManualEvent(formData: FormData): Promise<void> {
   const userId = await requireUserId();

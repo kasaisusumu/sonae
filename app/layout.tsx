@@ -7,6 +7,7 @@ import { logout } from "@/app/actions";
 import { FeedbackWidget } from "@/app/components/feedback-widget";
 import { SwRegister } from "@/app/components/sw-register";
 import { BottomNav } from "@/app/components/bottom-nav";
+import { LiveSync } from "@/app/components/live-sync";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -48,6 +49,7 @@ export default async function RootLayout({
     <html lang="ja" className={`${geistSans.variable} h-full`}>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <SwRegister />
+        {isLoggedIn ? <LiveSync /> : null}
 
         <header className="border-b bg-surface">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-3">

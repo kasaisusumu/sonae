@@ -255,11 +255,11 @@ export function verifyWatchToken(userId: string, token: string | null): boolean 
 export async function ensureWatch(userId: string): Promise<boolean> {
   const { calendar, account } = await getCalendarClient(userId);
 
-  // まだ十分先まで有効なら何もしない
+  // まだ十分先まで有効なら何もしない（期限切れで push が止まらないよう 48h 前に張り直す）
   if (
     account.watchChannelId &&
     account.watchExpiration &&
-    account.watchExpiration.getTime() - Date.now() > 1000 * 60 * 60 * 24
+    account.watchExpiration.getTime() - Date.now() > 1000 * 60 * 60 * 48
   ) {
     return true;
   }

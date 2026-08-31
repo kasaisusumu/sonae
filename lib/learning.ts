@@ -398,6 +398,8 @@ export interface LearningSearchEntry {
   eventId: string;
   title: string;
   crumb: string; // "旅行・出張 › 旅行 › ハワイ"
+  keywords: string[];
+  items: string[]; // リストの項目名（準備すること＋持ち物）
 }
 
 function parseKeywords(raw: string | null | undefined): string[] {
@@ -523,6 +525,8 @@ function collectSearch(
       eventId: leaf.eventId,
       title: leaf.title,
       crumb: parts.join(" › "),
+      keywords: leaf.keywords,
+      items: [...leaf.list.task, ...leaf.list.belonging].map((i) => i.title),
     });
   }
   for (const child of node.children) collectSearch(child, parts, acc);

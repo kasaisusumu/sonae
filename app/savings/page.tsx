@@ -9,7 +9,7 @@ import {
 import { formatDateOnly, formatYen } from "@/lib/format";
 import { formatLead } from "@/lib/lead-time";
 import { getUserTemplates } from "@/lib/templates";
-import { LearningSearch } from "./learning-search";
+import { LearningSearch, type SearchEntry } from "./learning-search";
 import { LazyLeaf } from "./lazy-leaf";
 import { LeafBody, type LeafItem } from "./leaf-body";
 import { TemplatesPanel } from "./templates-panel";
@@ -199,6 +199,28 @@ export default async function LearningTreePage() {
     getUserTemplates(user.id),
   ]);
 
+  const searchEntries: SearchEntry[] = [
+    ...searchIndex.map((e) => ({
+      kind: "event" as const,
+      anchor: `ev-${e.eventId}`,
+      title: e.title,
+      crumb: e.crumb,
+      keywords: e.keywords,
+      items: e.items,
+    })),
+    ...templates.map((t) => ({
+      kind: "template" as const,
+      anchor: `tpl-${t.id}`,
+      title: t.name,
+      crumb:
+        t.kind === "belonging"
+          ? "テンプレート › 持ち物"
+          : "テンプレート › 準備すること",
+      keywords: [],
+      items: t.items.map((i) => i.title),
+    })),
+  ];
+
   return (
     <div className="space-y-5">
       <div>
@@ -213,6 +235,8 @@ export default async function LearningTreePage() {
 
       <TemplatesPanel templates={templates} />
 
+      {searchEntries.length > 0 && <LearningSearch entries={searchEntries} />}
+
       {categories.length === 0 ? (
         <p className="rounded-xl bg-surface px-4 py-8 text-center text-sm text-muted">
           まだ学習内容はありません。
@@ -221,7 +245,6 @@ export default async function LearningTreePage() {
         </p>
       ) : (
         <>
-          <LearningSearch entries={searchIndex} />
           <div className="space-y-3">
             {categories.map((cat) => (
               <details

@@ -12,7 +12,10 @@ const KIND_LABEL = { task: "準備すること", belonging: "持ち物" } as con
 
 function TemplateCard({ t }: { t: TemplateDetail }) {
   return (
-    <details className="rounded-xl bg-background p-3 [&_summary::-webkit-details-marker]:hidden">
+    <details
+      id={`tpl-${t.id}`}
+      className="scroll-mt-24 rounded-xl bg-background p-3 [&_summary::-webkit-details-marker]:hidden"
+    >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium">
         <span>
           {t.name}

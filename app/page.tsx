@@ -2,10 +2,10 @@ import Link from "next/link";
 import { after } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { formatYen } from "@/lib/format";
 import { isDevLoginEnabled } from "@/lib/dev-login";
 import { getUpcomingWarnings } from "@/lib/failures";
 import { primeNotifiedChecklists } from "@/lib/checklist";
+import { SavingsDashboard } from "@/app/components/savings-dashboard";
 
 export const maxDuration = 60;
 
@@ -97,9 +97,8 @@ export default async function HomePage({
   }
 
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [upcoming, monthSavings, warnings] = await Promise.all([
+  const [upcoming, warnings] = await Promise.all([
     prisma.event.findMany({
       where: { userId: user.id, eventDatetime: { gte: now } },
       orderBy: { eventDatetime: "asc" },
@@ -112,58 +111,16 @@ export default async function HomePage({
         checklistItems: { select: { isDone: true } },
       },
     }),
-    prisma.savingsEntry.findMany({
-      where: {
-        userId: user.id,
-        confirmedByUser: true,
-        createdAt: { gte: monthStart },
-      },
-      orderBy: { amountYen: "desc" },
-      include: {
-        failureLog: { select: { description: true } },
-      },
-    }),
     getUpcomingWarnings(user.id),
   ]);
 
-  const monthlySavings = monthSavings.reduce((s, e) => s + e.amountYen, 0);
-  const savedItems = monthSavings
-    .filter((e) => e.failureLog)
-    .slice(0, 3)
-    .map((e) => ({
-      description: e.failureLog!.description,
-      amountYen: e.amountYen,
-    }));
   after(() => primeNotifiedChecklists(user.id));
 
   return (
     <div className="space-y-6">
       <HowTo open={upcoming.length === 0} />
 
-      <Link
-        href="/savings"
-        className="block rounded-2xl bg-teal-soft px-6 py-5 no-underline transition-colors hover:brightness-[0.98]"
-      >
-        <p className="text-sm text-teal-dark">今月の推定節約額（参考値）</p>
-        <p className="mt-1 text-4xl font-bold text-teal-dark">
-          {formatYen(monthlySavings)}
-        </p>
-        {savedItems.length > 0 && (
-          <ul className="mt-3 space-y-1 text-xs text-teal-dark/90">
-            {savedItems.map((it, i) => (
-              <li key={i} className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate">・{it.description}</span>
-                <span className="shrink-0 tabular-nums">
-                  {it.amountYen > 0 ? formatYen(it.amountYen) : "±0"}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-2 text-xs text-muted">
-          「防げた」と確認した失敗の推定損失額の合計。断定ではなく目安です。内訳を見る →
-        </p>
-      </Link>
+      <SavingsDashboard userId={user.id} />
 
       {warnings.length > 0 && (
         <section className="rounded-2xl border border-warn/30 bg-warn-soft p-5">

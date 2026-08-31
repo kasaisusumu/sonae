@@ -1,260 +1,282 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
-import { getSavingsSummary, getFailureRetrospective } from "@/lib/savings";
-import { formatYen } from "@/lib/format";
-import { setFailureOutcome } from "@/app/actions";
+import {
+  getLearningNameTree,
+  parseNotifyValue,
+  type EditChangeView,
+  type EditRecordView,
+  type LeafListItem,
+  type LearnedRuleView,
+  type NameTreeLeaf,
+  type NameTreeNode,
+  type RuleType,
+} from "@/lib/learning";
+import { leadLabel } from "@/lib/notify-items";
+import { RuleActions } from "./rule-actions";
+import { LearningSearch } from "./learning-search";
 
-export default async function SavingsPage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/");
+const TYPE_LABEL: Record<RuleType, string> = {
+  fixed_item: "入れる",
+  exclude_item: "出さない",
+  timing_override: "タイミング",
+  notify_override: "通知",
+};
 
-  const [s, retro] = await Promise.all([
-    getSavingsSummary(user.id),
-    getFailureRetrospective(user.id),
-  ]);
-  const maxMonthly = Math.max(1, ...s.monthly.map((m) => m.amountYen));
-  const maxCategory = Math.max(1, ...s.byCategory.map((c) => c.amountYen));
+const CHANGE_LABEL: Record<EditChangeView["kind"], string> = {
+  added: "追加",
+  removed: "削除",
+  retimed: "タイミング",
+  renotified: "通知",
+};
 
+function notifyText(value: string | null): string {
+  const m = parseNotifyValue(value);
+  return m === null ? "通知なし" : leadLabel(m);
+}
+
+function ruleMain(r: LearnedRuleView): string {
+  if (r.ruleType === "timing_override") return `${r.target} → ${r.value ?? ""}`;
+  if (r.ruleType === "notify_override")
+    return `${r.target} → ${notifyText(r.value)}`;
+  if (r.ruleType === "fixed_item" && r.value) return `${r.target}（${r.value}）`;
+  return r.target;
+}
+
+function Keywords({ words }: { words: string[] }) {
+  if (words.length === 0) return null;
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold">節約額ダッシュボード</h1>
-        <p className="mt-1 text-sm text-muted">
-          失敗ログのうち「これは防げた」と確認したものの推定損失額を積み上げています。
+    <span className="ml-1 inline-flex flex-wrap gap-1 align-middle">
+      {words.slice(0, 8).map((w) => (
+        <span
+          key={w}
+          className="rounded bg-surface-muted px-1 py-px text-[10px] text-muted"
+        >
+          {w}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function ListLine({ it }: { it: LeafListItem }) {
+  const bits: string[] = [];
+  if (it.timingLabel) bits.push(it.timingLabel);
+  if (it.notifyLeadMinutes != null)
+    bits.push(`🔔${leadLabel(it.notifyLeadMinutes)}`);
+  return (
+    <li className="text-[11px]">
+      {it.title}
+      {bits.length > 0 && (
+        <span className="text-muted">（{bits.join(" ・ ")}）</span>
+      )}
+      {it.isUserAdded && <span className="ml-1 text-teal-dark">＋追加</span>}
+    </li>
+  );
+}
+
+function RuleLine({ r }: { r: LearnedRuleView }) {
+  return (
+    <li className="flex items-start justify-between gap-2 py-1">
+      <div className="min-w-0 text-[11px]">
+        <p>
+          <span className="text-muted">[{TYPE_LABEL[r.ruleType]}]</span>{" "}
+          {ruleMain(r)}
+          {!r.forced && <span className="text-muted">（仮）</span>}
+        </p>
+        <p className="text-muted">
+          {r.situationLabel} ・{" "}
+          {r.isUserLocked
+            ? "固定中"
+            : `確信度 ${Math.round(r.effectiveConfidence * 100)}%`}
+          {r.confirmedCount > 0 ? ` ・ 確認 ${r.confirmedCount}回` : ""}
+          {r.contradictedCount > 0 ? ` ・ 矛盾 ${r.contradictedCount}回` : ""}
         </p>
       </div>
+      <RuleActions ruleId={r.id} locked={r.isUserLocked} />
+    </li>
+  );
+}
 
-      <section className="rounded-2xl bg-teal-soft px-6 py-6">
-        <p className="text-sm text-teal-dark">今月の推定節約額（参考値）</p>
-        <p className="mt-1 text-5xl font-bold text-teal-dark">
-          {formatYen(s.thisMonthYen)}
-        </p>
-        <p className="mt-3 text-sm text-teal-dark/80">
-          累計 {formatYen(s.totalYen)} ・ {s.entryCount} 件
-        </p>
-        <p className="mt-3 text-xs text-muted">
-          ※ これは<strong>推定値</strong>です。断定ではありません。
-          推定ロジック: あなたが記録した失敗の「推定損失額」のうち、同じカテゴリの予定で「防げた」と自己申告したものを合計しています。実際に防げたかどうかの自動判定は行っていません。
-        </p>
+function EditLine({ rec }: { rec: EditRecordView }) {
+  return (
+    <li className="py-1">
+      <p className="text-[11px] font-medium text-muted">
+        {rec.when.toLocaleDateString("ja-JP")}{" "}
+        {rec.when.toLocaleTimeString("ja-JP", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}
+      </p>
+      <ul className="mt-0.5 space-y-0.5 pl-3">
+        {rec.changes.map((ch, i) => (
+          <li key={i} className="text-[11px]">
+            <span className="text-muted">{CHANGE_LABEL[ch.kind]}: </span>
+            {ch.kind === "retimed" || ch.kind === "renotified"
+              ? `${ch.title} → ${ch.detail ?? ""}`
+              : ch.detail
+                ? `${ch.title}（${ch.detail}）`
+                : ch.title}
+          </li>
+        ))}
+      </ul>
+    </li>
+  );
+}
 
-        {s.thisMonthItems.length > 0 && (
-          <div className="mt-4 rounded-xl bg-surface/70 p-4">
-            <p className="text-xs font-semibold text-teal-dark">
-              今月防げたこと
-            </p>
-            <ul className="mt-2 space-y-1 text-sm text-teal-dark/90">
-              {s.thisMonthItems.map((it, i) => (
-                <li key={i} className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 truncate">
-                    ・{it.description}
-                    {it.eventTitle ? (
-                      <span className="text-teal-dark/60">
-                        {" "}
-                        （{it.eventTitle}）
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="shrink-0 tabular-nums">
-                    {it.amountYen > 0 ? formatYen(it.amountYen) : "±0"}
-                  </span>
-                </li>
+function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
+  return (
+    <details
+      id={`ev-${leaf.eventId}`}
+      className="scroll-mt-24 rounded-lg bg-surface p-2 transition-shadow"
+    >
+      <summary className="cursor-pointer text-xs font-medium">
+        {leaf.title}
+        <span className="ml-1 font-normal text-muted">
+          {leaf.situationLabel}
+          {leaf.editCount > 0 ? ` ・ 編集 ${leaf.editCount}回` : ""}
+        </span>
+        <Keywords words={leaf.keywords} />
+      </summary>
+
+      <div className="mt-2 space-y-3 border-l border-border pl-3">
+        <div>
+          <h5 className="text-[11px] font-semibold text-teal-dark">
+            この予定のときのリスト
+          </h5>
+          <div className="mt-1 grid gap-2 sm:grid-cols-2">
+            <div>
+              <p className="text-[11px] text-muted">準備すること</p>
+              <ul className="mt-0.5 space-y-0.5">
+                {leaf.list.task.length === 0 ? (
+                  <li className="text-[11px] text-muted">（なし）</li>
+                ) : (
+                  leaf.list.task.map((it, i) => <ListLine key={i} it={it} />)
+                )}
+              </ul>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted">持ち物</p>
+              <ul className="mt-0.5 space-y-0.5">
+                {leaf.list.belonging.length === 0 ? (
+                  <li className="text-[11px] text-muted">（なし）</li>
+                ) : (
+                  leaf.list.belonging.map((it, i) => (
+                    <ListLine key={i} it={it} />
+                  ))
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {leaf.rules.length > 0 && (
+          <div>
+            <h5 className="text-[11px] font-semibold text-muted">
+              この予定に効いている学習
+            </h5>
+            <ul className="mt-0.5 divide-y divide-border">
+              {leaf.rules.map((r) => (
+                <RuleLine key={r.id} r={r} />
               ))}
             </ul>
           </div>
         )}
-      </section>
 
-      {s.entryCount === 0 ? (
+        {leaf.edits.length > 0 && (
+          <div>
+            <h5 className="text-[11px] font-semibold text-muted">
+              この予定での編集の記録
+            </h5>
+            <ul className="mt-0.5 divide-y divide-border">
+              {leaf.edits.map((rec) => (
+                <EditLine key={rec.id} rec={rec} />
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function NameBranch({ node }: { node: NameTreeNode }) {
+  const single = node.count === 1 && node.leaves.length === 1;
+  if (single) {
+    // 語の枝に予定が 1 つだけなら、枝を省いて葉を直接出す
+    return <EventLeaf leaf={node.leaves[0]} />;
+  }
+  return (
+    <details className="rounded-xl bg-background p-2">
+      <summary className="cursor-pointer text-sm font-medium">
+        {node.label}
+        <span className="ml-1.5 text-xs font-normal text-muted">
+          {node.count}件
+        </span>
+      </summary>
+      <div className="mt-1.5 space-y-1.5 border-l border-border pl-3">
+        {node.children.map((c) => (
+          <NameBranch key={c.path} node={c} />
+        ))}
+        {node.leaves.map((l) => (
+          <EventLeaf key={l.eventId} leaf={l} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
+export default async function LearningOverviewPage() {
+  const user = await getCurrentUser();
+  if (!user) redirect("/");
+
+  const { categories, searchIndex } = await getLearningNameTree(user.id);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-xl font-semibold">学習内容</h1>
+        <p className="mt-1 text-sm text-muted">
+          <strong>カテゴリ → 予定名（語で枝分かれ）→ その予定のとき</strong>
+          の順でたどれます。どの名前の予定のときにどんなリストになるか、そのもとに
+          なった編集も見られます。上の検索バーに予定名を入れると、その枝へ飛べます。
+          各ルールは個別に固定・リセットできます。
+        </p>
+      </div>
+
+      {categories.length === 0 ? (
         <p className="rounded-xl bg-surface px-4 py-8 text-center text-sm text-muted">
-          まだ計上はありません。
+          まだ学習内容はありません。
           <br />
-          <Link href="/failures" className="no-underline">
-            失敗ログ
-          </Link>
-          を記録し、同じカテゴリの予定で「これは防げた」を押すとここに積み上がります。
+          予定の準備リストを何度か編集すると、ここに出てきます。
         </p>
       ) : (
         <>
-          <section className="rounded-2xl bg-surface p-5">
-            <h2 className="text-sm font-semibold text-muted">月ごとの推移（直近6ヶ月・参考値）</h2>
-            <div className="mt-4 flex items-end gap-2" style={{ height: 140 }}>
-              {s.monthly.map((m) => (
-                <div key={m.key} className="flex flex-1 flex-col items-center gap-1">
-                  <span className="text-[10px] text-muted">
-                    {m.amountYen > 0 ? formatYen(m.amountYen) : ""}
-                  </span>
-                  <div
-                    className="w-full rounded-t bg-teal"
-                    style={{
-                      height: `${Math.round((m.amountYen / maxMonthly) * 110)}px`,
-                      minHeight: m.amountYen > 0 ? 4 : 1,
-                      opacity: m.amountYen > 0 ? 1 : 0.25,
-                    }}
-                  />
-                  <span className="text-xs text-muted">{m.label}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-2xl bg-surface p-5">
-            <h2 className="text-sm font-semibold text-muted">カテゴリ別の内訳（参考値）</h2>
-            <ul className="mt-4 space-y-3">
-              {s.byCategory.map((c) => (
-                <li key={c.categoryName}>
-                  <div className="flex items-baseline justify-between text-sm">
-                    <span>{c.categoryName}</span>
-                    <span className="text-muted">
-                      {formatYen(c.amountYen)}（{c.count}件）
-                    </span>
-                  </div>
-                  <div className="mt-1 h-2 rounded-full bg-surface-muted">
-                    <div
-                      className="h-2 rounded-full bg-accent"
-                      style={{ width: `${(c.amountYen / maxCategory) * 100}%` }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section className="rounded-2xl bg-surface p-5">
-            <h2 className="text-sm font-semibold text-muted">最近の計上</h2>
-            <ul className="mt-3 divide-y divide-border">
-              {s.recent.map((r) => (
-                <li key={r.id} className="flex items-start justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm">{r.description}</p>
-                    <p className="text-xs text-muted">
-                      {r.categoryName}
-                      {r.eventTitle ? ` ・ ${r.eventTitle}` : ""} ・{" "}
-                      {r.createdAt.toLocaleDateString("ja-JP")}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-sm text-teal-dark">
-                    {formatYen(r.amountYen)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        </>
-      )}
-
-      {retro.totalCount > 0 && (
-        <section className="rounded-2xl bg-surface p-5">
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 className="text-sm font-semibold text-muted">
-              防げた失敗（カテゴリ別）
-            </h2>
-            <Link
-              href="/failures"
-              className="text-xs text-muted underline hover:text-foreground"
-            >
-              失敗ログを開く
-            </Link>
-          </div>
-          <p className="mt-1 text-xs text-muted">
-            「防げた」と振り返った記録だけを集めています。未選択のものは
-            <Link href="/failures" className="underline">
-              失敗ログ
-            </Link>
-            で「防げた／防げなかった」を選べます。
-          </p>
-          <p className="mt-3 text-sm">
-            防げた <strong>{retro.totalCount}件</strong>
-            {retro.totalEstimatedLossYen > 0 && (
-              <> ・ 推定損失の回避 累計 {formatYen(retro.totalEstimatedLossYen)}</>
-            )}
-          </p>
-
-          <div className="mt-4 space-y-3">
-            {retro.byCategory.map((c) => (
+          <LearningSearch entries={searchIndex} />
+          <div className="space-y-3">
+            {categories.map((cat) => (
               <details
-                key={c.categoryName}
-                className="rounded-xl bg-background p-3 [&_summary::-webkit-details-marker]:hidden"
+                key={cat.categoryId}
+                className="rounded-2xl bg-surface p-4"
+                open
               >
-                <summary className="flex cursor-pointer list-none items-baseline justify-between gap-3 text-sm">
-                  <span className="font-medium">{c.categoryName}</span>
-                  <span className="text-xs text-muted">
-                    {c.count}件
-                    {c.estimatedLossYen > 0
-                      ? ` ・ 推定 ${formatYen(c.estimatedLossYen)}`
-                      : ""}{" "}
-                    ・ 直近 {c.lastOccurredAt.toLocaleDateString("ja-JP")}
+                <summary className="cursor-pointer text-base font-semibold">
+                  {cat.categoryName}
+                  <span className="ml-2 text-xs font-normal text-muted">
+                    予定 {cat.eventCount}件 ・ 学習 {cat.ruleCount}件
                   </span>
                 </summary>
-                <ul className="mt-2 divide-y divide-border">
-                  {c.items.slice(0, 8).map((it) => (
-                    <li key={it.id} className="py-2">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="whitespace-pre-wrap text-sm">
-                            {it.description}
-                          </p>
-                          <p className="text-[11px] text-muted">
-                            {it.occurredAt.toLocaleDateString("ja-JP")}
-                            {it.eventTitle ? ` ・ 「${it.eventTitle}」` : ""}
-                          </p>
-                        </div>
-                        <span className="shrink-0 text-xs text-teal-dark tabular-nums">
-                          {it.estimatedLossYen > 0
-                            ? formatYen(it.estimatedLossYen)
-                            : "±0"}
-                        </span>
-                      </div>
-                      <div className="mt-1.5 flex items-center gap-3 text-[11px]">
-                        <form action={setFailureOutcome}>
-                          <input
-                            type="hidden"
-                            name="failureLogId"
-                            value={it.id}
-                          />
-                          <input type="hidden" name="outcome" value="unset" />
-                          <button
-                            type="submit"
-                            className="text-muted underline hover:text-foreground"
-                          >
-                            取り消す（未選択に戻す）
-                          </button>
-                        </form>
-                        <form action={setFailureOutcome}>
-                          <input
-                            type="hidden"
-                            name="failureLogId"
-                            value={it.id}
-                          />
-                          <input
-                            type="hidden"
-                            name="outcome"
-                            value="not_prevented"
-                          />
-                          <button
-                            type="submit"
-                            className="text-muted underline hover:text-warn"
-                          >
-                            防げなかったに変更
-                          </button>
-                        </form>
-                      </div>
-                    </li>
+                <div className="mt-3 space-y-1.5 border-l border-border pl-3">
+                  {cat.node.children.map((c) => (
+                    <NameBranch key={c.path} node={c} />
                   ))}
-                </ul>
-                {c.items.length > 8 && (
-                  <p className="mt-2 text-[11px] text-muted">
-                    ほか {c.items.length - 8} 件（
-                    <Link href="/failures" className="underline">
-                      失敗ログ
-                    </Link>
-                    で全部見られます）
-                  </p>
-                )}
+                  {cat.node.leaves.map((l) => (
+                    <EventLeaf key={l.eventId} leaf={l} />
+                  ))}
+                </div>
               </details>
             ))}
           </div>
-        </section>
+        </>
       )}
     </div>
   );

@@ -47,12 +47,12 @@ export default async function SettingsPage() {
       </section>
 
       <Link
-        href="/settings/learning"
+        href="/savings"
         className="block rounded-2xl bg-surface p-5 no-underline transition-colors hover:bg-surface-muted"
       >
-        <h2 className="text-sm font-semibold text-muted">学習内容の確認</h2>
+        <h2 className="text-sm font-semibold text-muted">学習内容</h2>
         <p className="mt-2 text-sm">
-          何を学習しているか（固定・除外・タイミング）を確認し、個別に固定/リセットできます →
+          「学習」タブ。予定名の樹形図で、どの予定のときにどんなリストになるかを確認・検索できます →
         </p>
       </Link>
 

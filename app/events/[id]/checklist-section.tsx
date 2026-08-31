@@ -158,10 +158,7 @@ export async function ChecklistSection({
             <h3 className="font-semibold text-teal-dark">
               この種類の予定で学習済みのこと
             </h3>
-            <Link
-              href="/settings/learning"
-              className="text-xs text-teal-dark underline"
-            >
+            <Link href="/savings" className="text-xs text-teal-dark underline">
               確認・編集
             </Link>
           </div>

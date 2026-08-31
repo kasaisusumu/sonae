@@ -66,7 +66,7 @@ export default async function RootLayout({
                   失敗ログ
                 </Link>
                 <Link href="/savings" className="text-foreground no-underline hover:text-teal-dark">
-                  節約額
+                  学習
                 </Link>
                 <Link href="/settings" className="text-foreground no-underline hover:text-teal-dark">
                   設定

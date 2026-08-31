@@ -345,7 +345,7 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
   }
 }
 
-// ── 「学習内容の確認」画面用: カテゴリ → どの場合(特徴シグネチャ) → 予定名 → 学習内容 の樹形図 ──
+// ── 「学習内容の確認」画面用: カテゴリ → 予定名の樹形図 → 予定ごとの「どのリストになるか」 ──
 
 export interface LearnedRuleView {
   id: string;
@@ -360,17 +360,8 @@ export interface LearnedRuleView {
   lastConfirmedAt: Date;
   isUserLocked: boolean;
   forced: boolean;
-  /** このルールを裏付けた予定名（編集ログ由来） */
-  supportedBy: string[];
-}
-
-export interface LearningKindGroup {
-  kind: ItemKind;
-  fixed: LearnedRuleView[];
-  excluded: LearnedRuleView[];
-  timing: LearnedRuleView[];
-  notify: LearnedRuleView[];
-  tentative: LearnedRuleView[];
+  /** このルールの署名（どの場合か）の日本語ラベル */
+  situationLabel: string;
 }
 
 export type EditChangeKind = "added" | "removed" | "retimed" | "renotified";
@@ -379,7 +370,7 @@ export interface EditChangeView {
   kind: EditChangeKind;
   itemKind: ItemKind | null;
   title: string;
-  detail: string | null; // タイミングラベル / リード時間ラベル
+  detail: string | null;
 }
 
 export interface EditRecordView {
@@ -388,34 +379,49 @@ export interface EditRecordView {
   changes: EditChangeView[];
 }
 
-export interface SituationEventView {
-  eventId: string | null;
+export interface LeafListItem {
   title: string;
+  timingLabel: string | null;
+  notifyLeadMinutes: number | null;
+  isUserAdded: boolean;
+}
+
+/** 樹形図の葉 = 実際に学習した 1 つの予定 */
+export interface NameTreeLeaf {
+  eventId: string;
+  title: string;
+  /** "国内・日帰り・平日・午前" など。予定の性質 */
+  situationLabel: string;
   keywords: string[];
   editCount: number;
+  /** この予定名のときの「リスト」 */
+  list: { task: LeafListItem[]; belonging: LeafListItem[] };
   edits: EditRecordView[];
+  /** この予定に効いている学習ルール（署名ラベル付き） */
+  rules: LearnedRuleView[];
 }
 
-export interface LearningSituation {
-  signature: string;
-  /** "海外・3泊以上・平日・午前"、共通なら "すべての予定に共通" */
-  label: string;
-  parts: string[];
-  ruleCount: number;
-  editCount: number;
-  /** この状況で見た予定名の語（union） */
-  keywords: string[];
-  kinds: LearningKindGroup[];
-  /** この状況に当てはまった予定と、その編集ログ */
-  events: SituationEventView[];
+/** 樹形図の枝 = 予定名の語による分岐 */
+export interface NameTreeNode {
+  path: string; // ルートからここまでの語をつないだもの（id 生成用）
+  label: string; // この枝の語（例: "旅行"）
+  count: number; // この枝以下の予定数
+  children: NameTreeNode[];
+  leaves: NameTreeLeaf[];
 }
 
-export interface LearningCategoryTree {
+export interface NameCategoryTree {
   categoryId: string;
   categoryName: string;
+  eventCount: number;
   ruleCount: number;
-  editCount: number;
-  situations: LearningSituation[];
+  node: NameTreeNode; // 直下の children / leaves が名前の樹形図のトップ
+}
+
+export interface LearningSearchEntry {
+  eventId: string;
+  title: string;
+  crumb: string; // "旅行・出張 › 旅行 › ハワイ"
 }
 
 function leadMinutesLabel(m: number | null): string {
@@ -430,7 +436,9 @@ function parseKeywords(raw: string | null | undefined): string[] {
   if (!raw) return [];
   try {
     const a = JSON.parse(raw);
-    return Array.isArray(a) ? a.map((x) => String(x)).filter(Boolean) : [];
+    return Array.isArray(a)
+      ? [...new Set(a.map((x) => String(x)).filter((x) => x.length >= 2))]
+      : [];
   } catch {
     return [];
   }
@@ -466,6 +474,7 @@ function ruleView(r: {
   contradictedCount: number;
   lastConfirmedAt: Date;
   isUserLocked: boolean;
+  featureSignature: string;
 }): LearnedRuleView {
   const eff = r.isUserLocked
     ? 1
@@ -483,7 +492,7 @@ function ruleView(r: {
     lastConfirmedAt: r.lastConfirmedAt,
     isUserLocked: r.isUserLocked,
     forced: r.isUserLocked || eff >= CONFIDENCE_THRESHOLD,
-    supportedBy: [],
+    situationLabel: describeSignature(r.featureSignature).text,
   };
 }
 
@@ -515,12 +524,7 @@ function parseEditChanges(e: {
     if (Array.isArray(removed)) {
       for (const r of removed) {
         if (!r) continue;
-        out.push({
-          kind: "removed",
-          itemKind: null,
-          title: String(r),
-          detail: null,
-        });
+        out.push({ kind: "removed", itemKind: null, title: String(r), detail: null });
       }
     }
   } catch {
@@ -561,25 +565,56 @@ function parseEditChanges(e: {
   return out;
 }
 
-export async function getLearningTree(
-  userId: string,
-): Promise<LearningCategoryTree[]> {
+// ── 予定名の樹形図を組む ──────────────────────────────
+
+type RawNode = { children: Map<string, RawNode>; leaves: NameTreeLeaf[] };
+
+function orderKeywords(kws: string[], freq: Map<string, number>): string[] {
+  return [...kws].sort(
+    (a, b) => (freq.get(b) ?? 0) - (freq.get(a) ?? 0) || (a < b ? -1 : 1),
+  );
+}
+
+function toNode(raw: RawNode, label: string, parentPath: string): NameTreeNode {
+  const path = parentPath ? `${parentPath}/${label}` : label;
+  let children = [...raw.children.entries()].map(([k, v]) => toNode(v, k, path));
+  let leaves = raw.leaves;
+
+  // 1 子・0 葉 の連なりは畳んでラベルをつなぐ（"旅行" ▸ "ハワイ" → "旅行・ハワイ"）
+  let mergedLabel = label;
+  while (children.length === 1 && leaves.length === 0) {
+    const only = children[0];
+    mergedLabel = `${mergedLabel}・${only.label}`;
+    children = only.children;
+    leaves = only.leaves;
+  }
+
+  children.sort((a, b) => b.count - a.count || (a.label < b.label ? -1 : 1));
+  leaves = [...leaves].sort((a, b) => (a.title < b.title ? -1 : 1));
+
+  const count =
+    leaves.length + children.reduce((s, c) => s + c.count, 0);
+  return { path, label: mergedLabel, count, children, leaves };
+}
+
+export async function getLearningNameTree(userId: string): Promise<{
+  categories: NameCategoryTree[];
+  searchIndex: LearningSearchEntry[];
+}> {
   const categories = await prisma.category.findMany({
     where: { userId },
     orderBy: { createdAt: "asc" },
     include: {
       learnedRules: true,
-      _count: { select: { editRecords: true } },
-    },
-  });
-  if (categories.length === 0) return [];
-
-  const catIds = categories.map((c) => c.id);
-  const editRecords = await prisma.editRecord.findMany({
-    where: { categoryId: { in: catIds } },
-    orderBy: { createdAt: "desc" },
-    include: {
-      event: {
+      events: {
+        where: {
+          OR: [
+            { checklistItems: { some: { isSuggested: false } } },
+            { editRecords: { some: {} } },
+          ],
+        },
+        orderBy: { eventDatetime: "desc" },
+        take: 300,
         select: {
           id: true,
           title: true,
@@ -592,162 +627,134 @@ export async function getLearningTree(
               keywords: true,
             },
           },
+          checklistItems: {
+            where: { isSuggested: false },
+            orderBy: { sortOrder: "asc" },
+            select: {
+              kind: true,
+              title: true,
+              timingLabel: true,
+              notifyLeadMinutes: true,
+              isUserAdded: true,
+            },
+          },
+          editRecords: {
+            orderBy: { createdAt: "desc" },
+            select: {
+              id: true,
+              createdAt: true,
+              addedItems: true,
+              removedItems: true,
+              timingChanges: true,
+              notifyChanges: true,
+            },
+          },
         },
       },
     },
   });
 
-  // categoryId -> signature -> eventKey -> SituationEventView
-  const editsByCatSig = new Map<
-    string,
-    Map<string, Map<string, SituationEventView>>
-  >();
-  for (const e of editRecords) {
-    if (!e.categoryId) continue;
-    const sig = signatureFromFeatureRow(e.event?.feature ?? null);
-    const changes = parseEditChanges(e);
-    if (changes.length === 0) continue;
+  const searchIndex: LearningSearchEntry[] = [];
 
-    let sigMap = editsByCatSig.get(e.categoryId);
-    if (!sigMap) {
-      sigMap = new Map();
-      editsByCatSig.set(e.categoryId, sigMap);
-    }
-    let evMap = sigMap.get(sig);
-    if (!evMap) {
-      evMap = new Map();
-      sigMap.set(sig, evMap);
-    }
-    const key = e.event?.id ?? `t:${e.event?.title ?? "?"}`;
-    let ev = evMap.get(key);
-    if (!ev) {
-      ev = {
-        eventId: e.event?.id ?? null,
-        title: e.event?.title ?? "(削除された予定)",
-        keywords: parseKeywords(e.event?.feature?.keywords),
-        editCount: 0,
-        edits: [],
-      };
-      evMap.set(key, ev);
-    }
-    ev.editCount += 1;
-    ev.edits.push({ id: e.id, when: e.createdAt, changes });
-  }
-
-  return categories
+  const out: NameCategoryTree[] = categories
+    .filter((c) => c.events.length > 0)
     .map((c) => {
-      const bySig = new Map<string, LearnedRuleView[]>();
-      for (const r of c.learnedRules) {
-        const arr = bySig.get(r.featureSignature) ?? [];
-        arr.push(ruleView(r));
-        bySig.set(r.featureSignature, arr);
+      // このカテゴリの予定のキーワード頻度
+      const freq = new Map<string, number>();
+      const evKw = new Map<string, string[]>();
+      for (const ev of c.events) {
+        const kws = parseKeywords(ev.feature?.keywords);
+        evKw.set(ev.id, kws);
+        for (const w of kws) freq.set(w, (freq.get(w) ?? 0) + 1);
       }
 
-      const sigEvents = editsByCatSig.get(c.id) ?? new Map();
-      // ルールがある署名 ∪ 編集ログがある署名
-      const allSigs = new Set<string>([...bySig.keys(), ...sigEvents.keys()]);
+      const root: RawNode = { children: new Map(), leaves: [] };
 
-      const situations: LearningSituation[] = [...allSigs]
-        .map((signature) => {
-          const rules = bySig.get(signature) ?? [];
-          const d = describeSignature(signature);
+      for (const ev of c.events) {
+        const sig = signatureFromFeatureRow(ev.feature ?? null);
+        const feat = featureFromRow(ev.feature ?? null);
+        // この予定の特徴に当てはまる学習ルール（署名不問で当たるものを全部）
+        const applied = c.learnedRules
+          .filter((lr) => signatureMatches(lr.featureSignature, feat))
+          .map(ruleView)
+          .sort(
+            (a, b) =>
+              Number(b.forced) - Number(a.forced) ||
+              b.effectiveConfidence - a.effectiveConfidence,
+          );
 
-          const events: SituationEventView[] = [
-            ...((sigEvents.get(signature) as
-              | Map<string, SituationEventView>
-              | undefined) ?? new Map()
-            ).values(),
-          ].sort((a, b) => b.editCount - a.editCount);
+        const leaf: NameTreeLeaf = {
+          eventId: ev.id,
+          title: ev.title,
+          situationLabel: describeSignature(sig).text,
+          keywords: evKw.get(ev.id) ?? [],
+          editCount: ev.editRecords.length,
+          list: {
+            task: ev.checklistItems
+              .filter((i) => i.kind !== "belonging")
+              .map((i) => ({
+                title: i.title,
+                timingLabel: i.timingLabel,
+                notifyLeadMinutes: i.notifyLeadMinutes,
+                isUserAdded: i.isUserAdded,
+              })),
+            belonging: ev.checklistItems
+              .filter((i) => i.kind === "belonging")
+              .map((i) => ({
+                title: i.title,
+                timingLabel: i.timingLabel,
+                notifyLeadMinutes: i.notifyLeadMinutes,
+                isUserAdded: i.isUserAdded,
+              })),
+          },
+          edits: ev.editRecords.map((e) => ({
+            id: e.id,
+            when: e.createdAt,
+            changes: parseEditChanges(e),
+          })),
+          rules: applied,
+        };
 
-          // ルールを裏付けた予定名を、編集ログから拾って添える
-          const supporters = (rt: RuleType, target: string): string[] => {
-            const want =
-              rt === "fixed_item"
-                ? "added"
-                : rt === "exclude_item"
-                  ? "removed"
-                  : rt === "timing_override"
-                    ? "retimed"
-                    : "renotified";
-            const t = norm(target);
-            const names = new Set<string>();
-            for (const ev of events) {
-              for (const rec of ev.edits) {
-                if (rec.changes.some((ch) => ch.kind === want && norm(ch.title) === t)) {
-                  names.add(ev.title);
-                }
-              }
-            }
-            return [...names];
-          };
-          for (const r of rules) r.supportedBy = supporters(r.ruleType, r.target);
+        const path = orderKeywords(evKw.get(ev.id) ?? [], freq);
+        let cur = root;
+        for (const k of path) {
+          if (!cur.children.has(k)) {
+            cur.children.set(k, { children: new Map(), leaves: [] });
+          }
+          cur = cur.children.get(k)!;
+        }
+        cur.leaves.push(leaf);
 
-          const kinds: LearningKindGroup[] = (
-            ["task", "belonging"] as ItemKind[]
-          )
-            .map((kind) => {
-              const rs = rules
-                .filter((r) => r.itemKind === kind)
-                .sort(
-                  (a, b) =>
-                    Number(b.forced) - Number(a.forced) ||
-                    b.effectiveConfidence - a.effectiveConfidence,
-                );
-              return {
-                kind,
-                fixed: rs.filter((r) => r.ruleType === "fixed_item" && r.forced),
-                excluded: rs.filter(
-                  (r) => r.ruleType === "exclude_item" && r.forced,
-                ),
-                timing: rs.filter(
-                  (r) => r.ruleType === "timing_override" && r.forced,
-                ),
-                notify: rs.filter(
-                  (r) => r.ruleType === "notify_override" && r.forced,
-                ),
-                tentative: rs.filter((r) => !r.forced),
-              } satisfies LearningKindGroup;
-            })
-            .filter(
-              (k) =>
-                k.fixed.length +
-                  k.excluded.length +
-                  k.timing.length +
-                  k.notify.length +
-                  k.tentative.length >
-                0,
-            );
+        searchIndex.push({
+          eventId: ev.id,
+          title: ev.title,
+          crumb: [c.name, ...path].join(" › "),
+        });
+      }
 
-          const kw = new Set<string>();
-          for (const ev of events) for (const w of ev.keywords) kw.add(w);
-
-          return {
-            signature,
-            label: d.text,
-            parts: d.parts,
-            ruleCount: rules.length,
-            editCount: events.reduce((s, e) => s + e.editCount, 0),
-            keywords: [...kw],
-            kinds,
-            events,
-          };
-        })
-        .filter((s) => s.ruleCount > 0 || s.editCount > 0)
-        // 具体的な状況を先に、"すべて共通" を後ろに。次に学習件数の多い順。
-        .sort(
-          (a, b) =>
-            b.parts.length - a.parts.length ||
-            b.ruleCount - a.ruleCount ||
-            b.editCount - a.editCount,
-        );
+      const node = toNode(root, "", "");
+      node.label = c.name;
+      node.path = c.id;
 
       return {
         categoryId: c.id,
         categoryName: c.name,
+        eventCount: c.events.length,
         ruleCount: c.learnedRules.length,
-        editCount: c._count.editRecords,
-        situations,
+        node,
       };
-    })
-    .filter((c) => c.ruleCount > 0 || c.editCount > 0);
+    });
+
+  return { categories: out, searchIndex };
+}
+
+/** 保存済み EventFeature 行を EventFeatureData に戻す（署名照合用。keywords は不要）。 */
+function featureFromRow(f: FeatureRow): EventFeatureData {
+  return {
+    isOverseas: f?.isOverseas ?? null,
+    durationNights: f?.durationNights ?? null,
+    isWeekday: f?.isWeekday ?? true,
+    timeBucket: (f?.timeBucket ?? "allday") as TimeBucket,
+    keywords: [],
+  };
 }

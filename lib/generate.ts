@@ -159,6 +159,7 @@ export async function generateBaseChecklist(
       const completion = await client.chat.completions.create({
         model: MODEL,
         temperature: 0.4,
+        max_tokens: 700, // tasks+belongings の JSON には十分。無駄な生成を抑える
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },

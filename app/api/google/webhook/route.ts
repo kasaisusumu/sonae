@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { syncAndNotify, refineFallbackCategories } from "@/lib/sync";
 import { primeNotifiedChecklists } from "@/lib/checklist";
+import { applyInboundDescription } from "@/lib/description-inbound";
 import { verifyWatchToken } from "@/lib/google";
 
 export const runtime = "nodejs";
@@ -38,14 +39,20 @@ export async function POST(req: NextRequest) {
 
   const userId = account.userId;
   try {
-    // 通知だけ最速で出す。カテゴリの AI 判定・準備リスト生成・説明欄書き込みは後回し。
+    // 通知だけ最速で出す。説明欄の取り込み・AI カテゴリ判定・準備リスト生成は後回し。
     const result = await syncAndNotify(userId, {
       deferGeneration: true,
       skipAiCategory: true,
+      deferInbound: true,
     });
 
     after(async () => {
       try {
+        for (const p of result.inboundPending) {
+          await applyInboundDescription(p.eventId, p.description).catch((e) =>
+            console.error("[google/webhook] 説明欄取り込み失敗 %s", p.eventId, e),
+          );
+        }
         await refineFallbackCategories(userId);
         await primeNotifiedChecklists(userId, 6);
       } catch (e) {

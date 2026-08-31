@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { resolveCategoryForEvent, FALLBACK_CATEGORY } from "@/lib/categories";
+import {
+  resolveCategoryForEvent,
+  getOrCreateCategory,
+  inferCategoryName,
+  FALLBACK_CATEGORY,
+} from "@/lib/categories";
+import { classifyEventCategoriesBatch } from "@/lib/categorize-ai";
 import {
   fetchCalendarChanges,
   getCalendarClient,
@@ -20,7 +26,11 @@ export interface SyncResult {
   updatedCount: number;
   deletedCount: number;
   isFirstSync: boolean;
+  /** deferInbound のとき、後で applyInboundDescription すべき (eventId, description) */
+  inboundPending: { eventId: string; description: string }[];
 }
+
+const normTitle = (s: string) => s.toLowerCase().replace(/\s+/g, "").trim();
 
 const FUTURE_LIMIT_MS = 1000 * 60 * 60 * 24 * 120; // 先 120 日まで
 const PAST_LIMIT_MS = 1000 * 60 * 60 * 24 * 2; // 過去 2 日まで
@@ -34,7 +44,7 @@ const AI_CATEGORY_BUDGET = 12;
  */
 export async function syncUserCalendar(
   userId: string,
-  opts: { skipAiCategory?: boolean } = {},
+  opts: { skipAiCategory?: boolean; deferInbound?: boolean } = {},
 ): Promise<SyncResult> {
   const account = await prisma.userGoogleAccount.findUnique({ where: { userId } });
   if (!account) throw new Error("Google アカウントが未接続です。");
@@ -60,33 +70,43 @@ export async function syncUserCalendar(
   );
 
   const newEvents: SyncResult["newEvents"] = [];
+  const inboundPending: SyncResult["inboundPending"] = [];
   let updatedCount = 0;
   let aiBudget = AI_CATEGORY_BUDGET;
 
-  // 既存の更新
-  for (const ev of upserts) {
-    const existing = existingByGid.get(ev.googleEventId);
-    if (!existing || !inWindow(ev)) continue;
+  // 既存の更新: スカラー項目はまとめて並列更新（クリティカルパスを短く）
+  const existingChanged = upserts.filter(
+    (ev) => existingByGid.get(ev.googleEventId) && inWindow(ev),
+  );
+  await Promise.all(
+    existingChanged.map((ev) =>
+      prisma.event.update({
+        where: { id: existingByGid.get(ev.googleEventId)!.id },
+        data: {
+          title: ev.title,
+          eventDatetime: ev.start,
+          endDatetime: ev.end,
+          recurringEventId: ev.recurringEventId,
+        },
+      }),
+    ),
+  );
+  updatedCount += existingChanged.length;
 
+  // 説明欄の直接編集の取り込み。deferInbound なら後回し（通知を先に出すため）。
+  for (const ev of existingChanged) {
+    const existing = existingByGid.get(ev.googleEventId)!;
     const echo =
       !!ev.description &&
       !!existing.lastWrittenHash &&
       hashDescription(ev.description) === existing.lastWrittenHash;
-
-    // 説明欄以外のスカラー項目は常に更新（memo は下の取り込みで扱う）
-    await prisma.event.update({
-      where: { id: existing.id },
-      data: {
-        title: ev.title,
-        eventDatetime: ev.start,
-        endDatetime: ev.end,
-        recurringEventId: ev.recurringEventId,
-      },
-    });
-    updatedCount++;
-
-    // 自分の書き込みのエコーでなければ、説明欄の直接編集を取り込む
-    if (!echo) {
+    if (echo) continue;
+    if (opts.deferInbound) {
+      inboundPending.push({
+        eventId: existing.id,
+        description: ev.description ?? "",
+      });
+    } else {
       try {
         await applyInboundDescription(existing.id, ev.description ?? "");
       } catch (e) {
@@ -116,58 +136,95 @@ export async function syncUserCalendar(
     }
   }
 
+  // 1) 系列上限などのフィルタ（I/O なし）
+  const toCreate: FetchedEvent[] = [];
   for (const ev of candidates) {
-    // 連携直後の初回取り込みは既存予定 → 件数上限なしで全部入れるが「自動管理しない」
-    if (!isFirstSync && newEvents.length >= MAX_NEW_PER_RUN) break;
+    if (!isFirstSync && toCreate.length >= MAX_NEW_PER_RUN) break;
     if (ev.recurringEventId) {
       const c = seriesCount.get(ev.recurringEventId) ?? 0;
       if (c >= MAX_PER_SERIES) continue;
       seriesCount.set(ev.recurringEventId, c + 1);
     }
+    toCreate.push(ev);
+  }
 
-    // 初回 or fast path は AI カテゴリ判定を使わない（キーワードのみ・高速）。
-    // 通知を早く出すため、webhook では skipAiCategory=true。後で refine する。
-    const useAi = !isFirstSync && !opts.skipAiCategory && aiBudget > 0;
-    const category = await resolveCategoryForEvent(
-      userId,
-      ev.title,
-      ev.description,
-      useAi,
+  // 2) カテゴリを決める
+  const catIdByEv = new Map<FetchedEvent, string>();
+  if (opts.skipAiCategory || isFirstSync) {
+    // keyword のみ・高速。カテゴリ名を重複排除してまとめて用意（webhook は後で refine）。
+    const nameByEv = new Map<FetchedEvent, string>();
+    for (const ev of toCreate) {
+      nameByEv.set(ev, inferCategoryName(ev.title, ev.description));
+    }
+    const catByName = new Map<string, string>();
+    await Promise.all(
+      [...new Set(nameByEv.values())].map(async (nm) => {
+        catByName.set(nm, (await getOrCreateCategory(userId, nm)).id);
+      }),
     );
-    if (useAi) aiBudget--;
-    try {
-      const created = await prisma.event.create({
-        data: {
-          userId,
-          categoryId: category.id,
-          title: ev.title,
-          eventDatetime: ev.start,
-          endDatetime: ev.end,
-          recurringEventId: ev.recurringEventId,
-          autoManaged: !isFirstSync, // 既存予定は自動管理の対象外
-          memo: stripSonaeBlock(ev.description) || null,
-          googleEventId: ev.googleEventId,
-          source: "google",
-        },
-      });
-      newEvents.push({
-        id: created.id,
-        title: created.title,
-        eventDatetime: created.eventDatetime,
-        recurringEventId: created.recurringEventId,
-      });
-    } catch (e: unknown) {
-      if (
-        typeof e === "object" &&
-        e !== null &&
-        "code" in e &&
-        (e as { code?: string }).code === "P2002"
-      ) {
-        updatedCount++;
-      } else {
+    for (const ev of toCreate) {
+      catIdByEv.set(ev, catByName.get(nameByEv.get(ev)!)!);
+    }
+  } else {
+    // cron 等: 従来どおり（AI フォールバックあり、予算内）
+    for (const ev of toCreate) {
+      const useAi = aiBudget > 0;
+      const cat = await resolveCategoryForEvent(
+        userId,
+        ev.title,
+        ev.description,
+        useAi,
+      );
+      if (useAi) aiBudget--;
+      catIdByEv.set(ev, cat.id);
+    }
+  }
+
+  // 3) 作成（並列）
+  type CreateOutcome =
+    | { created: SyncResult["newEvents"][number] }
+    | { dup: true };
+  const createResults = await Promise.all(
+    toCreate.map(async (ev): Promise<CreateOutcome> => {
+      try {
+        const created = await prisma.event.create({
+          data: {
+            userId,
+            categoryId: catIdByEv.get(ev)!,
+            title: ev.title,
+            eventDatetime: ev.start,
+            endDatetime: ev.end,
+            recurringEventId: ev.recurringEventId,
+            autoManaged: !isFirstSync, // 既存予定は自動管理の対象外
+            memo: stripSonaeBlock(ev.description) || null,
+            googleEventId: ev.googleEventId,
+            source: "google",
+          },
+        });
+        return {
+          created: {
+            id: created.id,
+            title: created.title,
+            eventDatetime: created.eventDatetime,
+            recurringEventId: created.recurringEventId,
+          },
+        };
+      } catch (e: unknown) {
+        if (
+          typeof e === "object" &&
+          e !== null &&
+          "code" in e &&
+          (e as { code?: string }).code === "P2002"
+        ) {
+          return { dup: true as const };
+        }
         throw e;
       }
-    }
+    }),
+  );
+  for (const r of createResults) {
+    if ("created" in r) newEvents.push(r.created);
+    else updatedCount++;
   }
 
   let deletedCount = 0;
@@ -186,7 +243,7 @@ export async function syncUserCalendar(
     },
   });
 
-  return { newEvents, updatedCount, deletedCount, isFirstSync };
+  return { newEvents, updatedCount, deletedCount, isFirstSync, inboundPending };
 }
 
 /**
@@ -242,7 +299,11 @@ export async function refreshEventFromGoogle(eventId: string): Promise<void> {
   }
 }
 
-/** 直近に取り込んで「その他」に落ちた Google 予定を、AI で本来のカテゴリに振り直す。 */
+/**
+ * 直近に取り込んで「その他」に落ちた Google 予定を、本来のカテゴリに振り直す。
+ * AI 負荷を抑えるため: 過去の予定は対象外 → 同名の既存予定のカテゴリを流用（AIなし）
+ * → 残りだけを 1 回の AI 呼び出しでまとめて分類。
+ */
 export async function refineFallbackCategories(
   userId: string,
   limit = 8,
@@ -254,25 +315,66 @@ export async function refineFallbackCategories(
       source: "google",
       autoManaged: true,
       createdAt: { gte: since },
+      eventDatetime: { gte: new Date() }, // 過去の予定は分類不要
       category: { name: FALLBACK_CATEGORY },
     },
     orderBy: { createdAt: "desc" },
     take: limit,
     select: { id: true, title: true, memo: true },
   });
+  if (targets.length === 0) return 0;
+
+  // 同名の既存予定が具体カテゴリを持っていれば流用（AI 不要）
+  const known = await prisma.event.findMany({
+    where: { userId, categoryId: { not: null }, category: { name: { not: FALLBACK_CATEGORY } } },
+    select: { title: true, categoryId: true, category: { select: { name: true } } },
+  });
+  const catByTitle = new Map<string, { id: string; name: string }>();
+  for (const k of known) {
+    const key = normTitle(k.title);
+    if (k.categoryId && !catByTitle.has(key)) {
+      catByTitle.set(key, { id: k.categoryId, name: k.category?.name ?? "" });
+    }
+  }
+
   let n = 0;
+  const needsAi: typeof targets = [];
   for (const ev of targets) {
-    try {
-      const cat = await resolveCategoryForEvent(userId, ev.title, ev.memo, true);
-      if (cat.name !== FALLBACK_CATEGORY) {
-        await prisma.event.update({
-          where: { id: ev.id },
-          data: { categoryId: cat.id },
-        });
-        n++;
+    const hit = catByTitle.get(normTitle(ev.title));
+    if (hit && hit.name !== FALLBACK_CATEGORY) {
+      await prisma.event.update({
+        where: { id: ev.id },
+        data: { categoryId: hit.id },
+      });
+      n++;
+    } else {
+      needsAi.push(ev);
+    }
+  }
+
+  if (needsAi.length > 0) {
+    const existing = (
+      await prisma.category.findMany({ where: { userId }, select: { name: true } })
+    ).map((c) => c.name);
+    const names = await classifyEventCategoriesBatch(
+      needsAi.map((e) => ({ title: e.title, description: e.memo })),
+      existing,
+    );
+    for (let i = 0; i < needsAi.length; i++) {
+      const name = names[i];
+      if (!name || name === FALLBACK_CATEGORY) continue;
+      try {
+        const cat = await getOrCreateCategory(userId, name);
+        if (cat.name !== FALLBACK_CATEGORY) {
+          await prisma.event.update({
+            where: { id: needsAi[i].id },
+            data: { categoryId: cat.id },
+          });
+          n++;
+        }
+      } catch (e) {
+        console.error("[refineFallbackCategories] eventId=%s", needsAi[i].id, e);
       }
-    } catch (e) {
-      console.error("[refineFallbackCategories] eventId=%s", ev.id, e);
     }
   }
   return n;
@@ -283,21 +385,32 @@ async function pickNotifiable(
   userId: string,
   newEvents: SyncResult["newEvents"],
 ): Promise<SyncResult["newEvents"]> {
+  const seriesIds = [
+    ...new Set(
+      newEvents.map((e) => e.recurringEventId).filter((v): v is string => !!v),
+    ),
+  ];
+  const notifiedSeries = new Set<string>();
+  if (seriesIds.length > 0) {
+    const rows = await prisma.event.findMany({
+      where: {
+        userId,
+        recurringEventId: { in: seriesIds },
+        notifiedAt: { not: null },
+      },
+      select: { recurringEventId: true },
+      distinct: ["recurringEventId"],
+    });
+    for (const r of rows) if (r.recurringEventId) notifiedSeries.add(r.recurringEventId);
+  }
+
   const out: SyncResult["newEvents"] = [];
   const seenSeries = new Set<string>();
   for (const ev of newEvents) {
     if (ev.recurringEventId) {
       if (seenSeries.has(ev.recurringEventId)) continue;
       seenSeries.add(ev.recurringEventId);
-      const already = await prisma.event.findFirst({
-        where: {
-          userId,
-          recurringEventId: ev.recurringEventId,
-          notifiedAt: { not: null },
-        },
-        select: { id: true },
-      });
-      if (already) continue;
+      if (notifiedSeries.has(ev.recurringEventId)) continue;
     }
     out.push(ev);
   }
@@ -319,10 +432,12 @@ export async function syncAndNotify(
     generateBudget?: number;
     deferGeneration?: boolean;
     skipAiCategory?: boolean;
+    deferInbound?: boolean;
   },
 ): Promise<SyncResult & { generated: number }> {
   const result = await syncUserCalendar(userId, {
     skipAiCategory: opts?.skipAiCategory,
+    deferInbound: opts?.deferInbound,
   });
   if (result.isFirstSync) return { ...result, generated: 0 };
 

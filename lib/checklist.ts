@@ -82,10 +82,45 @@ export async function ensureChecklistForEvent(eventId: string): Promise<void> {
   if (count === 0) await generateAndSaveChecklist(eventId);
 }
 
+const normTitle = (s: string) => s.toLowerCase().replace(/\s+/g, "").trim();
+
+/** ある予定のチェックリスト（提案含む全部）を、別の予定にそのままコピーする（AI 不要）。 */
+async function copyChecklistItems(
+  fromEventId: string,
+  toEventId: string,
+): Promise<void> {
+  const src = await prisma.checklistItem.findMany({
+    where: { eventId: fromEventId },
+    orderBy: { sortOrder: "asc" },
+  });
+  await prisma.$transaction([
+    prisma.checklistItem.deleteMany({ where: { eventId: toEventId } }),
+    prisma.checklistItem.createMany({
+      data: src.map((it) => ({
+        eventId: toEventId,
+        kind: it.kind,
+        title: it.title,
+        timingLabel: it.timingLabel,
+        comment: it.comment,
+        notifyLeadMinutes: it.notifyLeadMinutes,
+        isUserAdded: it.isUserAdded,
+        sortOrder: it.sortOrder,
+        isSuggested: it.isSuggested,
+        suggestionType: it.suggestionType,
+        suggestionRuleId: it.suggestionRuleId,
+        suggestionValue: it.suggestionValue,
+      })),
+    }),
+  ]);
+}
+
 /**
  * 通知済みでまだ準備リストが無い予定を先行生成し、説明欄にも反映する。
  * cron / webhook / ダッシュボード表示後（after）から呼ぶ。生成した件数を返す。
  * アプリを開かなくてもリストが用意されるための要。
+ *
+ * AI 負荷の最小化: 繰り返し系列・同カテゴリ同名 のまとまりごとに 1 件だけ生成し、
+ * 残りはその結果をコピーする（OpenAI 呼び出しはまとまりあたり最大 1 回）。
  */
 export async function primeNotifiedChecklists(
   userId: string,
@@ -102,20 +137,41 @@ export async function primeNotifiedChecklists(
     },
     orderBy: { eventDatetime: "asc" },
     take: limit,
-    select: { id: true },
+    select: { id: true, title: true, categoryId: true, recurringEventId: true },
   });
+  if (targets.length === 0) return 0;
 
-  // まとめて並列生成（各件は OpenAI 呼び出し＋Google 書き込みで待ちが長いため）
+  const groups = new Map<string, typeof targets>();
+  for (const t of targets) {
+    const key = t.recurringEventId
+      ? `s:${t.recurringEventId}`
+      : `t:${t.categoryId ?? "-"}:${normTitle(t.title)}`;
+    const arr = groups.get(key);
+    if (arr) arr.push(t);
+    else groups.set(key, [t]);
+  }
+
   const results = await Promise.all(
-    targets.map(async (t) => {
+    [...groups.values()].map(async (g) => {
+      const [first, ...rest] = g;
+      let n = 0;
       try {
-        await generateAndSaveChecklist(t.id);
-        await syncEventDescription(t.id);
-        return 1 as number;
+        await generateAndSaveChecklist(first.id); // まとまりにつき最大 1 回の生成
+        await syncEventDescription(first.id);
+        n++;
+        for (const r of rest) {
+          try {
+            await copyChecklistItems(first.id, r.id);
+            await syncEventDescription(r.id);
+            n++;
+          } catch (e) {
+            console.error("[prime] コピー失敗 eventId=%s", r.id, e);
+          }
+        }
       } catch (e) {
-        console.error("[prime] 生成失敗 eventId=%s", t.id, e);
-        return 0 as number;
+        console.error("[prime] 生成失敗 eventId=%s", first.id, e);
       }
+      return n;
     }),
   );
   return results.reduce((a, b) => a + b, 0);

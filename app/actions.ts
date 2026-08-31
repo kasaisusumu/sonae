@@ -45,6 +45,19 @@ function markAutoManaged(eventId: string) {
   });
 }
 
+/**
+ * チェックリスト・失敗ログ・カテゴリを変えたとき、影響しうる画面をまとめて再検証する。
+ * （ホーム＝節約ダッシュボード、予定一覧、予定詳細、失敗ログ、学習の樹形図＝/savings）
+ */
+function revalidateAppViews(eventId?: string) {
+  revalidatePath("/");
+  revalidatePath("/events");
+  revalidatePath("/failures");
+  revalidatePath("/savings");
+  if (eventId) revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events/[id]", "page");
+}
+
 export async function logout(): Promise<void> {
   await clearSession();
   redirect("/");
@@ -134,7 +147,7 @@ export async function createManualEvent(formData: FormData): Promise<void> {
     }).catch(() => {}),
   );
 
-  revalidatePath("/events");
+  revalidateAppViews(event.id);
   redirect(`/events/${event.id}`);
 }
 
@@ -154,8 +167,7 @@ export async function updateEventCategory(formData: FormData): Promise<void> {
     data: { categoryId: category.id },
   });
 
-  revalidatePath("/events");
-  revalidatePath(`/events/${eventId}`);
+  revalidateAppViews(eventId);
 }
 
 /** 準備リストを再生成する（学習内容を反映）。 */
@@ -168,7 +180,7 @@ export async function regenerateChecklist(formData: FormData): Promise<void> {
   await generateAndSaveChecklist(eventId);
   await markAutoManaged(eventId);
   after(() => syncEventDescription(eventId));
-  revalidatePath(`/events/${eventId}`);
+  revalidateAppViews(eventId);
 }
 
 /** 予定詳細を開いたときに、未生成なら準備リストを生成する。 */
@@ -197,8 +209,7 @@ export async function toggleChecklistItemDone(
   // 完了状態をカレンダー説明欄（取り消し線）にも反映
   await markAutoManaged(item.eventId);
   after(() => syncEventDescription(item.eventId));
-  revalidatePath("/events");
-  revalidatePath("/");
+  revalidateAppViews(item.eventId);
 }
 
 interface SaveChecklistInput {
@@ -361,9 +372,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     }
   }
 
-  revalidatePath(`/events/${input.eventId}`);
-  revalidatePath("/events");
-  revalidatePath("/savings");
+  revalidateAppViews(input.eventId);
 }
 
 /** 提案項目を「適用」する（1タップ）。ルールの確信度を上げる。 */
@@ -403,8 +412,7 @@ export async function acceptSuggestion(itemId: string): Promise<void> {
   if (item.suggestionRuleId) await confirmRule(item.suggestionRuleId);
   await markAutoManaged(item.eventId);
   after(() => syncEventDescription(item.eventId));
-  revalidatePath(`/events/${item.eventId}`);
-  revalidatePath("/events");
+  revalidateAppViews(item.eventId);
 }
 
 /** 提案項目を「却下」する（1タップ）。ルールの確信度を下げる。 */
@@ -433,8 +441,7 @@ export async function rejectSuggestion(itemId: string): Promise<void> {
   if (item.suggestionRuleId) await contradictRule(item.suggestionRuleId);
   await markAutoManaged(item.eventId);
   after(() => syncEventDescription(item.eventId));
-  revalidatePath(`/events/${item.eventId}`);
-  revalidatePath("/events");
+  revalidateAppViews(item.eventId);
 }
 
 /** 学習内容の確認画面: ルールを固定/解除する。 */
@@ -456,7 +463,7 @@ export async function setRuleLocked(
         : {}),
     },
   });
-  revalidatePath("/settings/learning");
+  revalidateAppViews();
 }
 
 /** 学習内容の確認画面: ルールを削除（リセット）する。 */
@@ -465,7 +472,7 @@ export async function deleteLearnedRule(ruleId: string): Promise<void> {
   await prisma.learnedRule.deleteMany({
     where: { id: ruleId, category: { userId } },
   });
-  revalidatePath("/settings/learning");
+  revalidateAppViews();
 }
 
 // ─────────────────────────────────────────────
@@ -527,10 +534,7 @@ export async function createFailureLog(formData: FormData): Promise<void> {
     },
   });
 
-  revalidatePath("/failures");
-  revalidatePath("/");
-  revalidatePath("/events");
-  if (linkedEvent) revalidatePath("/events/[id]", "page");
+  revalidateAppViews(linkedEvent?.id);
 }
 
 /** 事後の警告で「今回もやってしまった」を1タップ記録（同じ内容で、この予定に紐づけて追記）。 */
@@ -572,10 +576,7 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
     });
   }
 
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath("/events/[id]", "page");
-  revalidatePath("/failures");
-  revalidatePath("/");
+  revalidateAppViews(eventId);
 }
 
 /** 失敗ログを削除する。 */
@@ -583,8 +584,7 @@ export async function deleteFailureLog(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const id = String(formData.get("id") ?? "");
   await prisma.failureLog.deleteMany({ where: { id, userId } });
-  revalidatePath("/failures");
-  revalidatePath("/");
+  revalidateAppViews();
 }
 
 /**
@@ -636,10 +636,7 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
     });
   }
 
-  revalidatePath("/savings");
-  revalidatePath("/failures");
-  revalidatePath("/");
-  if (log.eventId) revalidatePath("/events/[id]", "page");
+  revalidateAppViews(log.eventId ?? undefined);
 }
 
 /** 予定の再発防止警告を「確認した」ことにして畳む。 */
@@ -650,8 +647,7 @@ export async function ackEventWarning(formData: FormData): Promise<void> {
     where: { id: eventId, userId },
     data: { failureWarningAckAt: new Date() },
   });
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath("/");
+  revalidateAppViews(eventId);
 }
 
 /** 警告の失敗内容を、この予定の準備リストに「再発防止」項目として追加する。 */
@@ -680,7 +676,7 @@ export async function addPreventionItem(formData: FormData): Promise<void> {
     },
   });
 
-  revalidatePath(`/events/${eventId}`);
+  revalidateAppViews(eventId);
 }
 
 /** 「これは防げた」と自己申告し、推定損失額を節約に計上する。 */
@@ -712,11 +708,7 @@ export async function markPrevented(formData: FormData): Promise<void> {
     data: { outcome: "prevented" },
   });
 
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath("/events/[id]", "page");
-  revalidatePath("/savings");
-  revalidatePath("/failures");
-  revalidatePath("/");
+  revalidateAppViews(eventId);
 }
 
 /** 「防げた」の計上を取り消す。他に計上が残っていなければ振り返り結果も未選択に戻す。 */
@@ -736,11 +728,7 @@ export async function undoPrevented(formData: FormData): Promise<void> {
       data: { outcome: null },
     });
   }
-  revalidatePath(`/events/${eventId}`);
-  revalidatePath("/events/[id]", "page");
-  revalidatePath("/savings");
-  revalidatePath("/failures");
-  revalidatePath("/");
+  revalidateAppViews(eventId);
 }
 
 // ─────────────────────────────────────────────

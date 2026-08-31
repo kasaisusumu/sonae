@@ -1,6 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { saveChecklist, toggleChecklistItemDone } from "@/app/actions";
 
 interface Item {
@@ -131,6 +137,24 @@ export function ChecklistEditor({
   const dirty =
     JSON.stringify(items.map(strip)) !== JSON.stringify(initial.map(strip)) ||
     removedTitles.length > 0;
+
+  // items が最後に同期した initial（＝サーバー値）。未保存編集の有無を判定するのに使う。
+  const syncedRef = useRef(initial);
+  // サーバーの最新（initialItems）が差し替わったとき、未保存の編集が無ければ取り込む。
+  // 別画面での編集（樹形図など）や保存直後の結果を、このエディタにも反映するため。
+  useEffect(() => {
+    const userEdited =
+      JSON.stringify(items.map(strip)) !==
+        JSON.stringify(syncedRef.current.map(strip)) ||
+      removedTitles.length > 0;
+    syncedRef.current = initial;
+    if (userEdited) return; // 未保存の編集は上書きしない
+    setItems(initial);
+    setRemovedTitles([]);
+    setSaved(false);
+    // initial が変わったときだけ動かす（items/removedTitles は現在値の読み取りに使うだけ）
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial]);
 
   function toPayload(list: Item[]) {
     return list

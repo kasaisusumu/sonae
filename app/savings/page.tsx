@@ -72,8 +72,6 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
       isUserAdded: it.isUserAdded,
       notifyLeadMinutes: it.notifyLeadMinutes,
     }));
-  const keyOf = (kind: "task" | "belonging") =>
-    `${leaf.eventId}-${kind}-${leaf.list[kind].map((i) => i.title).join("")}`;
   const siblings = leaf.siblingEventIds;
 
   return (
@@ -100,7 +98,6 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
       )}
       <p className="text-[11px] font-semibold text-teal-dark">準備すること</p>
       <ChecklistEditor
-        key={keyOf("task")}
         eventId={leaf.eventId}
         kind="task"
         initialItems={initial("task")}
@@ -108,7 +105,6 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
       />
       <p className="mt-3 text-[11px] font-semibold text-teal-dark">持ち物</p>
       <ChecklistEditor
-        key={keyOf("belonging")}
         eventId={leaf.eventId}
         kind="belonging"
         initialItems={initial("belonging")}

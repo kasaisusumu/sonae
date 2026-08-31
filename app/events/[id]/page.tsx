@@ -11,6 +11,7 @@ import {
   ChecklistSectionSkeleton,
 } from "./checklist-section";
 import { EventFailureLog } from "./event-failure-log";
+import { FailureSuggestions } from "./failure-suggestions";
 import { ScrollToHash } from "./scroll-to-hash";
 
 // 初回表示時に準備リストを OpenAI で生成することがあるため長めに
@@ -72,6 +73,10 @@ export default async function EventDetailPage({
           </p>
         )}
       </header>
+
+      <Suspense fallback={null}>
+        <FailureSuggestions eventId={event.id} />
+      </Suspense>
 
       <Suspense fallback={<ChecklistSectionSkeleton />}>
         <ChecklistSection

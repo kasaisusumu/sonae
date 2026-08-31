@@ -17,6 +17,7 @@ import {
   ensureChecklistForEvent,
   generateAndSaveChecklist,
   normTitle,
+  primeNotifiedChecklists,
   propagateListToNameGroup,
   resolveNameGroupOnEdit,
 } from "@/lib/checklist";
@@ -31,6 +32,7 @@ import { featureSignature } from "@/lib/signature";
 import { parseLead } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
 import { parseJstDate, parseJstDateTimeLocal } from "@/lib/format";
+import { clusterKey } from "@/lib/failures";
 
 async function requireUserId(): Promise<string> {
   const userId = await getSessionUserId();
@@ -138,11 +140,16 @@ export async function pullCalendarChanges(): Promise<{ changed: boolean }> {
       deferGeneration: true,
       skipAiCategory: true,
     });
-    after(() => {
-      void ensureWatch(userId).catch(() => {});
-    });
     const changed =
       result.newEvents.length + result.updatedCount + result.deletedCount > 0;
+    after(() => {
+      void ensureWatch(userId).catch(() => {});
+      // オフライン中にまとめて追加された予定なども、復帰時にここで一括で準備リストまで作る。
+      // 対象は新規追加通知を出した予定だけ（既存予定は生成しない）。
+      if (result.newEvents.length > 0) {
+        void primeNotifiedChecklists(userId, 12).catch(() => {});
+      }
+    });
     if (changed) revalidateAppViews();
     return { changed };
   } catch (e) {
@@ -692,6 +699,21 @@ export async function attachFailureToEvent(formData: FormData): Promise<void> {
   const rawAmount = formData.get("estimatedLossYen");
   const estimatedLossYen = parseYen(rawAmount);
   const rawOutcome = String(formData.get("outcome") ?? "");
+
+  // 「今回は関係ない」= この予定では以後この内容を提案しない（記録はしない）
+  if (rawOutcome === "dismiss") {
+    const descKey = clusterKey(description);
+    if (descKey) {
+      await prisma.failureDismissal.upsert({
+        where: { eventId_descKey: { eventId, descKey } },
+        create: { userId, eventId, descKey },
+        update: {},
+      });
+    }
+    revalidateAppViews(eventId);
+    return;
+  }
+
   const outcome =
     rawOutcome === "prevented" || rawOutcome === "not_prevented"
       ? rawOutcome

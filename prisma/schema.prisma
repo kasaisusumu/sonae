@@ -28,6 +28,7 @@ model User {
   feedback       Feedback[]
   pushSubscriptions PushSubscription[]
   listTemplates  ListTemplate[]
+  failureDismissals FailureDismissal[]
 }
 
 // Web Push の購読情報（1 ユーザーが複数端末を持てる）
@@ -125,6 +126,7 @@ model Event {
   failureLogs    FailureLog[]
   feature        EventFeature?
   editRecords    EditRecord[]
+  failureDismissals FailureDismissal[]
 
   @@index([userId, recurringEventId])
 }
@@ -293,4 +295,19 @@ model ListTemplateItem {
   sortOrder         Int          @default(0)
 
   @@index([templateId])
+}
+
+// 予定ページの「失敗ログの提案」で「今回は関係ない」と却下したもの。
+// 同じ内容（正規化した説明）は、その予定では以後提案しない。
+model FailureDismissal {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  descKey   String // 正規化した説明（clusterKey）
+  createdAt DateTime @default(now())
+
+  @@unique([eventId, descKey])
+  @@index([userId])
 }

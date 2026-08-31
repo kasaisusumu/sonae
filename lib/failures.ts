@@ -74,7 +74,7 @@ function shareKeyword(a: string, b: string): boolean {
   return false;
 }
 
-function clusterKey(s: string): string {
+export function clusterKey(s: string): string {
   return s
     .toLowerCase()
     .replace(/\s+/g, "")
@@ -528,11 +528,18 @@ export async function suggestFailureLogsForEvent(
 
   const feature = featureOf(event);
 
-  const own = await prisma.failureLog.findMany({
-    where: { userId: event.userId, eventId },
-    select: { description: true },
-  });
+  const [own, dismissed] = await Promise.all([
+    prisma.failureLog.findMany({
+      where: { userId: event.userId, eventId },
+      select: { description: true },
+    }),
+    prisma.failureDismissal.findMany({
+      where: { eventId },
+      select: { descKey: true },
+    }),
+  ]);
   const ownKeys = new Set(own.map((o) => clusterKey(o.description)));
+  const dismissedKeys = new Set(dismissed.map((d) => d.descKey));
 
   const logs: LogRow[] = await prisma.failureLog.findMany({
     where: { userId: event.userId, NOT: { eventId } },
@@ -546,7 +553,7 @@ export async function suggestFailureLogsForEvent(
 
   for (const l of logs) {
     const key = clusterKey(l.description);
-    if (!key || ownKeys.has(key)) continue;
+    if (!key || ownKeys.has(key) || dismissedKeys.has(key)) continue;
 
     let score = 0.4; // ベース（うっすら全部候補）
     const reasons: string[] = [];

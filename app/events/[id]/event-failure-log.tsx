@@ -1,19 +1,16 @@
 import { prisma } from "@/lib/prisma";
 import {
-  attachFailureToEvent,
   createFailureLog,
   deleteFailureLog,
   logRepeatedFailure,
   updateFailureLog,
 } from "@/app/actions";
-import { suggestFailureLogsForEvent } from "@/lib/failures";
 import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 
 /**
- * 予定詳細ページの失敗ログ。
- * - 似た予定・同カテゴリからの「こんな失敗もあり得ます」提案（内容・金額・成功/失敗を選んで記録）
+ * 予定詳細ページの失敗ログ（提案は別コンポーネント <FailureSuggestions> がページ上部に出す）。
  * - この予定に紐づく失敗ログの一覧（その場で編集／削除）
  * - 新しく記録する
  * - その他の失敗ログから選んで紐づける
@@ -25,12 +22,11 @@ export async function EventFailureLog({
   eventId: string;
   userId: string;
 }) {
-  const [linked, suggestions, others] = await Promise.all([
+  const [linked, others] = await Promise.all([
     prisma.failureLog.findMany({
       where: { userId, eventId },
       orderBy: { occurredAt: "desc" },
     }),
-    suggestFailureLogsForEvent(eventId, 6),
     prisma.failureLog.findMany({
       where: { userId, eventId: { not: eventId } },
       orderBy: { occurredAt: "desc" },
@@ -40,103 +36,21 @@ export async function EventFailureLog({
   ]);
 
   const linkedDesc = new Set(linked.map((l) => l.description.trim()));
-  const suggestDesc = new Set(suggestions.map((s) => s.description.trim()));
   const otherCandidates = others.filter(
-    (o) =>
-      !linkedDesc.has(o.description.trim()) &&
-      !suggestDesc.has(o.description.trim()),
+    (o) => !linkedDesc.has(o.description.trim()),
   );
 
   return (
     <details
       className="rounded-2xl bg-surface p-5 [&_summary::-webkit-details-marker]:hidden"
-      open={suggestions.length > 0}
+      open={linked.length > 0}
     >
       <summary className="cursor-pointer list-none text-sm font-semibold text-muted">
         この予定の失敗ログ（{linked.length}）
-        {suggestions.length > 0 && (
-          <span className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-[11px] text-warn">
-            提案 {suggestions.length}
-          </span>
-        )}
       </summary>
       <p className="mt-2 text-xs text-muted">
         責めるためではなく、次に似た予定が来たときに先回りするためです。金額は分からなければ空でOK。
       </p>
-
-      {/* 似た予定・同カテゴリからの提案 */}
-      {suggestions.length > 0 && (
-        <div className="mt-3 space-y-2">
-          <p className="text-xs font-semibold text-warn">
-            こんな失敗もあり得ます（似た予定から）
-          </p>
-          {suggestions.map((s) => (
-            <form
-              key={s.sourceId}
-              action={attachFailureToEvent}
-              className="space-y-2 rounded-xl border border-warn/30 bg-warn-soft p-3"
-            >
-              <input type="hidden" name="eventId" value={eventId} />
-              <div className="flex flex-wrap gap-1">
-                {s.reasons.map((r) => (
-                  <span
-                    key={r}
-                    className="rounded bg-surface px-1.5 py-0.5 text-[10px] text-muted"
-                  >
-                    {r}
-                  </span>
-                ))}
-                {s.fromEventTitle && (
-                  <span className="text-[10px] text-muted">
-                    「{s.fromEventTitle}」の記録
-                  </span>
-                )}
-              </div>
-              <textarea
-                name="description"
-                required
-                rows={2}
-                defaultValue={s.description}
-                className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
-              />
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="text-xs text-muted">
-                  金額（円）
-                  <input
-                    type="number"
-                    name="estimatedLossYen"
-                    min={0}
-                    step={100}
-                    defaultValue={s.estimatedLossYen || ""}
-                    placeholder="任意"
-                    className="ml-1 w-24 rounded-md border bg-background px-2 py-1 text-sm"
-                  />
-                </label>
-                <span className="inline-flex items-center gap-2 text-xs text-muted">
-                  <label className="inline-flex items-center gap-1">
-                    <input
-                      type="radio"
-                      name="outcome"
-                      value=""
-                      defaultChecked
-                    />
-                    まだ
-                  </label>
-                  <label className="inline-flex items-center gap-1">
-                    <input type="radio" name="outcome" value="prevented" />
-                    防げた
-                  </label>
-                  <label className="inline-flex items-center gap-1">
-                    <input type="radio" name="outcome" value="not_prevented" />
-                    防げなかった
-                  </label>
-                </span>
-                <SubmitButton variant="ghost">この予定に記録</SubmitButton>
-              </div>
-            </form>
-          ))}
-        </div>
-      )}
 
       {/* 紐づく失敗ログ：その場で編集・削除 */}
       {linked.length > 0 && (

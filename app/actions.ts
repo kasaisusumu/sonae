@@ -214,6 +214,8 @@ interface SaveChecklistInput {
     notifyLeadMinutes: number | null;
   }[];
   removedTitles: string[];
+  // 「同じ内容」としてまとめられた他の予定にも同じリストを反映する（学習ページから）
+  applyToEventIds?: string[];
 }
 
 function cleanLead(v: unknown): number | null {
@@ -325,8 +327,43 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
 
   await markAutoManaged(input.eventId);
   after(() => syncEventDescription(input.eventId));
+
+  // まとめ表示された他の予定にも、同じ内容（非提案項目）をコピーする
+  const siblingIds = [...new Set(input.applyToEventIds ?? [])].filter(
+    (id) => id && id !== input.eventId,
+  );
+  if (siblingIds.length > 0) {
+    const sibs = await prisma.event.findMany({
+      where: { id: { in: siblingIds }, userId },
+      select: { id: true },
+    });
+    for (const sib of sibs) {
+      await prisma.$transaction([
+        prisma.checklistItem.deleteMany({
+          where: { eventId: sib.id, isSuggested: false, kind },
+        }),
+        prisma.checklistItem.createMany({
+          data: cleanItems.map((it, i) => ({
+            eventId: sib.id,
+            kind,
+            title: it.title,
+            timingLabel: it.timingLabel,
+            comment: it.comment,
+            isDone: it.isDone,
+            isUserAdded: it.isUserAdded,
+            notifyLeadMinutes: it.notifyLeadMinutes,
+            sortOrder: (kind === "belonging" ? 1000 : 0) + i,
+          })),
+        }),
+      ]);
+      await markAutoManaged(sib.id);
+      after(() => syncEventDescription(sib.id));
+    }
+  }
+
   revalidatePath(`/events/${input.eventId}`);
   revalidatePath("/events");
+  revalidatePath("/savings");
 }
 
 /** 提案項目を「適用」する（1タップ）。ルールの確信度を上げる。 */

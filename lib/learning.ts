@@ -345,67 +345,36 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
   }
 }
 
-// ── 「学習内容の確認」画面用: カテゴリ → 予定名の樹形図 → 予定ごとの「どのリストになるか」 ──
-
-export interface LearnedRuleView {
-  id: string;
-  itemKind: ItemKind;
-  ruleType: RuleType;
-  target: string;
-  value: string | null;
-  confidence: number;
-  effectiveConfidence: number;
-  confirmedCount: number;
-  contradictedCount: number;
-  lastConfirmedAt: Date;
-  isUserLocked: boolean;
-  forced: boolean;
-  /** このルールの署名（どの場合か）の日本語ラベル */
-  situationLabel: string;
-}
-
-export type EditChangeKind = "added" | "removed" | "retimed" | "renotified";
-
-export interface EditChangeView {
-  kind: EditChangeKind;
-  itemKind: ItemKind | null;
-  title: string;
-  detail: string | null;
-}
-
-export interface EditRecordView {
-  id: string;
-  when: Date;
-  changes: EditChangeView[];
-}
+// ── 「学習内容」画面用: カテゴリ → 予定名の樹形図 → その予定で出てくるリスト ──
+// 同じ名前・同じ内容で、時間帯や長さだけが違う予定は 1 つの葉にまとめる。
 
 export interface LeafListItem {
+  id: string;
   title: string;
   timingLabel: string | null;
-  notifyLeadMinutes: number | null;
+  comment: string | null;
+  isDone: boolean;
   isUserAdded: boolean;
+  notifyLeadMinutes: number | null;
 }
 
-/** 樹形図の葉 = 実際に学習した 1 つの予定 */
+/** 樹形図の葉 = 実際に学習した予定（内容が同じものはまとめて 1 つ） */
 export interface NameTreeLeaf {
-  eventId: string;
+  eventId: string; // 代表（最新）の予定
+  siblingEventIds: string[]; // まとめられた他の予定
+  mergedCount: number;
   title: string;
-  /** "国内・日帰り・平日・午前" など。予定の性質 */
+  /** "国内・日帰り・平日・午前" など。まとめた場合は件数表示 */
   situationLabel: string;
   keywords: string[];
-  editCount: number;
-  /** この予定名のときの「リスト」 */
   list: { task: LeafListItem[]; belonging: LeafListItem[] };
-  edits: EditRecordView[];
-  /** この予定に効いている学習ルール（署名ラベル付き） */
-  rules: LearnedRuleView[];
 }
 
 /** 樹形図の枝 = 予定名の語による分岐 */
 export interface NameTreeNode {
-  path: string; // ルートからここまでの語をつないだもの（id 生成用）
-  label: string; // この枝の語（例: "旅行"）
-  count: number; // この枝以下の予定数
+  path: string;
+  label: string;
+  count: number; // この枝以下の葉（まとめ後）の数
   children: NameTreeNode[];
   leaves: NameTreeLeaf[];
 }
@@ -414,22 +383,13 @@ export interface NameCategoryTree {
   categoryId: string;
   categoryName: string;
   eventCount: number;
-  ruleCount: number;
-  node: NameTreeNode; // 直下の children / leaves が名前の樹形図のトップ
+  node: NameTreeNode;
 }
 
 export interface LearningSearchEntry {
   eventId: string;
   title: string;
   crumb: string; // "旅行・出張 › 旅行 › ハワイ"
-}
-
-function leadMinutesLabel(m: number | null): string {
-  if (m === null) return "通知なし";
-  if (m > 0 && m % 1440 === 0) return `${m / 1440}日前`;
-  const h = Math.floor(m / 60);
-  const mm = m % 60;
-  return `${h ? `${h}時間` : ""}${mm ? `${mm}分` : ""}前`;
 }
 
 function parseKeywords(raw: string | null | undefined): string[] {
@@ -463,111 +423,17 @@ function signatureFromFeatureRow(f: FeatureRow): string {
   });
 }
 
-function ruleView(r: {
-  id: string;
-  itemKind: string;
-  ruleType: string;
-  target: string;
-  value: string | null;
-  confidence: number;
-  confirmedCount: number;
-  contradictedCount: number;
-  lastConfirmedAt: Date;
-  isUserLocked: boolean;
-  featureSignature: string;
-}): LearnedRuleView {
-  const eff = r.isUserLocked
-    ? 1
-    : r.confidence * decayMultiplier(r.lastConfirmedAt);
-  return {
-    id: r.id,
-    itemKind: r.itemKind as ItemKind,
-    ruleType: r.ruleType as RuleType,
-    target: r.target,
-    value: r.value,
-    confidence: r.confidence,
-    effectiveConfidence: Number(eff.toFixed(3)),
-    confirmedCount: r.confirmedCount,
-    contradictedCount: r.contradictedCount,
-    lastConfirmedAt: r.lastConfirmedAt,
-    isUserLocked: r.isUserLocked,
-    forced: r.isUserLocked || eff >= CONFIDENCE_THRESHOLD,
-    situationLabel: describeSignature(r.featureSignature).text,
-  };
-}
-
-function parseEditChanges(e: {
-  addedItems: string;
-  removedItems: string;
-  timingChanges: string;
-  notifyChanges: string;
-}): EditChangeView[] {
-  const out: EditChangeView[] = [];
-  try {
-    const added = JSON.parse(e.addedItems);
-    if (Array.isArray(added)) {
-      for (const a of added) {
-        if (!a?.title) continue;
-        out.push({
-          kind: "added",
-          itemKind: a.kind === "belonging" ? "belonging" : "task",
-          title: String(a.title),
-          detail: a.timingLabel ? String(a.timingLabel) : null,
-        });
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    const removed = JSON.parse(e.removedItems);
-    if (Array.isArray(removed)) {
-      for (const r of removed) {
-        if (!r) continue;
-        out.push({ kind: "removed", itemKind: null, title: String(r), detail: null });
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    const timing = JSON.parse(e.timingChanges);
-    if (timing && typeof timing === "object") {
-      for (const [title, label] of Object.entries(timing)) {
-        out.push({
-          kind: "retimed",
-          itemKind: null,
-          title,
-          detail: label == null ? null : String(label),
-        });
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  try {
-    const notify = JSON.parse(e.notifyChanges);
-    if (notify && typeof notify === "object") {
-      for (const [title, mins] of Object.entries(notify)) {
-        out.push({
-          kind: "renotified",
-          itemKind: null,
-          title,
-          detail: leadMinutesLabel(
-            mins === null || mins === undefined ? null : Number(mins),
-          ),
-        });
-      }
-    }
-  } catch {
-    /* ignore */
-  }
-  return out;
-}
-
 // ── 予定名の樹形図を組む ──────────────────────────────
 
-type RawNode = { children: Map<string, RawNode>; leaves: NameTreeLeaf[] };
+interface RawLeaf {
+  eventId: string;
+  title: string;
+  sig: string;
+  keywords: string[];
+  list: { task: LeafListItem[]; belonging: LeafListItem[] };
+}
+
+type RawNode = { children: Map<string, RawNode>; leaves: RawLeaf[] };
 
 function orderKeywords(kws: string[], freq: Map<string, number>): string[] {
   return [...kws].sort(
@@ -575,10 +441,52 @@ function orderKeywords(kws: string[], freq: Map<string, number>): string[] {
   );
 }
 
+/** リストの「内容」だけを表す文字列（完了状態やコメントは無視）。 */
+function listSignature(list: {
+  task: LeafListItem[];
+  belonging: LeafListItem[];
+}): string {
+  const one = (arr: LeafListItem[]) =>
+    arr
+      .map((i) =>
+        [norm(i.title), i.timingLabel ?? "", i.notifyLeadMinutes ?? ""].join("~"),
+      )
+      .join("|");
+  return `${one(list.task)}#${one(list.belonging)}`;
+}
+
+/** 同名・同内容（時間帯・長さ違いだけ）の葉をまとめる。 */
+function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
+  const groups = new Map<string, RawLeaf[]>();
+  for (const l of raw) {
+    const key = `${norm(l.title)}${listSignature(l.list)}`;
+    const arr = groups.get(key);
+    if (arr) arr.push(l);
+    else groups.set(key, [l]);
+  }
+  return [...groups.values()]
+    .map((g) => {
+      const rep = g[0];
+      return {
+        eventId: rep.eventId,
+        siblingEventIds: g.slice(1).map((x) => x.eventId),
+        mergedCount: g.length,
+        title: rep.title,
+        situationLabel:
+          g.length > 1
+            ? `同じ内容 ${g.length}件（時間帯・長さ違い）`
+            : describeSignature(rep.sig).text,
+        keywords: rep.keywords,
+        list: rep.list,
+      } satisfies NameTreeLeaf;
+    })
+    .sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
+}
+
 function toNode(raw: RawNode, label: string, parentPath: string): NameTreeNode {
   const path = parentPath ? `${parentPath}/${label}` : label;
   let children = [...raw.children.entries()].map(([k, v]) => toNode(v, k, path));
-  let leaves = raw.leaves;
+  let leaves = mergeLeaves(raw.leaves);
 
   // 1 子・0 葉 の連なりは畳んでラベルをつなぐ（"旅行" ▸ "ハワイ" → "旅行・ハワイ"）
   let mergedLabel = label;
@@ -590,11 +498,24 @@ function toNode(raw: RawNode, label: string, parentPath: string): NameTreeNode {
   }
 
   children.sort((a, b) => b.count - a.count || (a.label < b.label ? -1 : 1));
-  leaves = [...leaves].sort((a, b) => (a.title < b.title ? -1 : 1));
-
-  const count =
-    leaves.length + children.reduce((s, c) => s + c.count, 0);
+  const count = leaves.length + children.reduce((s, c) => s + c.count, 0);
   return { path, label: mergedLabel, count, children, leaves };
+}
+
+function collectSearch(
+  node: NameTreeNode,
+  crumbParts: string[],
+  acc: LearningSearchEntry[],
+): void {
+  const parts = [...crumbParts, node.label];
+  for (const leaf of node.leaves) {
+    acc.push({
+      eventId: leaf.eventId,
+      title: leaf.title,
+      crumb: parts.join(" › "),
+    });
+  }
+  for (const child of node.children) collectSearch(child, parts, acc);
 }
 
 export async function getLearningNameTree(userId: string): Promise<{
@@ -605,16 +526,10 @@ export async function getLearningNameTree(userId: string): Promise<{
     where: { userId },
     orderBy: { createdAt: "asc" },
     include: {
-      learnedRules: true,
       events: {
-        where: {
-          OR: [
-            { checklistItems: { some: { isSuggested: false } } },
-            { editRecords: { some: {} } },
-          ],
-        },
+        where: { checklistItems: { some: { isSuggested: false } } },
         orderBy: { eventDatetime: "desc" },
-        take: 300,
+        take: 400,
         select: {
           id: true,
           title: true,
@@ -631,22 +546,14 @@ export async function getLearningNameTree(userId: string): Promise<{
             where: { isSuggested: false },
             orderBy: { sortOrder: "asc" },
             select: {
+              id: true,
               kind: true,
               title: true,
               timingLabel: true,
+              comment: true,
+              isDone: true,
               notifyLeadMinutes: true,
               isUserAdded: true,
-            },
-          },
-          editRecords: {
-            orderBy: { createdAt: "desc" },
-            select: {
-              id: true,
-              createdAt: true,
-              addedItems: true,
-              removedItems: true,
-              timingChanges: true,
-              notifyChanges: true,
             },
           },
         },
@@ -659,7 +566,6 @@ export async function getLearningNameTree(userId: string): Promise<{
   const out: NameCategoryTree[] = categories
     .filter((c) => c.events.length > 0)
     .map((c) => {
-      // このカテゴリの予定のキーワード頻度
       const freq = new Map<string, number>();
       const evKw = new Map<string, string[]>();
       for (const ev of c.events) {
@@ -671,48 +577,37 @@ export async function getLearningNameTree(userId: string): Promise<{
       const root: RawNode = { children: new Map(), leaves: [] };
 
       for (const ev of c.events) {
-        const sig = signatureFromFeatureRow(ev.feature ?? null);
-        const feat = featureFromRow(ev.feature ?? null);
-        // この予定の特徴に当てはまる学習ルール（署名不問で当たるものを全部）
-        const applied = c.learnedRules
-          .filter((lr) => signatureMatches(lr.featureSignature, feat))
-          .map(ruleView)
-          .sort(
-            (a, b) =>
-              Number(b.forced) - Number(a.forced) ||
-              b.effectiveConfidence - a.effectiveConfidence,
-          );
+        const toItem = (i: {
+          id: string;
+          title: string;
+          timingLabel: string | null;
+          comment: string | null;
+          isDone: boolean;
+          isUserAdded: boolean;
+          notifyLeadMinutes: number | null;
+        }): LeafListItem => ({
+          id: i.id,
+          title: i.title,
+          timingLabel: i.timingLabel,
+          comment: i.comment,
+          isDone: i.isDone,
+          isUserAdded: i.isUserAdded,
+          notifyLeadMinutes: i.notifyLeadMinutes,
+        });
 
-        const leaf: NameTreeLeaf = {
+        const rawLeaf: RawLeaf = {
           eventId: ev.id,
           title: ev.title,
-          situationLabel: describeSignature(sig).text,
+          sig: signatureFromFeatureRow(ev.feature ?? null),
           keywords: evKw.get(ev.id) ?? [],
-          editCount: ev.editRecords.length,
           list: {
             task: ev.checklistItems
               .filter((i) => i.kind !== "belonging")
-              .map((i) => ({
-                title: i.title,
-                timingLabel: i.timingLabel,
-                notifyLeadMinutes: i.notifyLeadMinutes,
-                isUserAdded: i.isUserAdded,
-              })),
+              .map(toItem),
             belonging: ev.checklistItems
               .filter((i) => i.kind === "belonging")
-              .map((i) => ({
-                title: i.title,
-                timingLabel: i.timingLabel,
-                notifyLeadMinutes: i.notifyLeadMinutes,
-                isUserAdded: i.isUserAdded,
-              })),
+              .map(toItem),
           },
-          edits: ev.editRecords.map((e) => ({
-            id: e.id,
-            when: e.createdAt,
-            changes: parseEditChanges(e),
-          })),
-          rules: applied,
         };
 
         const path = orderKeywords(evKw.get(ev.id) ?? [], freq);
@@ -723,38 +618,21 @@ export async function getLearningNameTree(userId: string): Promise<{
           }
           cur = cur.children.get(k)!;
         }
-        cur.leaves.push(leaf);
-
-        searchIndex.push({
-          eventId: ev.id,
-          title: ev.title,
-          crumb: [c.name, ...path].join(" › "),
-        });
+        cur.leaves.push(rawLeaf);
       }
 
       const node = toNode(root, "", "");
       node.label = c.name;
       node.path = c.id;
+      collectSearch(node, [], searchIndex);
 
       return {
         categoryId: c.id,
         categoryName: c.name,
         eventCount: c.events.length,
-        ruleCount: c.learnedRules.length,
         node,
       };
     });
 
   return { categories: out, searchIndex };
-}
-
-/** 保存済み EventFeature 行を EventFeatureData に戻す（署名照合用。keywords は不要）。 */
-function featureFromRow(f: FeatureRow): EventFeatureData {
-  return {
-    isOverseas: f?.isOverseas ?? null,
-    durationNights: f?.durationNights ?? null,
-    isWeekday: f?.isWeekday ?? true,
-    timeBucket: (f?.timeBucket ?? "allday") as TimeBucket,
-    keywords: [],
-  };
 }

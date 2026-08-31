@@ -2,12 +2,12 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import {
   getLearningNameTree,
-  type LeafListItem,
   type NameTreeLeaf,
   type NameTreeNode,
 } from "@/lib/learning";
-import { leadLabel } from "@/lib/notify-items";
+import { ChecklistEditor } from "@/app/events/[id]/checklist-editor";
 import { LearningSearch } from "./learning-search";
+import { LazyLeaf } from "./lazy-leaf";
 
 function Keywords({ words }: { words: string[] }) {
   if (words.length === 0) return null;
@@ -25,62 +25,62 @@ function Keywords({ words }: { words: string[] }) {
   );
 }
 
-function ListLine({ it }: { it: LeafListItem }) {
-  const bits: string[] = [];
-  if (it.timingLabel) bits.push(it.timingLabel);
-  if (it.notifyLeadMinutes != null)
-    bits.push(`🔔${leadLabel(it.notifyLeadMinutes)}`);
-  return (
-    <li className="text-xs">
-      {it.title}
-      {bits.length > 0 && (
-        <span className="text-muted">（{bits.join(" ・ ")}）</span>
-      )}
-      {it.isUserAdded && <span className="ml-1 text-teal-dark">＋追加</span>}
-    </li>
-  );
-}
-
 function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
-  return (
-    <details
-      id={`ev-${leaf.eventId}`}
-      className="scroll-mt-24 rounded-lg bg-surface p-2 transition-shadow"
-    >
-      <summary className="cursor-pointer text-xs font-medium">
-        {leaf.title}
-        <span className="ml-1 font-normal text-muted">{leaf.situationLabel}</span>
-        <Keywords words={leaf.keywords} />
-      </summary>
+  const initial = (kind: "task" | "belonging") =>
+    leaf.list[kind].map((it) => ({
+      id: it.id,
+      title: it.title,
+      timingLabel: it.timingLabel,
+      comment: it.comment,
+      isDone: it.isDone,
+      isUserAdded: it.isUserAdded,
+      notifyLeadMinutes: it.notifyLeadMinutes,
+    }));
+  const keyOf = (kind: "task" | "belonging") =>
+    `${leaf.eventId}-${kind}-${leaf.list[kind].map((i) => i.title).join("")}`;
+  const siblings = leaf.siblingEventIds;
 
-      <div className="mt-2 grid gap-2 border-l border-border pl-3 sm:grid-cols-2">
-        <div>
-          <p className="text-[11px] font-semibold text-teal-dark">準備すること</p>
-          <ul className="mt-0.5 space-y-0.5">
-            {leaf.list.task.length === 0 ? (
-              <li className="text-[11px] text-muted">（なし）</li>
-            ) : (
-              leaf.list.task.map((it, i) => <ListLine key={i} it={it} />)
-            )}
-          </ul>
-        </div>
-        <div>
-          <p className="text-[11px] font-semibold text-teal-dark">持ち物</p>
-          <ul className="mt-0.5 space-y-0.5">
-            {leaf.list.belonging.length === 0 ? (
-              <li className="text-[11px] text-muted">（なし）</li>
-            ) : (
-              leaf.list.belonging.map((it, i) => <ListLine key={i} it={it} />)
-            )}
-          </ul>
-        </div>
-      </div>
-    </details>
+  return (
+    <LazyLeaf
+      id={`ev-${leaf.eventId}`}
+      summary={
+        <>
+          {leaf.title}
+          <span className="ml-1 font-normal text-muted">
+            {leaf.situationLabel}
+          </span>
+          <Keywords words={leaf.keywords} />
+        </>
+      }
+    >
+      {siblings.length > 0 && (
+        <p className="mb-2 text-[11px] text-muted">
+          時間帯・長さ違いで {leaf.mergedCount} 件をまとめています。ここでの編集は
+          その全部に反映されます。
+        </p>
+      )}
+      <p className="text-[11px] font-semibold text-teal-dark">準備すること</p>
+      <ChecklistEditor
+        key={keyOf("task")}
+        eventId={leaf.eventId}
+        kind="task"
+        initialItems={initial("task")}
+        applyToEventIds={siblings}
+      />
+      <p className="mt-3 text-[11px] font-semibold text-teal-dark">持ち物</p>
+      <ChecklistEditor
+        key={keyOf("belonging")}
+        eventId={leaf.eventId}
+        kind="belonging"
+        initialItems={initial("belonging")}
+        applyToEventIds={siblings}
+      />
+    </LazyLeaf>
   );
 }
 
 function NameBranch({ node }: { node: NameTreeNode }) {
-  if (node.count === 1 && node.leaves.length === 1) {
+  if (node.children.length === 0 && node.leaves.length === 1) {
     return <EventLeaf leaf={node.leaves[0]} />;
   }
   return (
@@ -115,8 +115,9 @@ export default async function LearningTreePage() {
         <h1 className="text-xl font-semibold">学習内容</h1>
         <p className="mt-1 text-sm text-muted">
           <strong>カテゴリ → 予定名（語で枝分かれ）→ その予定</strong>
-          をたどると、その予定でこれから出てくる準備リスト・持ち物が見られます。
-          使うほど、あなたに合ったリストに育ちます。上の検索バーに予定名を入れると、その枝へ飛べます。
+          をたどると、その予定で出てくる準備リスト・持ち物が見られます。
+          ここでそのまま編集でき、編集は学習にも反映されます。同じ名前で同じ内容の予定
+          （時間帯や長さだけ違うもの）は 1 つにまとめて表示します。上の検索バーに予定名を入れると、その枝へ飛べます。
         </p>
       </div>
 
@@ -139,7 +140,7 @@ export default async function LearningTreePage() {
                 <summary className="cursor-pointer text-base font-semibold">
                   {cat.categoryName}
                   <span className="ml-2 text-xs font-normal text-muted">
-                    予定 {cat.eventCount}件
+                    {cat.node.count}件
                   </span>
                 </summary>
                 <div className="mt-3 space-y-1.5 border-l border-border pl-3">

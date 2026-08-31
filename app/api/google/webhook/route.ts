@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { syncAndNotify } from "@/lib/sync";
+import { syncAndNotify, refineFallbackCategories } from "@/lib/sync";
+import { primeNotifiedChecklists } from "@/lib/checklist";
 import { verifyWatchToken } from "@/lib/google";
 
 export const runtime = "nodejs";
@@ -34,17 +36,31 @@ export async function POST(req: NextRequest) {
     return new NextResponse(null, { status: 200 });
   }
 
+  const userId = account.userId;
   try {
-    const result = await syncAndNotify(account.userId, { generateBudget: 3 });
+    // 通知だけ最速で出す。カテゴリの AI 判定・準備リスト生成・説明欄書き込みは後回し。
+    const result = await syncAndNotify(userId, {
+      deferGeneration: true,
+      skipAiCategory: true,
+    });
+
+    after(async () => {
+      try {
+        await refineFallbackCategories(userId);
+        await primeNotifiedChecklists(userId, 6);
+      } catch (e) {
+        console.error("[google/webhook] 後処理に失敗 userId=%s", userId, e);
+      }
+    });
+
     return NextResponse.json({
       ok: true,
       new: result.newEvents.length,
       updated: result.updatedCount,
       deleted: result.deletedCount,
-      generated: result.generated,
     });
   } catch (e) {
-    console.error("[google/webhook] 同期に失敗 userId=%s", account.userId, e);
+    console.error("[google/webhook] 同期に失敗 userId=%s", userId, e);
     // 500 を返すと Google がリトライする
     return new NextResponse("sync failed", { status: 500 });
   }

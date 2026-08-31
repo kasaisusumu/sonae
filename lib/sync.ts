@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { resolveCategoryForEvent } from "@/lib/categories";
+import { resolveCategoryForEvent, FALLBACK_CATEGORY } from "@/lib/categories";
 import {
   fetchCalendarChanges,
   getCalendarClient,
@@ -32,7 +32,10 @@ const AI_CATEGORY_BUDGET = 12;
  * 1 ユーザーの Google カレンダーを取り込む（差分同期）。
  * 繰り返し予定が一気に大量に来ても、系列ごと・全体で件数を絞ってバグらないようにする。
  */
-export async function syncUserCalendar(userId: string): Promise<SyncResult> {
+export async function syncUserCalendar(
+  userId: string,
+  opts: { skipAiCategory?: boolean } = {},
+): Promise<SyncResult> {
   const account = await prisma.userGoogleAccount.findUnique({ where: { userId } });
   if (!account) throw new Error("Google アカウントが未接続です。");
 
@@ -122,14 +125,16 @@ export async function syncUserCalendar(userId: string): Promise<SyncResult> {
       seriesCount.set(ev.recurringEventId, c + 1);
     }
 
-    // 初回は AI カテゴリ判定を使わない（キーワードのみ・高速）
+    // 初回 or fast path は AI カテゴリ判定を使わない（キーワードのみ・高速）。
+    // 通知を早く出すため、webhook では skipAiCategory=true。後で refine する。
+    const useAi = !isFirstSync && !opts.skipAiCategory && aiBudget > 0;
     const category = await resolveCategoryForEvent(
       userId,
       ev.title,
       ev.description,
-      !isFirstSync && aiBudget > 0,
+      useAi,
     );
-    if (!isFirstSync && aiBudget > 0) aiBudget--;
+    if (useAi) aiBudget--;
     try {
       const created = await prisma.event.create({
         data: {
@@ -237,34 +242,53 @@ export async function refreshEventFromGoogle(eventId: string): Promise<void> {
   }
 }
 
-/**
- * 同期 → 新規予定の準備リストを先行生成（説明欄にも反映）→ 即プッシュ通知。
- * アプリを開かなくても成り立つための中心処理。
- * 繰り返し予定は「系列ごとに1回だけ」通知する。初回同期では通知しない。
- */
-export async function syncAndNotify(
+/** 直近に取り込んで「その他」に落ちた Google 予定を、AI で本来のカテゴリに振り直す。 */
+export async function refineFallbackCategories(
   userId: string,
-  opts?: { generateBudget?: number },
-): Promise<SyncResult & { generated: number }> {
-  const result = await syncUserCalendar(userId);
-  if (result.isFirstSync) return { ...result, generated: 0 };
+  limit = 8,
+): Promise<number> {
+  const since = new Date(Date.now() - 15 * 60_000);
+  const targets = await prisma.event.findMany({
+    where: {
+      userId,
+      source: "google",
+      autoManaged: true,
+      createdAt: { gte: since },
+      category: { name: FALLBACK_CATEGORY },
+    },
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: { id: true, title: true, memo: true },
+  });
+  let n = 0;
+  for (const ev of targets) {
+    try {
+      const cat = await resolveCategoryForEvent(userId, ev.title, ev.memo, true);
+      if (cat.name !== FALLBACK_CATEGORY) {
+        await prisma.event.update({
+          where: { id: ev.id },
+          data: { categoryId: cat.id },
+        });
+        n++;
+      }
+    } catch (e) {
+      console.error("[refineFallbackCategories] eventId=%s", ev.id, e);
+    }
+  }
+  return n;
+}
 
-  // 通知の前に、準備リストを用意して説明欄へ反映（新規＋積み残し、上限つき）
-  const generated = await primeNotifiedChecklists(
-    userId,
-    opts?.generateBudget ?? 3,
-  );
-
-  if (result.newEvents.length === 0) return { ...result, generated };
-
-  // 系列は最も近い1件だけ通知対象にする
-  const notifiable: SyncResult["newEvents"] = [];
+/** result.newEvents から、実際に通知すべきもの（系列は代表1件・未通知）を選ぶ。 */
+async function pickNotifiable(
+  userId: string,
+  newEvents: SyncResult["newEvents"],
+): Promise<SyncResult["newEvents"]> {
+  const out: SyncResult["newEvents"] = [];
   const seenSeries = new Set<string>();
-  for (const ev of result.newEvents) {
+  for (const ev of newEvents) {
     if (ev.recurringEventId) {
       if (seenSeries.has(ev.recurringEventId)) continue;
       seenSeries.add(ev.recurringEventId);
-      // 既に同系列で通知済みインスタンスがあればスキップ
       const already = await prisma.event.findFirst({
         where: {
           userId,
@@ -275,24 +299,58 @@ export async function syncAndNotify(
       });
       if (already) continue;
     }
-    notifiable.push(ev);
+    out.push(ev);
+  }
+  return out;
+}
+
+/**
+ * 同期 →（まず）新規予定を即プッシュ通知 → 準備リスト生成＋説明欄反映。
+ * アプリを開かなくても成り立つための中心処理。
+ * 繰り返し予定は「系列ごとに1回だけ」通知する。初回同期では通知しない。
+ *
+ * - deferGeneration: true なら生成・説明欄反映はしない（呼び出し側が after() で回す）。
+ *   通知を最速で出すための webhook 用。
+ * - skipAiCategory: true なら取り込み時の AI カテゴリ判定を省く（keyword のみ）。
+ */
+export async function syncAndNotify(
+  userId: string,
+  opts?: {
+    generateBudget?: number;
+    deferGeneration?: boolean;
+    skipAiCategory?: boolean;
+  },
+): Promise<SyncResult & { generated: number }> {
+  const result = await syncUserCalendar(userId, {
+    skipAiCategory: opts?.skipAiCategory,
+  });
+  if (result.isFirstSync) return { ...result, generated: 0 };
+
+  // まず通知（生成を待たない）。
+  if (result.newEvents.length > 0) {
+    const notifiable = await pickNotifiable(userId, result.newEvents);
+    for (const ev of notifiable) {
+      const isSeries = Boolean(ev.recurringEventId);
+      await sendPushToUser(userId, {
+        title: isSeries
+          ? "繰り返しの予定が追加されました"
+          : "新しい予定が追加されました",
+        body: `「${ev.title}」を追加しました。準備リストを用意します`,
+        url: `/events/${ev.id}`,
+        tag: isSeries ? `series-${ev.recurringEventId}` : `event-${ev.id}`,
+      });
+      await prisma.event.update({
+        where: { id: ev.id },
+        data: { notifiedAt: new Date() },
+      });
+    }
   }
 
-  for (const ev of notifiable) {
-    const isSeries = Boolean(ev.recurringEventId);
-    await sendPushToUser(userId, {
-      title: isSeries
-        ? "繰り返しの予定が追加されました"
-        : "新しい予定が追加されました",
-      body: `「${ev.title}」の準備リストを用意しました`,
-      url: `/events/${ev.id}`,
-      tag: isSeries ? `series-${ev.recurringEventId}` : `event-${ev.id}`,
-    });
-    await prisma.event.update({
-      where: { id: ev.id },
-      data: { notifiedAt: new Date() },
-    });
-  }
+  if (opts?.deferGeneration) return { ...result, generated: 0 };
 
+  const generated = await primeNotifiedChecklists(
+    userId,
+    opts?.generateBudget ?? 3,
+  );
   return { ...result, generated };
 }

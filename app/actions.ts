@@ -551,14 +551,18 @@ export async function deleteFailureLog(formData: FormData): Promise<void> {
 }
 
 /**
- * 振り返り画面から、失敗ログ 1 件を「防げた / まだ」に切り替える。
- * 「防げた」→ その失敗の推定損失額を 1 回だけ節約に計上（予定に紐づいていればその予定で）。
- * 「まだ」→ その失敗ログの計上をすべて取り消す。
+ * 失敗ログ 1 件の振り返り結果を切り替える。
+ *   "prevented"     … 防げた → 推定損失額を 1 回だけ節約に計上。ダッシュボードに残る。
+ *   "not_prevented" … 防げなかった → 計上は取り消し。ダッシュボードには出さない。
+ *   "unset"         … 未選択に戻す → 計上取り消し。失敗ログ一覧で選び直す。
+ * 同じボタンをもう一度押したら "unset"（トグル）。
  */
-export async function setFailureOvercome(formData: FormData): Promise<void> {
+export async function setFailureOutcome(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const failureLogId = String(formData.get("failureLogId") ?? "");
-  const overcome = String(formData.get("overcome") ?? "") === "1";
+  const raw = String(formData.get("outcome") ?? "");
+  const outcome =
+    raw === "prevented" || raw === "not_prevented" ? raw : "unset";
   if (!failureLogId) return;
 
   const log = await prisma.failureLog.findFirst({
@@ -567,7 +571,7 @@ export async function setFailureOvercome(formData: FormData): Promise<void> {
   });
   if (!log) return;
 
-  if (overcome) {
+  if (outcome === "prevented") {
     const existing = await prisma.savingsEntry.findFirst({
       where: { userId, failureLogId },
       select: { id: true },
@@ -583,11 +587,20 @@ export async function setFailureOvercome(formData: FormData): Promise<void> {
         },
       });
     }
+    await prisma.failureLog.update({
+      where: { id: failureLogId },
+      data: { outcome: "prevented" },
+    });
   } else {
     await prisma.savingsEntry.deleteMany({ where: { userId, failureLogId } });
+    await prisma.failureLog.update({
+      where: { id: failureLogId },
+      data: { outcome: outcome === "not_prevented" ? "not_prevented" : null },
+    });
   }
 
   revalidatePath("/savings");
+  revalidatePath("/failures");
   revalidatePath("/");
   if (log.eventId) revalidatePath("/events/[id]", "page");
 }
@@ -657,13 +670,19 @@ export async function markPrevented(formData: FormData): Promise<void> {
       confirmedByUser: true,
     },
   });
+  await prisma.failureLog.updateMany({
+    where: { id: failureLogId, outcome: { not: "not_prevented" } },
+    data: { outcome: "prevented" },
+  });
 
   revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events/[id]", "page");
   revalidatePath("/savings");
+  revalidatePath("/failures");
   revalidatePath("/");
 }
 
-/** 「防げた」の計上を取り消す。 */
+/** 「防げた」の計上を取り消す。他に計上が残っていなければ振り返り結果も未選択に戻す。 */
 export async function undoPrevented(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const eventId = String(formData.get("eventId") ?? "");
@@ -671,8 +690,19 @@ export async function undoPrevented(formData: FormData): Promise<void> {
   await prisma.savingsEntry.deleteMany({
     where: { userId, eventId, failureLogId },
   });
+  const remaining = await prisma.savingsEntry.count({
+    where: { userId, failureLogId },
+  });
+  if (remaining === 0) {
+    await prisma.failureLog.updateMany({
+      where: { id: failureLogId, outcome: "prevented" },
+      data: { outcome: null },
+    });
+  }
   revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events/[id]", "page");
   revalidatePath("/savings");
+  revalidatePath("/failures");
   revalidatePath("/");
 }
 

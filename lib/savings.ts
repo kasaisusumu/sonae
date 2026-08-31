@@ -60,12 +60,12 @@ export interface FailureRetro {
   byCategory: FailureRetroCategory[];
 }
 
-/** 節約ダッシュボードで、これまで溜まった失敗ログをカテゴリごとに振り返る。 */
+/** 節約ダッシュボード用: 「防げた」と振り返った失敗ログだけをカテゴリごとにまとめる。 */
 export async function getFailureRetrospective(
   userId: string,
 ): Promise<FailureRetro> {
   const logs = await prisma.failureLog.findMany({
-    where: { userId },
+    where: { userId, outcome: "prevented" },
     orderBy: { occurredAt: "desc" },
     include: {
       category: true,

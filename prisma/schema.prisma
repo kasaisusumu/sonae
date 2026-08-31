@@ -217,6 +217,9 @@ model FailureLog {
   featureSignature String   @default("{}")
   // 推定損失額（円・任意。0 のままでもよい）
   estimatedLossYen Int      @default(0)
+  // 振り返りの結果: null = 未選択 / "prevented" = 防げた / "not_prevented" = 防げなかった
+  // ダッシュボードには "prevented" のものだけ残す。未選択は失敗ログ一覧で選ぶ。
+  outcome          String?
   occurredAt       DateTime @default(now())
   createdAt        DateTime @default(now())
 

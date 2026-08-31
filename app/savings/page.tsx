@@ -3,8 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { getSavingsSummary, getFailureRetrospective } from "@/lib/savings";
 import { formatYen } from "@/lib/format";
-import { setFailureOvercome } from "@/app/actions";
-import { SubmitButton } from "@/app/components/submit-button";
+import { setFailureOutcome } from "@/app/actions";
 
 export default async function SavingsPage() {
   const user = await getCurrentUser();
@@ -148,7 +147,7 @@ export default async function SavingsPage() {
         <section className="rounded-2xl bg-surface p-5">
           <div className="flex items-baseline justify-between gap-3">
             <h2 className="text-sm font-semibold text-muted">
-              これまでの失敗ログの振り返り
+              防げた失敗（カテゴリ別）
             </h2>
             <Link
               href="/failures"
@@ -158,21 +157,16 @@ export default async function SavingsPage() {
             </Link>
           </div>
           <p className="mt-1 text-xs text-muted">
-            責めるためではありません。溜まった記録を見返して、次に先回りするための場所です。
+            「防げた」と振り返った記録だけを集めています。未選択のものは
+            <Link href="/failures" className="underline">
+              失敗ログ
+            </Link>
+            で「防げた／防げなかった」を選べます。
           </p>
           <p className="mt-3 text-sm">
-            合計 <strong>{retro.totalCount}件</strong>
+            防げた <strong>{retro.totalCount}件</strong>
             {retro.totalEstimatedLossYen > 0 && (
-              <>
-                {" "}
-                ・ 推定損失の累計 {formatYen(retro.totalEstimatedLossYen)}
-              </>
-            )}
-            {retro.preventedTotal > 0 && (
-              <>
-                {" "}
-                ・ うち「防げた」{retro.preventedTotal}回
-              </>
+              <> ・ 推定損失の回避 累計 {formatYen(retro.totalEstimatedLossYen)}</>
             )}
           </p>
 
@@ -193,30 +187,40 @@ export default async function SavingsPage() {
                   </span>
                 </summary>
                 <ul className="mt-2 divide-y divide-border">
-                  {c.items.slice(0, 8).map((it) => {
-                    const overcome = it.preventedTimes > 0;
-                    return (
-                      <li key={it.id} className="py-2">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="whitespace-pre-wrap text-sm">
-                              {it.description}
-                            </p>
-                            <p className="text-[11px] text-muted">
-                              {it.occurredAt.toLocaleDateString("ja-JP")}
-                              {it.eventTitle ? ` ・ 「${it.eventTitle}」` : ""}
-                            </p>
-                          </div>
-                          {it.estimatedLossYen > 0 && (
-                            <span className="shrink-0 text-xs text-muted tabular-nums">
-                              {formatYen(it.estimatedLossYen)}
-                            </span>
-                          )}
+                  {c.items.slice(0, 8).map((it) => (
+                    <li key={it.id} className="py-2">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="whitespace-pre-wrap text-sm">
+                            {it.description}
+                          </p>
+                          <p className="text-[11px] text-muted">
+                            {it.occurredAt.toLocaleDateString("ja-JP")}
+                            {it.eventTitle ? ` ・ 「${it.eventTitle}」` : ""}
+                          </p>
                         </div>
-                        <form
-                          action={setFailureOvercome}
-                          className="mt-1.5 flex items-center gap-2"
-                        >
+                        <span className="shrink-0 text-xs text-teal-dark tabular-nums">
+                          {it.estimatedLossYen > 0
+                            ? formatYen(it.estimatedLossYen)
+                            : "±0"}
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-3 text-[11px]">
+                        <form action={setFailureOutcome}>
+                          <input
+                            type="hidden"
+                            name="failureLogId"
+                            value={it.id}
+                          />
+                          <input type="hidden" name="outcome" value="unset" />
+                          <button
+                            type="submit"
+                            className="text-muted underline hover:text-foreground"
+                          >
+                            取り消す（未選択に戻す）
+                          </button>
+                        </form>
+                        <form action={setFailureOutcome}>
                           <input
                             type="hidden"
                             name="failureLogId"
@@ -224,33 +228,19 @@ export default async function SavingsPage() {
                           />
                           <input
                             type="hidden"
-                            name="overcome"
-                            value={overcome ? "0" : "1"}
+                            name="outcome"
+                            value="not_prevented"
                           />
-                          {overcome ? (
-                            <>
-                              <span className="text-[11px] text-teal-dark">
-                                ✓ 防げたに計上済み
-                                {it.estimatedLossYen > 0
-                                  ? `（${formatYen(it.estimatedLossYen)}）`
-                                  : ""}
-                              </span>
-                              <button
-                                type="submit"
-                                className="text-[11px] text-muted underline hover:text-foreground"
-                              >
-                                取り消す
-                              </button>
-                            </>
-                          ) : (
-                            <SubmitButton variant="ghost">
-                              これは防げた
-                            </SubmitButton>
-                          )}
+                          <button
+                            type="submit"
+                            className="text-muted underline hover:text-warn"
+                          >
+                            防げなかったに変更
+                          </button>
                         </form>
-                      </li>
-                    );
-                  })}
+                      </div>
+                    </li>
+                  ))}
                 </ul>
                 {c.items.length > 8 && (
                   <p className="mt-2 text-[11px] text-muted">

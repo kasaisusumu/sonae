@@ -105,15 +105,18 @@ export async function primeNotifiedChecklists(
     select: { id: true },
   });
 
-  let n = 0;
-  for (const t of targets) {
-    try {
-      await generateAndSaveChecklist(t.id);
-      await syncEventDescription(t.id);
-      n++;
-    } catch (e) {
-      console.error("[prime] 生成失敗 eventId=%s", t.id, e);
-    }
-  }
-  return n;
+  // まとめて並列生成（各件は OpenAI 呼び出し＋Google 書き込みで待ちが長いため）
+  const results = await Promise.all(
+    targets.map(async (t) => {
+      try {
+        await generateAndSaveChecklist(t.id);
+        await syncEventDescription(t.id);
+        return 1 as number;
+      } catch (e) {
+        console.error("[prime] 生成失敗 eventId=%s", t.id, e);
+        return 0 as number;
+      }
+    }),
+  );
+  return results.reduce((a, b) => a + b, 0);
 }

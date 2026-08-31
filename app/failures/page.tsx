@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { createFailureLog, deleteFailureLog } from "@/app/actions";
+import {
+  createFailureLog,
+  deleteFailureLog,
+  setFailureOutcome,
+} from "@/app/actions";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
 import { formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
@@ -10,6 +14,95 @@ function todayValue(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+type LogRow = {
+  id: string;
+  description: string;
+  occurredAt: Date;
+  estimatedLossYen: number;
+  outcome: string | null;
+  category: { name: string } | null;
+  event: { title: string } | null;
+};
+
+function OutcomeButton({
+  logId,
+  target,
+  active,
+  label,
+  tone,
+}: {
+  logId: string;
+  target: "prevented" | "not_prevented";
+  active: boolean;
+  label: string;
+  tone: "teal" | "warn";
+}) {
+  const base = "rounded-full px-3 py-1 text-xs transition-colors";
+  const cls = active
+    ? tone === "teal"
+      ? "bg-teal text-white"
+      : "bg-warn text-white"
+    : "border border-border text-muted hover:border-foreground/40";
+  return (
+    <form action={setFailureOutcome}>
+      <input type="hidden" name="failureLogId" value={logId} />
+      <input
+        type="hidden"
+        name="outcome"
+        value={active ? "unset" : target}
+      />
+      <button type="submit" className={`${base} ${cls}`}>
+        {active ? `✓ ${label}` : label}
+      </button>
+    </form>
+  );
+}
+
+function FailureRow({ log: l }: { log: LogRow }) {
+  return (
+    <li className="rounded-xl bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="whitespace-pre-wrap text-sm">{l.description}</p>
+          <p className="mt-1 text-xs text-muted">
+            {l.occurredAt.toLocaleDateString("ja-JP")}
+            {l.category ? ` ・ ${l.category.name}` : " ・ カテゴリなし"}
+            {l.event ? ` ・ 「${l.event.title}」` : ""}
+            {l.estimatedLossYen > 0
+              ? ` ・ 推定 ${formatYen(l.estimatedLossYen)}`
+              : ""}
+          </p>
+        </div>
+        <form action={deleteFailureLog}>
+          <input type="hidden" name="id" value={l.id} />
+          <button
+            type="submit"
+            className="shrink-0 rounded px-2 py-1 text-xs text-muted hover:bg-warn-soft hover:text-warn"
+          >
+            削除
+          </button>
+        </form>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <OutcomeButton
+          logId={l.id}
+          target="prevented"
+          active={l.outcome === "prevented"}
+          label="防げた"
+          tone="teal"
+        />
+        <OutcomeButton
+          logId={l.id}
+          target="not_prevented"
+          active={l.outcome === "not_prevented"}
+          label="防げなかった"
+          tone="warn"
+        />
+      </div>
+    </li>
+  );
 }
 
 export default async function FailuresPage() {
@@ -39,6 +132,8 @@ export default async function FailuresPage() {
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
   );
   const total = logs.reduce((s, l) => s + l.estimatedLossYen, 0);
+  const unreviewed = logs.filter((l) => !l.outcome);
+  const reviewed = logs.filter((l) => l.outcome);
 
   return (
     <div className="space-y-8">
@@ -135,35 +230,41 @@ export default async function FailuresPage() {
             まだ記録はありません。
           </p>
         ) : (
-          <ul className="space-y-2">
-            {logs.map((l) => (
-              <li
-                key={l.id}
-                className="flex items-start justify-between gap-3 rounded-xl bg-surface p-4"
-              >
-                <div className="min-w-0">
-                  <p className="whitespace-pre-wrap text-sm">{l.description}</p>
-                  <p className="mt-1 text-xs text-muted">
-                    {l.occurredAt.toLocaleDateString("ja-JP")}
-                    {l.category ? ` ・ ${l.category.name}` : " ・ カテゴリなし"}
-                    {l.event ? ` ・ 「${l.event.title}」` : ""}
-                    {l.estimatedLossYen > 0
-                      ? ` ・ 推定 ${formatYen(l.estimatedLossYen)}`
-                      : ""}
-                  </p>
-                </div>
-                <form action={deleteFailureLog}>
-                  <input type="hidden" name="id" value={l.id} />
-                  <button
-                    type="submit"
-                    className="shrink-0 rounded px-2 py-1 text-xs text-muted hover:bg-warn-soft hover:text-warn"
-                  >
-                    削除
-                  </button>
-                </form>
-              </li>
-            ))}
-          </ul>
+          <>
+            <p className="text-xs text-muted">
+              各記録について「防げた／防げなかった」を選べます。「防げた」にしたものだけが
+              <a href="/savings" className="underline">
+                節約額ダッシュボード
+              </a>
+              に残ります。
+            </p>
+
+            {unreviewed.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-semibold text-warn">
+                  まだ振り返っていない記録（{unreviewed.length}件）
+                </h3>
+                <ul className="space-y-2">
+                  {unreviewed.map((l) => (
+                    <FailureRow key={l.id} log={l} />
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {reviewed.length > 0 && (
+              <div className="space-y-2">
+                {unreviewed.length > 0 && (
+                  <h3 className="text-xs font-semibold text-muted">振り返り済み</h3>
+                )}
+                <ul className="space-y-2">
+                  {reviewed.map((l) => (
+                    <FailureRow key={l.id} log={l} />
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>

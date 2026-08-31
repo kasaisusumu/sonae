@@ -1,10 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import type { EventFeatureData } from "@/lib/features";
+import type { EventFeatureData, TimeBucket } from "@/lib/features";
 import {
   describeSignature,
   featureSignature,
   signatureMatches,
   signatureSpecificity,
+  WILDCARD_SIGNATURE,
 } from "@/lib/signature";
 
 export type RuleType =
@@ -295,6 +296,11 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
       timingChanges: JSON.stringify(
         Object.fromEntries(input.retimed.map((r) => [r.title, r.timingLabel])),
       ),
+      notifyChanges: JSON.stringify(
+        Object.fromEntries(
+          (input.renotified ?? []).map((r) => [r.title, r.leadMinutes]),
+        ),
+      ),
     },
   });
 
@@ -339,7 +345,7 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
   }
 }
 
-// ── 「学習内容の確認」画面用: カテゴリ → 状況(特徴シグネチャ) → 学習内容 の樹形図 ──
+// ── 「学習内容の確認」画面用: カテゴリ → どの場合(特徴シグネチャ) → 予定名 → 学習内容 の樹形図 ──
 
 export interface LearnedRuleView {
   id: string;
@@ -354,6 +360,8 @@ export interface LearnedRuleView {
   lastConfirmedAt: Date;
   isUserLocked: boolean;
   forced: boolean;
+  /** このルールを裏付けた予定名（編集ログ由来） */
+  supportedBy: string[];
 }
 
 export interface LearningKindGroup {
@@ -365,13 +373,41 @@ export interface LearningKindGroup {
   tentative: LearnedRuleView[];
 }
 
+export type EditChangeKind = "added" | "removed" | "retimed" | "renotified";
+
+export interface EditChangeView {
+  kind: EditChangeKind;
+  itemKind: ItemKind | null;
+  title: string;
+  detail: string | null; // タイミングラベル / リード時間ラベル
+}
+
+export interface EditRecordView {
+  id: string;
+  when: Date;
+  changes: EditChangeView[];
+}
+
+export interface SituationEventView {
+  eventId: string | null;
+  title: string;
+  keywords: string[];
+  editCount: number;
+  edits: EditRecordView[];
+}
+
 export interface LearningSituation {
   signature: string;
   /** "海外・3泊以上・平日・午前"、共通なら "すべての予定に共通" */
   label: string;
   parts: string[];
   ruleCount: number;
+  editCount: number;
+  /** この状況で見た予定名の語（union） */
+  keywords: string[];
   kinds: LearningKindGroup[];
+  /** この状況に当てはまった予定と、その編集ログ */
+  events: SituationEventView[];
 }
 
 export interface LearningCategoryTree {
@@ -380,6 +416,43 @@ export interface LearningCategoryTree {
   ruleCount: number;
   editCount: number;
   situations: LearningSituation[];
+}
+
+function leadMinutesLabel(m: number | null): string {
+  if (m === null) return "通知なし";
+  if (m > 0 && m % 1440 === 0) return `${m / 1440}日前`;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  return `${h ? `${h}時間` : ""}${mm ? `${mm}分` : ""}前`;
+}
+
+function parseKeywords(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const a = JSON.parse(raw);
+    return Array.isArray(a) ? a.map((x) => String(x)).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+type FeatureRow = {
+  isOverseas: boolean | null;
+  durationNights: number | null;
+  isWeekday: boolean;
+  timeBucket: string | null;
+  keywords: string;
+} | null;
+
+function signatureFromFeatureRow(f: FeatureRow): string {
+  if (!f || !f.timeBucket) return WILDCARD_SIGNATURE;
+  return featureSignature({
+    isOverseas: f.isOverseas,
+    durationNights: f.durationNights,
+    isWeekday: f.isWeekday,
+    timeBucket: f.timeBucket as TimeBucket,
+    keywords: [],
+  });
 }
 
 function ruleView(r: {
@@ -410,7 +483,82 @@ function ruleView(r: {
     lastConfirmedAt: r.lastConfirmedAt,
     isUserLocked: r.isUserLocked,
     forced: r.isUserLocked || eff >= CONFIDENCE_THRESHOLD,
+    supportedBy: [],
   };
+}
+
+function parseEditChanges(e: {
+  addedItems: string;
+  removedItems: string;
+  timingChanges: string;
+  notifyChanges: string;
+}): EditChangeView[] {
+  const out: EditChangeView[] = [];
+  try {
+    const added = JSON.parse(e.addedItems);
+    if (Array.isArray(added)) {
+      for (const a of added) {
+        if (!a?.title) continue;
+        out.push({
+          kind: "added",
+          itemKind: a.kind === "belonging" ? "belonging" : "task",
+          title: String(a.title),
+          detail: a.timingLabel ? String(a.timingLabel) : null,
+        });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const removed = JSON.parse(e.removedItems);
+    if (Array.isArray(removed)) {
+      for (const r of removed) {
+        if (!r) continue;
+        out.push({
+          kind: "removed",
+          itemKind: null,
+          title: String(r),
+          detail: null,
+        });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const timing = JSON.parse(e.timingChanges);
+    if (timing && typeof timing === "object") {
+      for (const [title, label] of Object.entries(timing)) {
+        out.push({
+          kind: "retimed",
+          itemKind: null,
+          title,
+          detail: label == null ? null : String(label),
+        });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const notify = JSON.parse(e.notifyChanges);
+    if (notify && typeof notify === "object") {
+      for (const [title, mins] of Object.entries(notify)) {
+        out.push({
+          kind: "renotified",
+          itemKind: null,
+          title,
+          detail: leadMinutesLabel(
+            mins === null || mins === undefined ? null : Number(mins),
+          ),
+        });
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return out;
 }
 
 export async function getLearningTree(
@@ -424,6 +572,67 @@ export async function getLearningTree(
       _count: { select: { editRecords: true } },
     },
   });
+  if (categories.length === 0) return [];
+
+  const catIds = categories.map((c) => c.id);
+  const editRecords = await prisma.editRecord.findMany({
+    where: { categoryId: { in: catIds } },
+    orderBy: { createdAt: "desc" },
+    include: {
+      event: {
+        select: {
+          id: true,
+          title: true,
+          feature: {
+            select: {
+              isOverseas: true,
+              durationNights: true,
+              isWeekday: true,
+              timeBucket: true,
+              keywords: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // categoryId -> signature -> eventKey -> SituationEventView
+  const editsByCatSig = new Map<
+    string,
+    Map<string, Map<string, SituationEventView>>
+  >();
+  for (const e of editRecords) {
+    if (!e.categoryId) continue;
+    const sig = signatureFromFeatureRow(e.event?.feature ?? null);
+    const changes = parseEditChanges(e);
+    if (changes.length === 0) continue;
+
+    let sigMap = editsByCatSig.get(e.categoryId);
+    if (!sigMap) {
+      sigMap = new Map();
+      editsByCatSig.set(e.categoryId, sigMap);
+    }
+    let evMap = sigMap.get(sig);
+    if (!evMap) {
+      evMap = new Map();
+      sigMap.set(sig, evMap);
+    }
+    const key = e.event?.id ?? `t:${e.event?.title ?? "?"}`;
+    let ev = evMap.get(key);
+    if (!ev) {
+      ev = {
+        eventId: e.event?.id ?? null,
+        title: e.event?.title ?? "(削除された予定)",
+        keywords: parseKeywords(e.event?.feature?.keywords),
+        editCount: 0,
+        edits: [],
+      };
+      evMap.set(key, ev);
+    }
+    ev.editCount += 1;
+    ev.edits.push({ id: e.id, when: e.createdAt, changes });
+  }
 
   return categories
     .map((c) => {
@@ -434,9 +643,45 @@ export async function getLearningTree(
         bySig.set(r.featureSignature, arr);
       }
 
-      const situations: LearningSituation[] = [...bySig.entries()]
-        .map(([signature, rules]) => {
+      const sigEvents = editsByCatSig.get(c.id) ?? new Map();
+      // ルールがある署名 ∪ 編集ログがある署名
+      const allSigs = new Set<string>([...bySig.keys(), ...sigEvents.keys()]);
+
+      const situations: LearningSituation[] = [...allSigs]
+        .map((signature) => {
+          const rules = bySig.get(signature) ?? [];
           const d = describeSignature(signature);
+
+          const events: SituationEventView[] = [
+            ...((sigEvents.get(signature) as
+              | Map<string, SituationEventView>
+              | undefined) ?? new Map()
+            ).values(),
+          ].sort((a, b) => b.editCount - a.editCount);
+
+          // ルールを裏付けた予定名を、編集ログから拾って添える
+          const supporters = (rt: RuleType, target: string): string[] => {
+            const want =
+              rt === "fixed_item"
+                ? "added"
+                : rt === "exclude_item"
+                  ? "removed"
+                  : rt === "timing_override"
+                    ? "retimed"
+                    : "renotified";
+            const t = norm(target);
+            const names = new Set<string>();
+            for (const ev of events) {
+              for (const rec of ev.edits) {
+                if (rec.changes.some((ch) => ch.kind === want && norm(ch.title) === t)) {
+                  names.add(ev.title);
+                }
+              }
+            }
+            return [...names];
+          };
+          for (const r of rules) r.supportedBy = supporters(r.ruleType, r.target);
+
           const kinds: LearningKindGroup[] = (
             ["task", "belonging"] as ItemKind[]
           )
@@ -450,9 +695,7 @@ export async function getLearningTree(
                 );
               return {
                 kind,
-                fixed: rs.filter(
-                  (r) => r.ruleType === "fixed_item" && r.forced,
-                ),
+                fixed: rs.filter((r) => r.ruleType === "fixed_item" && r.forced),
                 excluded: rs.filter(
                   (r) => r.ruleType === "exclude_item" && r.forced,
                 ),
@@ -474,18 +717,28 @@ export async function getLearningTree(
                   k.tentative.length >
                 0,
             );
+
+          const kw = new Set<string>();
+          for (const ev of events) for (const w of ev.keywords) kw.add(w);
+
           return {
             signature,
             label: d.text,
             parts: d.parts,
             ruleCount: rules.length,
+            editCount: events.reduce((s, e) => s + e.editCount, 0),
+            keywords: [...kw],
             kinds,
+            events,
           };
         })
-        // 具体的な状況を先に、"すべて共通" を後ろに。次に件数の多い順。
+        .filter((s) => s.ruleCount > 0 || s.editCount > 0)
+        // 具体的な状況を先に、"すべて共通" を後ろに。次に学習件数の多い順。
         .sort(
           (a, b) =>
-            b.parts.length - a.parts.length || b.ruleCount - a.ruleCount,
+            b.parts.length - a.parts.length ||
+            b.ruleCount - a.ruleCount ||
+            b.editCount - a.editCount,
         );
 
       return {
@@ -496,5 +749,5 @@ export async function getLearningTree(
         situations,
       };
     })
-    .filter((c) => c.ruleCount > 0);
+    .filter((c) => c.ruleCount > 0 || c.editCount > 0);
 }

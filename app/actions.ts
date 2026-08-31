@@ -550,6 +550,48 @@ export async function deleteFailureLog(formData: FormData): Promise<void> {
   revalidatePath("/");
 }
 
+/**
+ * 振り返り画面から、失敗ログ 1 件を「防げた / まだ」に切り替える。
+ * 「防げた」→ その失敗の推定損失額を 1 回だけ節約に計上（予定に紐づいていればその予定で）。
+ * 「まだ」→ その失敗ログの計上をすべて取り消す。
+ */
+export async function setFailureOvercome(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const failureLogId = String(formData.get("failureLogId") ?? "");
+  const overcome = String(formData.get("overcome") ?? "") === "1";
+  if (!failureLogId) return;
+
+  const log = await prisma.failureLog.findFirst({
+    where: { id: failureLogId, userId },
+    select: { id: true, eventId: true, estimatedLossYen: true },
+  });
+  if (!log) return;
+
+  if (overcome) {
+    const existing = await prisma.savingsEntry.findFirst({
+      where: { userId, failureLogId },
+      select: { id: true },
+    });
+    if (!existing) {
+      await prisma.savingsEntry.create({
+        data: {
+          userId,
+          failureLogId,
+          eventId: log.eventId,
+          amountYen: log.estimatedLossYen,
+          confirmedByUser: true,
+        },
+      });
+    }
+  } else {
+    await prisma.savingsEntry.deleteMany({ where: { userId, failureLogId } });
+  }
+
+  revalidatePath("/savings");
+  revalidatePath("/");
+  if (log.eventId) revalidatePath("/events/[id]", "page");
+}
+
 /** 予定の再発防止警告を「確認した」ことにして畳む。 */
 export async function ackEventWarning(formData: FormData): Promise<void> {
   const userId = await requireUserId();

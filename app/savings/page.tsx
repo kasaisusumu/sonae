@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { getSavingsSummary, getFailureRetrospective } from "@/lib/savings";
 import { formatYen } from "@/lib/format";
+import { setFailureOvercome } from "@/app/actions";
+import { SubmitButton } from "@/app/components/submit-button";
 
 export default async function SavingsPage() {
   const user = await getCurrentUser();
@@ -191,30 +193,64 @@ export default async function SavingsPage() {
                   </span>
                 </summary>
                 <ul className="mt-2 divide-y divide-border">
-                  {c.items.slice(0, 8).map((it) => (
-                    <li
-                      key={it.id}
-                      className="flex items-start justify-between gap-3 py-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="whitespace-pre-wrap text-sm">
-                          {it.description}
-                        </p>
-                        <p className="text-[11px] text-muted">
-                          {it.occurredAt.toLocaleDateString("ja-JP")}
-                          {it.eventTitle ? ` ・ 「${it.eventTitle}」` : ""}
-                          {it.preventedTimes > 0
-                            ? ` ・ 防げた ${it.preventedTimes}回`
-                            : ""}
-                        </p>
-                      </div>
-                      {it.estimatedLossYen > 0 && (
-                        <span className="shrink-0 text-xs text-muted tabular-nums">
-                          {formatYen(it.estimatedLossYen)}
-                        </span>
-                      )}
-                    </li>
-                  ))}
+                  {c.items.slice(0, 8).map((it) => {
+                    const overcome = it.preventedTimes > 0;
+                    return (
+                      <li key={it.id} className="py-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="whitespace-pre-wrap text-sm">
+                              {it.description}
+                            </p>
+                            <p className="text-[11px] text-muted">
+                              {it.occurredAt.toLocaleDateString("ja-JP")}
+                              {it.eventTitle ? ` ・ 「${it.eventTitle}」` : ""}
+                            </p>
+                          </div>
+                          {it.estimatedLossYen > 0 && (
+                            <span className="shrink-0 text-xs text-muted tabular-nums">
+                              {formatYen(it.estimatedLossYen)}
+                            </span>
+                          )}
+                        </div>
+                        <form
+                          action={setFailureOvercome}
+                          className="mt-1.5 flex items-center gap-2"
+                        >
+                          <input
+                            type="hidden"
+                            name="failureLogId"
+                            value={it.id}
+                          />
+                          <input
+                            type="hidden"
+                            name="overcome"
+                            value={overcome ? "0" : "1"}
+                          />
+                          {overcome ? (
+                            <>
+                              <span className="text-[11px] text-teal-dark">
+                                ✓ 防げたに計上済み
+                                {it.estimatedLossYen > 0
+                                  ? `（${formatYen(it.estimatedLossYen)}）`
+                                  : ""}
+                              </span>
+                              <button
+                                type="submit"
+                                className="text-[11px] text-muted underline hover:text-foreground"
+                              >
+                                取り消す
+                              </button>
+                            </>
+                          ) : (
+                            <SubmitButton variant="ghost">
+                              これは防げた
+                            </SubmitButton>
+                          )}
+                        </form>
+                      </li>
+                    );
+                  })}
                 </ul>
                 {c.items.length > 8 && (
                   <p className="mt-2 text-[11px] text-muted">

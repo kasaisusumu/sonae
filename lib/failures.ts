@@ -496,3 +496,104 @@ export async function notifyPostEventFailureChecks(
   }
   return sent;
 }
+
+// ─────────────────────────────────────────────
+// 失敗ログの提案（準備リストの提案と同じノリで、似た予定・同カテゴリからどんどん出す）
+// ─────────────────────────────────────────────
+
+export interface FailureSuggestion {
+  /** 元になった失敗ログ id（内容の引用元・参照用） */
+  sourceId: string;
+  description: string;
+  estimatedLossYen: number;
+  fromEventTitle: string | null;
+  reasons: string[]; // "同じカテゴリ" / "似た予定" / "状況が近い" / "名前が近い"
+  score: number;
+}
+
+/**
+ * ある予定に「こんな失敗もあり得ます」と提案する失敗ログの候補。
+ * 同カテゴリ・似た予定名・特徴シグネチャ一致でスコアリングし、ゆるめの閾値で多めに返す。
+ * すでにこの予定に同じ内容が記録されているものは除外。内容（description）で重複排除。
+ */
+export async function suggestFailureLogsForEvent(
+  eventId: string,
+  limit = 6,
+): Promise<FailureSuggestion[]> {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: { category: true },
+  });
+  if (!event) return [];
+
+  const feature = featureOf(event);
+
+  const own = await prisma.failureLog.findMany({
+    where: { userId: event.userId, eventId },
+    select: { description: true },
+  });
+  const ownKeys = new Set(own.map((o) => clusterKey(o.description)));
+
+  const logs: LogRow[] = await prisma.failureLog.findMany({
+    where: { userId: event.userId, NOT: { eventId } },
+    orderBy: { occurredAt: "desc" },
+    take: 200,
+    select: LOG_SELECT,
+  });
+
+  type Scored = FailureSuggestion & { occurredAt: Date };
+  const byKey = new Map<string, Scored>();
+
+  for (const l of logs) {
+    const key = clusterKey(l.description);
+    if (!key || ownKeys.has(key)) continue;
+
+    let score = 0.4; // ベース（うっすら全部候補）
+    const reasons: string[] = [];
+    if (l.categoryId && event.categoryId && l.categoryId === event.categoryId) {
+      score += 2;
+      reasons.push("同じカテゴリ");
+    }
+    if (eventLinkApplies(l, event.title, event.recurringEventId)) {
+      score += 2;
+      if (!reasons.includes("同じカテゴリ")) reasons.push("似た予定");
+    }
+    if (signatureMatches(l.featureSignature, feature)) {
+      score += 1;
+      reasons.push("状況が近い");
+    }
+    if (l.event && similarText(l.event.title, event.title)) {
+      score += 1.5;
+      if (!reasons.some((r) => r === "似た予定" || r === "同じカテゴリ")) {
+        reasons.push("名前が近い");
+      }
+    }
+    score = Number((score * decayMultiplier(l.occurredAt)).toFixed(3));
+    if (score < 0.9 || reasons.length === 0) continue;
+
+    const prev = byKey.get(key);
+    if (!prev || score > prev.score) {
+      byKey.set(key, {
+        sourceId: l.id,
+        description: l.description,
+        estimatedLossYen: l.estimatedLossYen,
+        fromEventTitle: l.event?.title ?? null,
+        reasons,
+        score,
+        occurredAt: l.occurredAt,
+      });
+    }
+  }
+
+  return [...byKey.values()]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((s) => ({
+      sourceId: s.sourceId,
+      description: s.description,
+      estimatedLossYen: s.estimatedLossYen,
+      fromEventTitle: s.fromEventTitle,
+      reasons: s.reasons,
+      score: s.score,
+    }));
+}

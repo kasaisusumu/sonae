@@ -676,6 +676,89 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
   revalidateAppViews(eventId);
 }
 
+/**
+ * 提案（または既存）の失敗を、内容・金額・成功/失敗を選んだ上でこの予定に記録する。
+ * outcome:
+ *   "prevented"     … 防げた → 推定損失額を節約に計上
+ *   "not_prevented" … 防げなかった
+ *   ""              … まだ選ばない
+ */
+export async function attachFailureToEvent(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  const description = String(formData.get("description") ?? "").trim();
+  if (!eventId || !description) return;
+
+  const rawAmount = formData.get("estimatedLossYen");
+  const estimatedLossYen = parseYen(rawAmount);
+  const rawOutcome = String(formData.get("outcome") ?? "");
+  const outcome =
+    rawOutcome === "prevented" || rawOutcome === "not_prevented"
+      ? rawOutcome
+      : null;
+
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    select: {
+      id: true,
+      title: true,
+      memo: true,
+      eventDatetime: true,
+      endDatetime: true,
+      categoryId: true,
+    },
+  });
+  if (!event) return;
+
+  // 同じ内容がこの予定に既にあるなら二重記録しない
+  const dup = await prisma.failureLog.findFirst({
+    where: { userId, eventId, description },
+    select: { id: true },
+  });
+  if (dup) {
+    revalidateAppViews(eventId);
+    return;
+  }
+
+  const featureSig = featureSignature(
+    extractEventFeature({
+      title: event.title,
+      memo: event.memo,
+      eventDatetime: event.eventDatetime,
+      endDatetime: event.endDatetime,
+    }),
+  );
+
+  const log = await prisma.failureLog.create({
+    data: {
+      userId,
+      categoryId: event.categoryId,
+      eventId: event.id,
+      featureSignature: featureSig,
+      description,
+      estimatedLossYen,
+      occurredAt: event.eventDatetime,
+      outcome,
+    },
+  });
+
+  if (outcome === "prevented") {
+    await prisma.savingsEntry.upsert({
+      where: { eventId_failureLogId: { eventId, failureLogId: log.id } },
+      update: { amountYen: estimatedLossYen, confirmedByUser: true },
+      create: {
+        userId,
+        eventId,
+        failureLogId: log.id,
+        amountYen: estimatedLossYen,
+        confirmedByUser: true,
+      },
+    });
+  }
+
+  revalidateAppViews(eventId);
+}
+
 /** 失敗ログを削除する。 */
 export async function deleteFailureLog(formData: FormData): Promise<void> {
   const userId = await requireUserId();

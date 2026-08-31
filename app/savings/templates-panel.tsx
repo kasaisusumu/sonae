@@ -64,7 +64,7 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
   );
 }
 
-function KindGroup({
+export function KindGroup({
   kind,
   templates,
 }: {
@@ -74,12 +74,16 @@ function KindGroup({
   const list = templates.filter((t) => t.kind === kind);
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-teal-dark">
-          {KIND_LABEL[kind]}のリスト
-        </h3>
-        <span className="text-xs text-muted">{list.length}件</span>
-      </div>
+      <p className="text-xs text-muted">
+        よく使う{KIND_LABEL[kind]}に名前を付けて保存。予定ページの「📋 テンプレート・他の予定から」で
+        どの予定にも追加できます。
+      </p>
+
+      {list.length === 0 && (
+        <p className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">
+          まだありません。下の「＋ 新しいリストを作る」から作成できます。
+        </p>
+      )}
 
       {list.length > 0 && (
         <div className="space-y-1.5">
@@ -116,27 +120,3 @@ function KindGroup({
   );
 }
 
-/** 学習内容ページに置く「名前をつけたリスト（テンプレート）」パネル。 */
-export function TemplatesPanel({ templates }: { templates: TemplateDetail[] }) {
-  return (
-    <details
-      className="rounded-2xl bg-surface p-4 [&_summary::-webkit-details-marker]:hidden"
-      open={templates.length > 0}
-    >
-      <summary className="cursor-pointer list-none text-base font-semibold">
-        名前をつけたリスト（テンプレート）
-        <span className="ml-2 text-xs font-normal text-muted">
-          {templates.length}件
-        </span>
-      </summary>
-      <p className="mt-1 text-xs text-muted">
-        よく使う準備すること・持ち物に名前を付けて保存。準備すること用と持ち物用は分けています。
-        予定ページの「📋 テンプレート・他の予定から」でどの予定にも追加できます。
-      </p>
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
-        <KindGroup kind="task" templates={templates} />
-        <KindGroup kind="belonging" templates={templates} />
-      </div>
-    </details>
-  );
-}

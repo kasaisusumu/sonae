@@ -6,7 +6,7 @@ import {
   setItemNotifyLead,
   toggleChecklistItemDone,
 } from "@/app/actions";
-import { LEAD_PRESETS, isLeadPreset } from "@/lib/lead-time";
+import { LEAD_PRESETS, formatLead, isLeadPreset } from "@/lib/lead-time";
 
 interface Item {
   key: string;
@@ -122,6 +122,15 @@ export function ChecklistEditor({
   const [removedTitles, setRemovedTitles] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
+  // 行ごとの詳細（通知タイミング・メモ・削除）を開いているか
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
+  const toggleOpen = (key: string) =>
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkText, setBulkText] = useState("");
   const [bulkNote, setBulkNote] = useState<string | null>(null);
@@ -290,8 +299,8 @@ export function ChecklistEditor({
   const doneCount = items.filter((it) => it.isDone).length;
 
   return (
-    <div className="rounded-2xl bg-surface p-4">
-      <div className="mb-2 flex items-baseline gap-2">
+    <div className="rounded-2xl bg-surface p-3">
+      <div className="mb-1.5 flex items-baseline gap-2">
         <h3 className="text-sm font-semibold text-foreground">
           {isBelonging ? "持ち物" : "準備すること"}
         </h3>
@@ -299,7 +308,7 @@ export function ChecklistEditor({
           {doneCount}/{items.length}
         </span>
       </div>
-      <ul className="divide-y divide-border">
+      <ul className="divide-y divide-border/70">
         {displayItems.map((it) => {
           const c = splitLead(it.notifyLeadMinutes ?? DEFAULT_LEAD);
           const showCustom =
@@ -310,116 +319,144 @@ export function ChecklistEditor({
             : it.notifyLeadMinutes == null
               ? "none"
               : String(it.notifyLeadMinutes);
+          const open = openKeys.has(it.key);
+          const leadLabel =
+            it.notifyLeadMinutes == null
+              ? "🔔なし"
+              : `🔔${formatLead(it.notifyLeadMinutes)}`;
           return (
-            <li key={it.key} className="flex items-start gap-2.5 py-2.5">
-              <input
-                type="checkbox"
-                checked={it.isDone}
-                onChange={(e) => toggleDone(it, e.target.checked)}
-                className="mt-1.5 h-4 w-4 shrink-0 accent-[var(--teal)]"
-                aria-label="完了"
-              />
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center gap-2">
+            <li key={it.key} className="py-1">
+              {/* 1 行に集約：チェック / 文言 / 通知チップ */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={it.isDone}
+                  onChange={(e) => toggleDone(it, e.target.checked)}
+                  className="h-4 w-4 shrink-0 accent-[var(--teal)]"
+                  aria-label="完了"
+                />
+                <input
+                  value={it.title}
+                  onChange={(e) => update(it.key, { title: e.target.value })}
+                  placeholder={isBelonging ? "持ち物を書く" : "準備することを書く"}
+                  className={`min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-1 text-sm hover:border-border focus:border-border focus:bg-background ${
+                    it.isDone ? "text-muted line-through" : ""
+                  }`}
+                />
+                {it.isUserAdded && (
+                  <span className="hidden shrink-0 rounded bg-accent-soft px-1 text-[10px] text-teal-dark sm:inline">
+                    追加
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => toggleOpen(it.key)}
+                  aria-expanded={open}
+                  className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] tabular-nums transition-colors ${
+                    open
+                      ? "border-teal bg-teal-soft text-teal-dark"
+                      : it.notifyLeadMinutes == null
+                        ? "border-border text-muted hover:border-teal"
+                        : "border-teal/40 text-teal-dark hover:border-teal"
+                  }`}
+                >
+                  {leadLabel}
+                </button>
+              </div>
+
+              {/* 詳細（チップを押したときだけ）：通知タイミング・メモ・削除 */}
+              {open && (
+                <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
+                    <span className="shrink-0">通知</span>
+                    <select
+                      value={selValue}
+                      onChange={(e) => onNotifySelect(it, e.target.value)}
+                      className="rounded-md border bg-background px-1.5 py-0.5 text-xs"
+                      aria-label="通知タイミング"
+                    >
+                      {LEAD_PRESETS.map((p) => (
+                        <option
+                          key={p.label}
+                          value={p.minutes == null ? "none" : String(p.minutes)}
+                        >
+                          {p.label}
+                        </option>
+                      ))}
+                      <option value="custom">カスタム…</option>
+                    </select>
+                    {showCustom && (
+                      <span className="inline-flex items-center gap-0.5">
+                        <input
+                          type="number"
+                          min={0}
+                          max={30}
+                          value={c.d || ""}
+                          onChange={(e) => setCustomPart(it, "d", e.target.value)}
+                          className="w-10 rounded border bg-background px-1 py-0.5 text-xs"
+                          aria-label="日"
+                        />
+                        日
+                        <input
+                          type="number"
+                          min={0}
+                          max={23}
+                          value={c.h || ""}
+                          onChange={(e) => setCustomPart(it, "h", e.target.value)}
+                          className="w-10 rounded border bg-background px-1 py-0.5 text-xs"
+                          aria-label="時間"
+                        />
+                        時間
+                        <input
+                          type="number"
+                          min={0}
+                          max={59}
+                          value={c.mm || ""}
+                          onChange={(e) => setCustomPart(it, "mm", e.target.value)}
+                          className="w-10 rounded border bg-background px-1 py-0.5 text-xs"
+                          aria-label="分"
+                        />
+                        分前
+                      </span>
+                    )}
+                  </div>
+
                   <input
-                    value={it.title}
-                    onChange={(e) => update(it.key, { title: e.target.value })}
-                    placeholder={
-                      isBelonging ? "持ち物を書く" : "準備することを書く"
-                    }
-                    className={`min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-1 text-sm hover:border-border focus:border-border focus:bg-background ${
-                      it.isDone ? "text-muted line-through" : ""
-                    }`}
+                    value={it.comment}
+                    onChange={(e) => update(it.key, { comment: e.target.value })}
+                    placeholder="メモ（任意・学習しません）"
+                    className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-muted"
                   />
-                  {it.isUserAdded && (
-                    <span className="shrink-0 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] text-teal-dark">
-                      追加
-                    </span>
-                  )}
+
                   <button
                     type="button"
                     onClick={() => remove(it.key)}
-                    className="shrink-0 rounded px-1.5 py-0.5 text-xs text-muted hover:bg-warn-soft hover:text-warn"
-                    aria-label="削除"
+                    className="text-[11px] text-muted underline hover:text-warn"
                   >
-                    削除
+                    この項目を削除
                   </button>
                 </div>
+              )}
 
-                <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
-                  <span>🔔 通知</span>
-                  <select
-                    value={selValue}
-                    onChange={(e) => onNotifySelect(it, e.target.value)}
-                    className="rounded-md border bg-background px-1.5 py-0.5 text-xs"
-                    aria-label="通知タイミング"
-                  >
-                    {LEAD_PRESETS.map((p) => (
-                      <option
-                        key={p.label}
-                        value={p.minutes == null ? "none" : String(p.minutes)}
-                      >
-                        {p.label}
-                      </option>
-                    ))}
-                    <option value="custom">カスタム…</option>
-                  </select>
-                  {showCustom && (
-                    <span className="inline-flex items-center gap-0.5">
-                      <input
-                        type="number"
-                        min={0}
-                        max={30}
-                        value={c.d || ""}
-                        onChange={(e) => setCustomPart(it, "d", e.target.value)}
-                        className="w-10 rounded border bg-background px-1 py-0.5 text-xs"
-                        aria-label="日"
-                      />
-                      日
-                      <input
-                        type="number"
-                        min={0}
-                        max={23}
-                        value={c.h || ""}
-                        onChange={(e) => setCustomPart(it, "h", e.target.value)}
-                        className="w-10 rounded border bg-background px-1 py-0.5 text-xs"
-                        aria-label="時間"
-                      />
-                      時間
-                      <input
-                        type="number"
-                        min={0}
-                        max={59}
-                        value={c.mm || ""}
-                        onChange={(e) => setCustomPart(it, "mm", e.target.value)}
-                        className="w-10 rounded border bg-background px-1 py-0.5 text-xs"
-                        aria-label="分"
-                      />
-                      分前
-                    </span>
-                  )}
-                </div>
-
-                <input
-                  value={it.comment}
-                  onChange={(e) => update(it.key, { comment: e.target.value })}
-                  placeholder="メモ（任意・学習しません）"
-                  className="w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs text-muted hover:border-border focus:border-border focus:bg-background"
-                />
-              </div>
+              {/* 閉じているときはメモを 1 行プレビュー */}
+              {!open && it.comment.trim() && (
+                <p className="ml-6 truncate text-[11px] text-muted">
+                  {it.comment}
+                </p>
+              )}
             </li>
           );
         })}
       </ul>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
             onClick={add}
-            className="rounded-lg border border-dashed border-border px-3 py-1.5 text-sm text-muted hover:border-teal hover:text-teal-dark"
+            className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
           >
-            ＋ 項目を追加
+            ＋ 追加
           </button>
           <button
             type="button"
@@ -427,21 +464,21 @@ export function ChecklistEditor({
               setBulkOpen((v) => !v);
               setBulkNote(null);
             }}
-            className="rounded-lg border border-dashed border-border px-3 py-1.5 text-sm text-muted hover:border-teal hover:text-teal-dark"
+            className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
           >
-            メモから一括追加
+            メモから一括
           </button>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {saved && !dirty && (
-            <span className="text-xs text-teal-dark">保存しました</span>
+            <span className="text-[11px] text-teal-dark">保存しました</span>
           )}
           <button
             type="button"
             onClick={() => persist(items)}
             disabled={pending || !dirty}
-            className="rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-teal-dark disabled:opacity-50"
+            className="rounded-lg bg-teal px-3.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-teal-dark disabled:opacity-50"
           >
             {pending ? "保存中…" : "保存する"}
           </button>
@@ -488,8 +525,8 @@ export function ChecklistEditor({
       )}
       {bulkNote && <p className="mt-2 text-xs text-teal-dark">{bulkNote}</p>}
 
-      <p className="mt-2 text-[11px] text-muted">
-        チェックと通知タイミングは自動保存・自動学習。文言・メモの変更は「保存する」で反映（メモは学習しません）。
+      <p className="mt-1.5 text-[11px] text-muted">
+        🔔チップで通知・メモ・削除。チェックと通知は自動保存、文言・メモは「保存する」で反映。
       </p>
     </div>
   );

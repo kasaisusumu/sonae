@@ -9,10 +9,11 @@ import {
 import { formatDateOnly, formatYen } from "@/lib/format";
 import { formatLead } from "@/lib/lead-time";
 import { getUserTemplates } from "@/lib/templates";
-import { LearningSearch, type SearchEntry } from "./learning-search";
+import { type SearchEntry } from "./learning-search";
+import { LearningExplorer } from "./learning-explorer";
 import { LazyLeaf } from "./lazy-leaf";
 import { LeafBody, type LeafItem } from "./leaf-body";
-import { TemplatesPanel } from "./templates-panel";
+import { KindGroup } from "./templates-panel";
 
 const OUTCOME_LABEL: Record<string, string> = {
   prevented: "防げた",
@@ -210,6 +211,7 @@ export default async function LearningTreePage() {
     })),
     ...templates.map((t) => ({
       kind: "template" as const,
+      tplKind: t.kind,
       anchor: `tpl-${t.id}`,
       title: t.name,
       crumb:
@@ -221,56 +223,54 @@ export default async function LearningTreePage() {
     })),
   ];
 
+  const tree = (
+    <div className="space-y-3">
+      {categories.map((cat) => (
+        <details
+          key={cat.categoryId}
+          className="rounded-2xl bg-surface p-4"
+          open
+        >
+          <summary className="cursor-pointer text-base font-semibold">
+            {cat.categoryName}
+            <span className="ml-2 text-xs font-normal text-muted">
+              {cat.node.count}件
+            </span>
+          </summary>
+          <div className="mt-3 space-y-1.5 border-l border-border pl-3">
+            {cat.node.children.map((c) => (
+              <NameBranch key={c.path} node={c} />
+            ))}
+            {cat.node.leaves.map((l) => (
+              <EventLeaf key={l.eventId} leaf={l} />
+            ))}
+          </div>
+        </details>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold">学習内容</h1>
         <p className="mt-1 text-sm text-muted">
-          <strong>カテゴリ → 予定名（語で枝分かれ）→ その予定</strong>
-          をたどると、その予定で出てくる準備リスト・持ち物をコンパクトに確認できます。
-          「編集」を押すとその場で編集でき、編集は学習にも反映されます。同じ名前の未編集の予定は
-          1 つにまとめて表示します。上の検索バーに予定名を入れると、その枝へ飛べます。
+          自動で覚えた「どの予定でどんな準備リストになるか」と、名前を付けて保存したテンプレートを確認・編集できます。
+          上の検索は両方をまとめて探します。
         </p>
       </div>
 
-      <TemplatesPanel templates={templates} />
-
-      {searchEntries.length > 0 && <LearningSearch entries={searchEntries} />}
-
-      {categories.length === 0 ? (
-        <p className="rounded-xl bg-surface px-4 py-8 text-center text-sm text-muted">
-          まだ学習内容はありません。
-          <br />
-          予定の準備リストを何度か編集すると、ここに育っていきます。
-        </p>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {categories.map((cat) => (
-              <details
-                key={cat.categoryId}
-                className="rounded-2xl bg-surface p-4"
-                open
-              >
-                <summary className="cursor-pointer text-base font-semibold">
-                  {cat.categoryName}
-                  <span className="ml-2 text-xs font-normal text-muted">
-                    {cat.node.count}件
-                  </span>
-                </summary>
-                <div className="mt-3 space-y-1.5 border-l border-border pl-3">
-                  {cat.node.children.map((c) => (
-                    <NameBranch key={c.path} node={c} />
-                  ))}
-                  {cat.node.leaves.map((l) => (
-                    <EventLeaf key={l.eventId} leaf={l} />
-                  ))}
-                </div>
-              </details>
-            ))}
-          </div>
-        </>
-      )}
+      <LearningExplorer
+        entries={searchEntries}
+        hasTree={categories.length > 0}
+        taskCount={templates.filter((t) => t.kind === "task").length}
+        belongingCount={templates.filter((t) => t.kind === "belonging").length}
+        tree={tree}
+        templatesTask={<KindGroup kind="task" templates={templates} />}
+        templatesBelonging={
+          <KindGroup kind="belonging" templates={templates} />
+        }
+      />
     </div>
   );
 }

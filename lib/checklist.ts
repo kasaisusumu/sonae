@@ -240,6 +240,10 @@ export async function primeNotifiedChecklists(
       userId,
       source: "google",
       autoManaged: true,
+      // 「本当に新しくカレンダーに追加された予定」＝新規追加通知を出したものだけ。
+      // 連携時に一括で読み込んだ既存の予定は notifiedAt が null なので生成しない
+      // （それらはユーザーが準備リストのページを開いたときに初めて生成する）。
+      notifiedAt: { not: null },
       eventDatetime: { gte: new Date() },
       checklistItems: { none: {} },
     },

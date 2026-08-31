@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 
 export interface SearchEntry {
   kind: "event" | "template";
+  /** テンプレートのとき、どちらのタブか */
+  tplKind?: "task" | "belonging";
   anchor: string; // スクロール先の DOM id（"ev-<id>" | "tpl-<id>"）
   title: string;
   crumb: string;
@@ -46,7 +48,14 @@ type Scored = {
   sim: number;
 };
 
-export function LearningSearch({ entries }: { entries: SearchEntry[] }) {
+export function LearningSearch({
+  entries,
+  onPick,
+}: {
+  entries: SearchEntry[];
+  /** 候補が選ばれたとき。呼び出し側でタブ切り替え＋スクロールを行う。 */
+  onPick: (e: SearchEntry) => void;
+}) {
   const [q, setQ] = useState("");
 
   const { results, maybe } = useMemo(() => {
@@ -98,17 +107,8 @@ export function LearningSearch({ entries }: { entries: SearchEntry[] }) {
     return { results: direct.slice(0, 15), maybe: fuzzy.slice(0, 6) };
   }, [q, entries]);
 
-  function jump(anchor: string) {
-    const el = document.getElementById(anchor);
-    if (!el) return;
-    let node: HTMLElement | null = el;
-    while (node) {
-      if (node instanceof HTMLDetailsElement) node.open = true;
-      node = node.parentElement;
-    }
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    el.classList.add("ring-2", "ring-teal");
-    window.setTimeout(() => el.classList.remove("ring-2", "ring-teal"), 2200);
+  function pick(e: SearchEntry) {
+    onPick(e);
     setQ("");
   }
 
@@ -116,7 +116,7 @@ export function LearningSearch({ entries }: { entries: SearchEntry[] }) {
     <li className="border-b border-border last:border-0">
       <button
         type="button"
-        onClick={() => jump(r.e.anchor)}
+        onClick={() => pick(r.e)}
         className="block w-full px-3 py-2 text-left hover:bg-surface-muted"
       >
         <span className="font-medium">

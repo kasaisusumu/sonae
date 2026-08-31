@@ -35,6 +35,8 @@ export interface EventWarning {
     categoryName: string;
   };
   isPast: boolean;
+  // このカテゴリに記録はあるが、この予定と強くは結びつかない（参考表示）
+  weak: boolean;
   logs: WarningCluster[]; // 呼び出し側の互換のため名前は logs のまま（中身はクラスタ）
 }
 
@@ -161,6 +163,7 @@ function buildClusters(
   preventedCountByLogId: Map<string, number>,
   preventedThisEventLogIds: Set<string>,
   thisEventId: string | null = null,
+  opts: { noFloor?: boolean } = {},
 ): WarningCluster[] {
   const sorted = [...logs].sort(
     (a, b) => b.occurredAt.getTime() - a.occurredAt.getTime(),
@@ -210,7 +213,7 @@ function buildClusters(
   });
 
   return clusters
-    .filter((c) => c.weight >= WEIGHT_FLOOR || c.prevented)
+    .filter((c) => opts.noFloor || c.weight >= WEIGHT_FLOOR || c.prevented)
     .sort((a, b) => b.weight - a.weight)
     .slice(0, MAX_CLUSTERS);
 }
@@ -260,14 +263,14 @@ export async function getWarningForEvent(
     select: LOG_SELECT,
   });
 
-  const applicable = logs.filter((l) =>
+  if (logs.length === 0) return null;
+
+  const strong = logs.filter((l) =>
     logApplies(l, event.title, event.recurringEventId, feature),
   );
-  if (applicable.length === 0) return null;
 
-  const ids = applicable.map((l) => l.id);
   const savings = await prisma.savingsEntry.findMany({
-    where: { failureLogId: { in: ids }, confirmedByUser: true },
+    where: { failureLogId: { in: logs.map((l) => l.id) }, confirmedByUser: true },
     select: { failureLogId: true, eventId: true },
   });
   const preventedCountByLogId = new Map<string, number>();
@@ -281,12 +284,29 @@ export async function getWarningForEvent(
     if (s.eventId === event.id) preventedThisEvent.add(s.failureLogId);
   }
 
-  const clusters = buildClusters(
-    applicable,
+  // 1) この予定に強く結びつく記録で通常のクラスタ
+  let clusters = buildClusters(
+    strong,
     preventedCountByLogId,
     preventedThisEvent,
     event.id,
   );
+  let weak = false;
+
+  // 2) 何も出ないが、このカテゴリに記録はある
+  //    → 一覧の「過去に失敗あり」バッジと表示を一致させるため、参考として出す。
+  //    まず strong を経年フロアなしで、それも空ならカテゴリ全記録から。
+  if (clusters.length === 0) {
+    const base = strong.length > 0 ? strong : logs;
+    clusters = buildClusters(
+      base,
+      preventedCountByLogId,
+      preventedThisEvent,
+      event.id,
+      { noFloor: true },
+    );
+    weak = true;
+  }
   if (clusters.length === 0) return null;
 
   const categoryName =
@@ -300,6 +320,7 @@ export async function getWarningForEvent(
       categoryName,
     },
     isPast: past,
+    weak,
     logs: clusters,
   };
 }
@@ -394,6 +415,7 @@ export async function getUpcomingWarnings(userId: string): Promise<EventWarning[
         categoryName: e.category?.name ?? "その他",
       },
       isPast: false,
+      weak: false,
       logs: clusters,
     });
   }

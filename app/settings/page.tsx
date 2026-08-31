@@ -3,11 +3,9 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
-  deleteListTemplate,
   disableDescriptionWrite,
   disconnectGoogle,
   logout,
-  renameListTemplate,
   setCalendarId,
   submitFeedback,
 } from "@/app/actions";
@@ -167,60 +165,20 @@ export default async function SettingsPage() {
         )}
       </section>
 
-      <section className="rounded-2xl bg-surface p-5">
+      <Link
+        href="/savings"
+        className="block rounded-2xl bg-surface p-5 no-underline transition-colors hover:bg-surface-muted"
+      >
         <h2 className="text-sm font-semibold text-muted">
-          準備リストのテンプレート
+          名前をつけたリスト（テンプレート）
         </h2>
-        <p className="mt-2 text-xs text-muted">
-          予定ページの「📋 テンプレート・他の予定から」で、いまのリストに名前を付けて保存できます。
-          保存したものはどの予定にも追加できます。
+        <p className="mt-2 text-sm">
+          {templates.length > 0
+            ? `${templates.length} 件保存済み。`
+            : "まだありません。"}
+          「学習」タブで、準備すること用・持ち物用に分けて作成・編集できます（一括貼り付け対応）→
         </p>
-        {templates.length === 0 ? (
-          <p className="mt-3 text-sm text-muted">まだテンプレートはありません。</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {templates.map((t) => (
-              <li key={t.id} className="rounded-xl bg-surface-muted p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{t.name}</span>
-                  <span className="text-xs text-muted">
-                    準備 {t.taskCount} ・ 持ち物 {t.belongingCount}
-                  </span>
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <form
-                    action={renameListTemplate}
-                    className="flex items-center gap-1"
-                  >
-                    <input type="hidden" name="id" value={t.id} />
-                    <input
-                      name="name"
-                      defaultValue={t.name}
-                      maxLength={60}
-                      className="w-40 rounded-md border bg-background px-2 py-1 text-xs"
-                    />
-                    <button
-                      type="submit"
-                      className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
-                    >
-                      名前を変更
-                    </button>
-                  </form>
-                  <form action={deleteListTemplate}>
-                    <input type="hidden" name="id" value={t.id} />
-                    <button
-                      type="submit"
-                      className="text-[11px] text-muted underline hover:text-warn"
-                    >
-                      削除
-                    </button>
-                  </form>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      </Link>
 
       <section className="rounded-2xl bg-surface p-5">
         <h2 className="text-sm font-semibold text-muted">フィードバック（WTP アンケート）</h2>

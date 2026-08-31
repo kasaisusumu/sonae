@@ -12,7 +12,7 @@ import { SubmitButton } from "@/app/components/submit-button";
 import type { EventWarning } from "@/lib/failures";
 
 export function WarningPanel({ warning }: { warning: EventWarning }) {
-  const { event, logs, isPast } = warning;
+  const { event, logs, isPast, weak } = warning;
 
   return (
     <section className="rounded-2xl border border-warn/30 bg-warn-soft p-5">
@@ -31,7 +31,9 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
             このカテゴリ「{event.categoryName}」で過去に失敗の記録があります
           </h2>
           <p className="mt-1 text-xs text-warn/80">
-            責めるための表示ではありません。今回先回りできるよう、参考にしてください。前回防げていても、次回以降も表示します。
+            {weak
+              ? "この予定と直接は結びついていませんが、同じカテゴリの記録です。参考にしてください。"
+              : "責めるための表示ではありません。今回先回りできるよう、参考にしてください。前回防げていても、次回以降も表示します。"}
           </p>
         </>
       )}

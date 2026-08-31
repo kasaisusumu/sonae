@@ -29,6 +29,7 @@ import {
 import { extractEventFeature } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
 import { parseLead } from "@/lib/lead-time";
+import { parseBulkTitles } from "@/lib/bulk";
 
 async function requireUserId(): Promise<string> {
   const userId = await getSessionUserId();
@@ -952,10 +953,18 @@ type TemplateSeed = {
   notifyLeadMinutes: number | null;
 };
 
-/** 予定の「いま」の準備リスト（提案は除く）を、名前を付けてテンプレート保存する。 */
+function readKind(v: unknown): "task" | "belonging" {
+  return String(v ?? "") === "belonging" ? "belonging" : "task";
+}
+
+/**
+ * 予定の「いま」のリストのうち、指定した種類（準備すること or 持ち物）だけを
+ * 名前を付けてテンプレート保存する。テンプレートは種類ごとに分ける。
+ */
 export async function saveListAsTemplate(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const eventId = String(formData.get("eventId") ?? "");
+  const kind = readKind(formData.get("kind"));
   const name = String(formData.get("name") ?? "")
     .trim()
     .slice(0, 60);
@@ -971,26 +980,140 @@ export async function saveListAsTemplate(formData: FormData): Promise<void> {
       },
     },
   });
-  if (!event || event.checklistItems.length === 0) return;
+  if (!event) return;
 
-  const items: TemplateSeed[] = event.checklistItems.map((it) => ({
-    kind: it.kind === "belonging" ? "belonging" : "task",
+  const picked = event.checklistItems.filter(
+    (it) => (it.kind === "belonging" ? "belonging" : "task") === kind,
+  );
+  if (picked.length === 0) return;
+
+  const create = picked.map((it, i) => ({
+    kind,
     title: it.title,
     notifyLeadMinutes: it.notifyLeadMinutes ?? null,
+    sortOrder: i,
   }));
-  const create = items.map((it, i) => ({ ...it, sortOrder: i }));
 
   await prisma.listTemplate.upsert({
-    where: { userId_name: { userId, name } },
-    update: {
-      sourceEventId: eventId,
-      items: { deleteMany: {}, create },
-    },
-    create: { userId, name, sourceEventId: eventId, items: { create } },
+    where: { userId_kind_name: { userId, kind, name } },
+    update: { sourceEventId: eventId, items: { deleteMany: {}, create } },
+    create: { userId, kind, name, sourceEventId: eventId, items: { create } },
   });
 
   revalidatePath("/settings");
+  revalidatePath("/savings");
   revalidateAppViews(eventId);
+}
+
+/** 学習内容ページから、名前を付けたリストを新規作成する（一括貼り付け対応）。 */
+export async function createListTemplate(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const kind = readKind(formData.get("kind"));
+  const name = String(formData.get("name") ?? "")
+    .trim()
+    .slice(0, 60);
+  if (!name) return;
+
+  const titles = parseBulkTitles(String(formData.get("bulkText") ?? ""));
+
+  await prisma.listTemplate.upsert({
+    where: { userId_kind_name: { userId, kind, name } },
+    update: {
+      items: {
+        deleteMany: {},
+        create: titles.map((title, i) => ({ kind, title, sortOrder: i })),
+      },
+    },
+    create: {
+      userId,
+      kind,
+      name,
+      items: {
+        create: titles.map((title, i) => ({ kind, title, sortOrder: i })),
+      },
+    },
+  });
+
+  revalidatePath("/savings");
+  revalidatePath("/settings");
+}
+
+/** 名前を付けたリストの中身を丸ごと置き換える（学習内容ページのエディタから）。 */
+export async function saveTemplateItems(
+  templateId: string,
+  items: { title: string; notifyLeadMinutes: number | null }[],
+): Promise<void> {
+  const userId = await requireUserId();
+  const template = await prisma.listTemplate.findFirst({
+    where: { id: templateId, userId },
+    select: { id: true, kind: true },
+  });
+  if (!template) return;
+
+  const clean = items
+    .map((it) => ({
+      title: it.title.trim().slice(0, 120),
+      notifyLeadMinutes:
+        typeof it.notifyLeadMinutes === "number" && it.notifyLeadMinutes > 0
+          ? Math.round(it.notifyLeadMinutes)
+          : null,
+    }))
+    .filter((it) => it.title);
+
+  await prisma.$transaction([
+    prisma.listTemplateItem.deleteMany({ where: { templateId } }),
+    prisma.listTemplateItem.createMany({
+      data: clean.map((it, i) => ({
+        templateId,
+        kind: template.kind,
+        title: it.title,
+        notifyLeadMinutes: it.notifyLeadMinutes,
+        sortOrder: i,
+      })),
+    }),
+    prisma.listTemplate.update({
+      where: { id: templateId },
+      data: { updatedAt: new Date() },
+    }),
+  ]);
+
+  revalidatePath("/savings");
+  revalidatePath("/settings");
+}
+
+/** 名前を付けたリストに、一括貼り付けで項目を追記する。 */
+export async function addTemplateItemsBulk(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const templateId = String(formData.get("templateId") ?? "");
+  const titles = parseBulkTitles(String(formData.get("bulkText") ?? ""));
+  if (!templateId || titles.length === 0) return;
+
+  const template = await prisma.listTemplate.findFirst({
+    where: { id: templateId, userId },
+    include: { items: { select: { title: true, sortOrder: true } } },
+  });
+  if (!template) return;
+
+  const existing = new Set(template.items.map((i) => normTitle(i.title)));
+  let sort = template.items.reduce((m, i) => Math.max(m, i.sortOrder + 1), 0);
+  const fresh = titles.filter((t) => !existing.has(normTitle(t)));
+  if (fresh.length === 0) return;
+
+  await prisma.listTemplateItem.createMany({
+    data: fresh.map((title) => ({
+      templateId,
+      kind: template.kind,
+      title,
+      sortOrder: sort++,
+    })),
+  });
+  await prisma.listTemplate.update({
+    where: { id: templateId },
+    data: { updatedAt: new Date() },
+  });
+
+  revalidatePath("/savings");
+  revalidatePath("/settings");
 }
 
 /** テンプレート／他の予定の項目を、予定の準備リストに追加する（同じ種類・同じ名前はスキップ）。 */
@@ -1106,6 +1229,7 @@ export async function renameListTemplate(formData: FormData): Promise<void> {
   if (!id || !name) return;
   await prisma.listTemplate.updateMany({ where: { id, userId }, data: { name } });
   revalidatePath("/settings");
+  revalidatePath("/savings");
 }
 
 /** テンプレートを削除する。 */
@@ -1115,4 +1239,5 @@ export async function deleteListTemplate(formData: FormData): Promise<void> {
   if (!id) return;
   await prisma.listTemplate.deleteMany({ where: { id, userId } });
   revalidatePath("/settings");
+  revalidatePath("/savings");
 }

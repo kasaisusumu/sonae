@@ -1,11 +1,19 @@
 import { prisma } from "@/lib/prisma";
 
-export type TemplateSummary = {
+export type TemplateKind = "task" | "belonging";
+
+export type TemplateItem = {
   id: string;
+  title: string;
+  notifyLeadMinutes: number | null;
+};
+
+export type TemplateDetail = {
+  id: string;
+  kind: TemplateKind;
   name: string;
-  taskCount: number;
-  belongingCount: number;
   updatedAt: Date;
+  items: TemplateItem[];
 };
 
 export type PastEventWithList = {
@@ -16,21 +24,25 @@ export type PastEventWithList = {
   belongingCount: number;
 };
 
-/** ユーザーの保存済みテンプレート一覧（新しい順・件数つき）。 */
+/** ユーザーの保存済みテンプレート一覧（新しい順・項目つき）。 */
 export async function getUserTemplates(
   userId: string,
-): Promise<TemplateSummary[]> {
+): Promise<TemplateDetail[]> {
   const rows = await prisma.listTemplate.findMany({
     where: { userId },
-    orderBy: { updatedAt: "desc" },
-    include: { items: { select: { kind: true } } },
+    orderBy: [{ kind: "asc" }, { updatedAt: "desc" }],
+    include: { items: { orderBy: { sortOrder: "asc" } } },
   });
   return rows.map((t) => ({
     id: t.id,
+    kind: t.kind === "belonging" ? "belonging" : "task",
     name: t.name,
     updatedAt: t.updatedAt,
-    taskCount: t.items.filter((i) => i.kind !== "belonging").length,
-    belongingCount: t.items.filter((i) => i.kind === "belonging").length,
+    items: t.items.map((i) => ({
+      id: i.id,
+      title: i.title,
+      notifyLeadMinutes: i.notifyLeadMinutes ?? null,
+    })),
   }));
 }
 

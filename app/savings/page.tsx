@@ -8,9 +8,11 @@ import {
 } from "@/lib/learning";
 import { formatYen } from "@/lib/format";
 import { formatLead } from "@/lib/lead-time";
+import { getUserTemplates } from "@/lib/templates";
 import { LearningSearch } from "./learning-search";
 import { LazyLeaf } from "./lazy-leaf";
 import { LeafBody, type LeafItem } from "./leaf-body";
+import { TemplatesPanel } from "./templates-panel";
 
 const OUTCOME_LABEL: Record<string, string> = {
   prevented: "防げた",
@@ -183,7 +185,10 @@ export default async function LearningTreePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/");
 
-  const { categories, searchIndex } = await getLearningNameTree(user.id);
+  const [{ categories, searchIndex }, templates] = await Promise.all([
+    getLearningNameTree(user.id),
+    getUserTemplates(user.id),
+  ]);
 
   return (
     <div className="space-y-5">
@@ -196,6 +201,8 @@ export default async function LearningTreePage() {
           1 つにまとめて表示します。上の検索バーに予定名を入れると、その枝へ飛べます。
         </p>
       </div>
+
+      <TemplatesPanel templates={templates} />
 
       {categories.length === 0 ? (
         <p className="rounded-xl bg-surface px-4 py-8 text-center text-sm text-muted">

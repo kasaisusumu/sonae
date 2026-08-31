@@ -260,12 +260,14 @@ model Feedback {
   createdAt DateTime @default(now())
 }
 
-// 名前を付けて保存できる準備リストのテンプレート（準備すること＋持ち物）。
-// 予定の現在のリストから作れる。別の予定にまとめて適用できる。
+// 名前を付けて保存できる準備リストのテンプレート。
+// 「準備すること(task)」用と「持ち物(belonging)」用で分ける。
+// 予定の現在のリストから作るほか、学習内容ページで新規作成・編集もできる。
 model ListTemplate {
   id            String   @id @default(cuid())
   userId        String
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind          String   @default("task") // "task" | "belonging"
   name          String
   note          String?
   sourceEventId String? // どの予定のリストから作ったか（参照用）
@@ -274,7 +276,7 @@ model ListTemplate {
 
   items ListTemplateItem[]
 
-  @@unique([userId, name])
+  @@unique([userId, kind, name])
   @@index([userId])
 }
 

@@ -6,9 +6,11 @@ import {
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { SubmitButton } from "@/app/components/submit-button";
 
+const KIND_LABEL = { task: "準備すること", belonging: "持ち物" } as const;
+
 /**
  * 予定ページの「テンプレート・他の予定から」ツール。
- * - いまのリストに名前を付けて保存
+ * - いまのリストを種類ごと（準備すること／持ち物）に名前を付けて保存
  * - 保存済みテンプレートを追加
  * - 他の予定（過去のデータ）のリストをコピー
  */
@@ -31,13 +33,22 @@ export async function ListToolbox({
       </summary>
 
       <div className="mt-4 space-y-5">
-        {/* いまのリストを保存 */}
+        {/* いまのリストを種類ごとに保存 */}
         <form action={saveListAsTemplate} className="space-y-1.5">
           <input type="hidden" name="eventId" value={eventId} />
           <p className="text-xs font-semibold text-muted">
             いまのリストに名前を付けて保存
           </p>
           <div className="flex flex-wrap gap-2">
+            <select
+              name="kind"
+              defaultValue="task"
+              className="rounded-lg border bg-background px-2 py-2 text-sm"
+              aria-label="種類"
+            >
+              <option value="task">準備すること</option>
+              <option value="belonging">持ち物</option>
+            </select>
             <input
               name="name"
               required
@@ -48,7 +59,7 @@ export async function ListToolbox({
             <SubmitButton variant="ghost">保存</SubmitButton>
           </div>
           <p className="text-[11px] text-muted">
-            同じ名前で保存すると上書きします。準備すること・持ち物・通知タイミングをまとめて保存します。
+            準備すること用と持ち物用は別々に保存します。同じ種類・同じ名前なら上書きします。
           </p>
         </form>
 
@@ -60,7 +71,7 @@ export async function ListToolbox({
           </p>
           {templates.length === 0 ? (
             <p className="text-[11px] text-muted">
-              まだテンプレートはありません。上で保存すると選べます。
+              まだテンプレートはありません。上で保存するか、学習内容ページで作成できます。
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
@@ -75,7 +86,7 @@ export async function ListToolbox({
                 </option>
                 {templates.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name}（準備{t.taskCount}・持ち物{t.belongingCount}）
+                    [{KIND_LABEL[t.kind]}] {t.name}（{t.items.length}）
                   </option>
                 ))}
               </select>

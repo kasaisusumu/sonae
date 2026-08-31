@@ -48,7 +48,7 @@ function composeKind(
   kind: ItemKind,
   baseItems: GeneratedItem[],
   rules: ApplicableRule[],
-  opts: { autofillNotify?: boolean } = {},
+  opts: { autofillNotify?: boolean; verbatim?: boolean } = {},
 ): BuiltItem[] {
   const { min, max } = LIMITS[kind];
   let items: BuiltItem[] = baseItems.map((b) => ({
@@ -77,28 +77,32 @@ function composeKind(
     }
   }
   // 通知リード時間（内容とセットで学習した値。"off" は通知しない）
+  // recall（前回そっくり再利用）のときは、前回のリストと時間をそのまま出す。
+  // notify_override / timing_override の上書きも仮提案もしない。編集されて初めて枝分かれ。
   const notifyLearned = new Set<string>();
-  for (const r of byType(forced, "notify_override")) {
-    const hit = items.find((it) => norm(it.title) === norm(r.target));
-    if (hit) {
-      hit.notifyLeadMinutes = parseNotifyValue(r.value);
-      notifyLearned.add(norm(hit.title));
-    }
-  }
-  // 旧「タイミング」学習は通知リード時間として引き継ぐ
-  for (const r of byType(forced, "timing_override")) {
-    const hit = items.find((it) => norm(it.title) === norm(r.target));
-    if (hit && r.value) {
-      hit.timingLabel = r.value;
-      const lead = parseLead(r.value);
-      if (lead != null && !notifyLearned.has(norm(hit.title))) {
-        hit.notifyLeadMinutes = lead;
+  if (!opts.verbatim) {
+    for (const r of byType(forced, "notify_override")) {
+      const hit = items.find((it) => norm(it.title) === norm(r.target));
+      if (hit) {
+        hit.notifyLeadMinutes = parseNotifyValue(r.value);
         notifyLearned.add(norm(hit.title));
+      }
+    }
+    // 旧「タイミング」学習は通知リード時間として引き継ぐ
+    for (const r of byType(forced, "timing_override")) {
+      const hit = items.find((it) => norm(it.title) === norm(r.target));
+      if (hit && r.value) {
+        hit.timingLabel = r.value;
+        const lead = parseLead(r.value);
+        if (lead != null && !notifyLearned.has(norm(hit.title))) {
+          hit.notifyLeadMinutes = lead;
+          notifyLearned.add(norm(hit.title));
+        }
       }
     }
   }
   // 学習値が無い項目は、目安（生成時のラベル）から通知時間を自動提案する
-  if (opts.autofillNotify) {
+  if (opts.autofillNotify && !opts.verbatim) {
     for (const it of items) {
       if (it.notifyLeadMinutes === null && !notifyLearned.has(norm(it.title))) {
         it.notifyLeadMinutes = suggestNotifyLead(it.timingLabel, kind);
@@ -107,7 +111,9 @@ function composeKind(
   }
 
   // 仮ルール（提案。1タップで適用/却下）
-  for (const r of byType(tentative, "exclude_item")) {
+  // recall のときは提案を出さない ── 前回どおりを黙って出し、編集で初めて枝分かれ。
+  const tentativeRules = opts.verbatim ? [] : tentative;
+  for (const r of byType(tentativeRules, "exclude_item")) {
     const hit = items.find(
       (it) => norm(it.title) === norm(r.target) && !it.isSuggested,
     );
@@ -117,7 +123,7 @@ function composeKind(
       hit.suggestionRuleId = r.id;
     }
   }
-  for (const r of byType(tentative, "fixed_item")) {
+  for (const r of byType(tentativeRules, "fixed_item")) {
     if (!items.some((it) => norm(it.title) === norm(r.target))) {
       items.push({
         ...base(kind, r.target, r.value),
@@ -128,7 +134,7 @@ function composeKind(
       });
     }
   }
-  for (const r of byType(tentative, "timing_override")) {
+  for (const r of byType(tentativeRules, "timing_override")) {
     const hit = items.find(
       (it) => norm(it.title) === norm(r.target) && !it.isSuggested,
     );
@@ -239,10 +245,14 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
     }),
   ]);
 
-  // recall 由来は前回の通知設定（"なし" 含む）をそのまま尊重。新規生成のみ自動提案。
+  // recall 由来は前回のリストと通知設定（"なし" 含む）をそのまま出す。新規生成のみ自動提案。
   const autofillNotify = !recalled;
+  const verbatim = !!recalled;
   return [
-    ...composeKind("task", gen.tasks, taskRules, { autofillNotify }),
-    ...composeKind("belonging", gen.belongings, belongingRules, { autofillNotify }),
+    ...composeKind("task", gen.tasks, taskRules, { autofillNotify, verbatim }),
+    ...composeKind("belonging", gen.belongings, belongingRules, {
+      autofillNotify,
+      verbatim,
+    }),
   ];
 }

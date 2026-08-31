@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { saveChecklist, toggleChecklistItemDone } from "@/app/actions";
+import {
+  saveChecklist,
+  setItemNotifyLead,
+  toggleChecklistItemDone,
+} from "@/app/actions";
 import { LEAD_PRESETS, isLeadPreset } from "@/lib/lead-time";
 
 interface Item {
@@ -150,6 +154,13 @@ export function ChecklistEditor({
     setSaved(false);
   }
 
+  // 保存済み項目は通知の変更をその場で保存＋学習（チェックと同じ扱い）
+  function commitNotify(it: Item, minutes: number | null) {
+    if (it.id && (it.notifyLeadMinutes ?? null) !== minutes) {
+      void setItemNotifyLead(it.id, minutes);
+    }
+  }
+
   function onNotifySelect(it: Item, value: string) {
     if (value === "custom") {
       update(it.key, {
@@ -158,8 +169,11 @@ export function ChecklistEditor({
       });
     } else if (value === "none") {
       update(it.key, { notifyCustom: false, notifyLeadMinutes: null });
+      commitNotify(it, null);
     } else {
-      update(it.key, { notifyCustom: false, notifyLeadMinutes: Number(value) });
+      const m = Number(value);
+      update(it.key, { notifyCustom: false, notifyLeadMinutes: m });
+      commitNotify(it, m);
     }
   }
 
@@ -169,7 +183,9 @@ export function ChecklistEditor({
     const h = part === "h" ? clamp(Number(value), 23) : cur.h;
     const mm = part === "mm" ? clamp(Number(value), 59) : cur.mm;
     const total = d * 1440 + h * 60 + mm;
-    update(it.key, { notifyLeadMinutes: total > 0 ? total : null });
+    const next = total > 0 ? total : null;
+    update(it.key, { notifyLeadMinutes: next });
+    commitNotify(it, next);
   }
 
   function toggleDone(it: Item, next: boolean) {
@@ -440,7 +456,7 @@ export function ChecklistEditor({
       {bulkNote && <p className="mt-2 text-xs text-teal-dark">{bulkNote}</p>}
 
       <p className="mt-2 text-[11px] text-muted">
-        チェックは自動保存。文言・通知・メモの変更は「保存する」で反映（メモは学習しません）。
+        チェックと通知タイミングは自動保存・自動学習。文言・メモの変更は「保存する」で反映（メモは学習しません）。
       </p>
     </div>
   );

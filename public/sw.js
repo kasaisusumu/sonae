@@ -1,4 +1,4 @@
-/* 私のマネージャー Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v3 */
+/* 私のマネージャー Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v4 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -59,7 +59,21 @@ self.addEventListener("notificationclick", (event) => {
         return;
       }
 
-      // 2) navigate できる同一オリジンの窓があれば、そこを目的ページへ移動する
+      // 2) まず新しく目的 URL を開く。これが一番確実に「その通知のページ」へ着く。
+      //    （インストール済み PWA なら PWA 内で開く）
+      if (self.clients.openWindow) {
+        try {
+          const w = await self.clients.openWindow(targetHref);
+          if (w) {
+            if (typeof w.focus === "function") await w.focus().catch(() => {});
+            return;
+          }
+        } catch {
+          /* openWindow 不可（ブロック等）→ 下へ */
+        }
+      }
+
+      // 3) 開けなかったら、既存の同一オリジン窓を目的ページへ移動する
       const navigable = sameOrigin.find((c) => typeof c.navigate === "function");
       if (navigable) {
         try {
@@ -69,13 +83,6 @@ self.addEventListener("notificationclick", (event) => {
         } catch {
           /* navigate 不可 → 下へ */
         }
-      }
-
-      // 3) 目的 URL を開く（インストール済み PWA なら PWA 内で開く）
-      if (self.clients.openWindow) {
-        const w = await self.clients.openWindow(targetHref);
-        if (w && typeof w.focus === "function") await w.focus().catch(() => {});
-        return;
       }
 
       // 4) 最後の手段: 既存窓をフォーカスだけでもする

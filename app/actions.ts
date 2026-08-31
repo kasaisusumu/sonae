@@ -221,6 +221,56 @@ export async function toggleChecklistItemDone(
   revalidateAppViews(item.eventId);
 }
 
+/**
+ * 通知リード時間の即時変更＋即時学習（「保存する」不要。チェックと同じ扱い）。
+ * minutes = null で通知なし。
+ */
+export async function setItemNotifyLead(
+  itemId: string,
+  minutes: number | null,
+): Promise<void> {
+  const userId = await requireUserId();
+  const lead = cleanLead(minutes);
+  const item = await prisma.checklistItem.findFirst({
+    where: { id: itemId, isSuggested: false, event: { userId } },
+    include: { event: true },
+  });
+  if (!item) return;
+  if ((item.notifyLeadMinutes ?? null) === lead) return; // 変化なし
+
+  await prisma.checklistItem.update({
+    where: { id: itemId },
+    data: { notifyLeadMinutes: lead, notifiedAt: null },
+  });
+
+  // 内容とセットで即時学習（notify_override）
+  if (item.event.categoryId) {
+    await recordEdit({
+      eventId: item.eventId,
+      categoryId: item.event.categoryId,
+      itemKind: item.kind === "belonging" ? "belonging" : "task",
+      feature: extractEventFeature({
+        title: item.event.title,
+        memo: item.event.memo,
+        eventDatetime: item.event.eventDatetime,
+        endDatetime: item.event.endDatetime,
+      }),
+      removed: [],
+      added: [],
+      retimed: [],
+      renotified: [{ title: item.title, leadMinutes: lead }],
+    });
+  }
+
+  await markAutoManaged(item.eventId);
+  const twinIds = await resolveNameGroupOnEdit(item.eventId);
+  after(() => {
+    void syncEventDescription(item.eventId);
+    for (const id of twinIds) void syncEventDescription(id);
+  });
+  revalidateAppViews(item.eventId);
+}
+
 interface SaveChecklistInput {
   eventId: string;
   kind: "task" | "belonging";

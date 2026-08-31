@@ -94,6 +94,13 @@ export async function recallBaseChecklist(
       categoryId: event.categoryId,
       id: { not: event.id },
       checklistItems: { some: { isSuggested: false } },
+      // 「たたき台にしてよい」のは、ユーザーが確認 or 編集した予定だけ。
+      // 生成しただけで一度も見られていないリストは再利用のもとにしない。
+      OR: [
+        { editRecords: { some: {} } },
+        { listCustomized: true },
+        { listReviewedAt: { not: null } },
+      ],
     },
     orderBy: { eventDatetime: "desc" },
     take: 50,

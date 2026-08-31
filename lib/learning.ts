@@ -543,7 +543,20 @@ export async function getLearningNameTree(userId: string): Promise<{
       events: {
         where: {
           OR: [
-            { checklistItems: { some: { isSuggested: false } } },
+            // 準備リストがあり、かつユーザーが確認 or 編集した予定だけを学習内容として出す。
+            // 生成しただけ・未確認・未編集のものは学習には使わない。
+            {
+              AND: [
+                { checklistItems: { some: { isSuggested: false } } },
+                {
+                  OR: [
+                    { editRecords: { some: {} } },
+                    { listCustomized: true },
+                    { listReviewedAt: { not: null } },
+                  ],
+                },
+              ],
+            },
             { failureLogs: { some: {} } },
           ],
         },

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getSavingsSummary, getFailureRetrospective } from "@/lib/savings";
 import { formatYen } from "@/lib/format";
-import { setFailureOutcome } from "@/app/actions";
+import { setFailureOutcome, updateFailureAmount } from "@/app/actions";
 
 /** ホームに表示する節約額ダッシュボード。防げたことも並べる。 */
 export async function SavingsDashboard({ userId }: { userId: string }) {
@@ -183,7 +183,32 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
                                 : "±0"}
                             </span>
                           </div>
-                          <div className="mt-1.5 flex items-center gap-3 text-[11px]">
+                          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px]">
+                            <form
+                              action={updateFailureAmount}
+                              className="flex items-center gap-1"
+                            >
+                              <input
+                                type="hidden"
+                                name="failureLogId"
+                                value={it.id}
+                              />
+                              <input
+                                type="number"
+                                name="estimatedLossYen"
+                                min={0}
+                                step={100}
+                                defaultValue={it.estimatedLossYen || ""}
+                                placeholder="円"
+                                className="w-20 rounded-md border bg-surface px-2 py-0.5 text-[11px]"
+                              />
+                              <button
+                                type="submit"
+                                className="text-teal-dark underline hover:text-foreground"
+                              >
+                                金額を直す
+                              </button>
+                            </form>
                             <form action={setFailureOutcome}>
                               <input
                                 type="hidden"

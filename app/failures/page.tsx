@@ -5,6 +5,7 @@ import {
   createFailureLog,
   deleteFailureLog,
   setFailureOutcome,
+  updateFailureAmount,
 } from "@/app/actions";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
 import { formatYen } from "@/lib/format";
@@ -85,7 +86,7 @@ function FailureRow({ log: l }: { log: LogRow }) {
           </button>
         </form>
       </div>
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <OutcomeButton
           logId={l.id}
           target="prevented"
@@ -100,6 +101,24 @@ function FailureRow({ log: l }: { log: LogRow }) {
           label="防げなかった"
           tone="warn"
         />
+        <form action={updateFailureAmount} className="flex items-center gap-1">
+          <input type="hidden" name="failureLogId" value={l.id} />
+          <input
+            type="number"
+            name="estimatedLossYen"
+            min={0}
+            step={100}
+            defaultValue={l.estimatedLossYen || ""}
+            placeholder="金額（円）"
+            className="w-28 rounded-full border border-border bg-background px-3 py-1 text-xs"
+          />
+          <button
+            type="submit"
+            className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:border-foreground/40"
+          >
+            金額を更新
+          </button>
+        </form>
       </div>
     </li>
   );

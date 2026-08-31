@@ -4,6 +4,7 @@ import {
   logRepeatedFailure,
   markPrevented,
   undoPrevented,
+  updateFailureAmount,
 } from "@/app/actions";
 import { formatYen } from "@/lib/format";
 import { LEAD_PRESETS } from "@/lib/lead-time";
@@ -91,32 +92,69 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
             {/* 防げた / 防げなかった */}
             <div className="mt-3 flex flex-wrap items-center gap-3">
               {log.prevented ? (
-                <form action={undoPrevented} className="flex items-center gap-3">
-                  <input type="hidden" name="eventId" value={event.id} />
-                  <input type="hidden" name="failureLogId" value={log.id} />
+                <div className="flex flex-wrap items-center gap-3">
                   <span className="text-xs text-teal-dark">
                     ✓ 「防げた」として計上済み
                     {log.estimatedLossYen > 0
                       ? `（${formatYen(log.estimatedLossYen)}）`
                       : ""}
                   </span>
-                  <button
-                    type="submit"
-                    className="text-xs text-muted underline hover:text-foreground"
+                  <form
+                    action={updateFailureAmount}
+                    className="flex items-center gap-1"
                   >
-                    取り消す
-                  </button>
-                </form>
-              ) : (
-                <>
-                  <form action={markPrevented}>
+                    <input type="hidden" name="failureLogId" value={log.id} />
+                    <span className="text-[11px] text-muted">金額を直す</span>
+                    <input
+                      type="number"
+                      name="estimatedLossYen"
+                      min={0}
+                      step={100}
+                      defaultValue={log.estimatedLossYen || ""}
+                      placeholder="円"
+                      className="w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                    />
+                    <button
+                      type="submit"
+                      className="text-[11px] text-teal-dark underline hover:text-foreground"
+                    >
+                      更新
+                    </button>
+                  </form>
+                  <form action={undoPrevented}>
                     <input type="hidden" name="eventId" value={event.id} />
                     <input type="hidden" name="failureLogId" value={log.id} />
+                    <button
+                      type="submit"
+                      className="text-xs text-muted underline hover:text-foreground"
+                    >
+                      取り消す
+                    </button>
+                  </form>
+                </div>
+              ) : (
+                <>
+                  <form
+                    action={markPrevented}
+                    className="flex flex-wrap items-center gap-2"
+                  >
+                    <input type="hidden" name="eventId" value={event.id} />
+                    <input type="hidden" name="failureLogId" value={log.id} />
+                    <label className="flex items-center gap-1 text-[11px] text-muted">
+                      金額（任意）
+                      <input
+                        type="number"
+                        name="estimatedLossYen"
+                        min={0}
+                        step={100}
+                        defaultValue={log.estimatedLossYen || ""}
+                        placeholder="円"
+                        className="w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                      />
+                    </label>
                     <SubmitButton>
                       {isPast ? "今回は防げた" : "これは防げた"}
-                      {log.estimatedLossYen > 0
-                        ? `（${formatYen(log.estimatedLossYen)}を節約に計上）`
-                        : "（節約に計上）"}
+                      （節約に計上）
                     </SubmitButton>
                   </form>
                   {isPast && (

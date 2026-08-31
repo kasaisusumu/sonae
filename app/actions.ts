@@ -671,13 +671,26 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
     raw === "prevented" || raw === "not_prevented" ? raw : "unset";
   if (!failureLogId) return;
 
+  // 振り返り時に金額を改めて入力・修正できる（空欄なら既存のまま）。
+  const rawAmount = formData.get("estimatedLossYen");
+  const hasAmount = rawAmount !== null && String(rawAmount).trim() !== "";
+  const newAmount = hasAmount ? parseYen(rawAmount) : null;
+
   const log = await prisma.failureLog.findFirst({
     where: { id: failureLogId, userId },
     select: { id: true, eventId: true, estimatedLossYen: true },
   });
   if (!log) return;
 
+  const amount = newAmount ?? log.estimatedLossYen;
+
   if (outcome === "prevented") {
+    if (hasAmount) {
+      await prisma.failureLog.update({
+        where: { id: failureLogId },
+        data: { estimatedLossYen: amount },
+      });
+    }
     const existing = await prisma.savingsEntry.findFirst({
       where: { userId, failureLogId },
       select: { id: true },
@@ -688,9 +701,14 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
           userId,
           failureLogId,
           eventId: log.eventId,
-          amountYen: log.estimatedLossYen,
+          amountYen: amount,
           confirmedByUser: true,
         },
+      });
+    } else if (hasAmount) {
+      await prisma.savingsEntry.updateMany({
+        where: { userId, failureLogId },
+        data: { amountYen: amount },
       });
     }
     await prisma.failureLog.update({
@@ -698,12 +716,46 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
       data: { outcome: "prevented" },
     });
   } else {
+    if (hasAmount) {
+      await prisma.failureLog.update({
+        where: { id: failureLogId },
+        data: { estimatedLossYen: amount },
+      });
+    }
     await prisma.savingsEntry.deleteMany({ where: { userId, failureLogId } });
     await prisma.failureLog.update({
       where: { id: failureLogId },
       data: { outcome: outcome === "not_prevented" ? "not_prevented" : null },
     });
   }
+
+  revalidateAppViews(log.eventId ?? undefined);
+}
+
+/**
+ * 失敗ログの推定金額を、振り返りの場であとから入力・修正する。
+ * すでに「防げた」に計上済みなら、節約額の方も同じ金額へ揃える。
+ */
+export async function updateFailureAmount(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const failureLogId = String(formData.get("failureLogId") ?? "");
+  if (!failureLogId) return;
+  const amount = parseYen(formData.get("estimatedLossYen"));
+
+  const log = await prisma.failureLog.findFirst({
+    where: { id: failureLogId, userId },
+    select: { id: true, eventId: true },
+  });
+  if (!log) return;
+
+  await prisma.failureLog.update({
+    where: { id: failureLogId },
+    data: { estimatedLossYen: amount },
+  });
+  await prisma.savingsEntry.updateMany({
+    where: { userId, failureLogId },
+    data: { amountYen: amount },
+  });
 
   revalidateAppViews(log.eventId ?? undefined);
 }
@@ -761,14 +813,25 @@ export async function markPrevented(formData: FormData): Promise<void> {
   ]);
   if (!event || !log) return;
 
+  // 振り返りで金額を改めて入力できる（空欄なら既存のまま）。
+  const rawAmount = formData.get("estimatedLossYen");
+  const hasAmount = rawAmount !== null && String(rawAmount).trim() !== "";
+  const amount = hasAmount ? parseYen(rawAmount) : log.estimatedLossYen;
+  if (hasAmount) {
+    await prisma.failureLog.update({
+      where: { id: failureLogId },
+      data: { estimatedLossYen: amount },
+    });
+  }
+
   await prisma.savingsEntry.upsert({
     where: { eventId_failureLogId: { eventId, failureLogId } },
-    update: { amountYen: log.estimatedLossYen, confirmedByUser: true },
+    update: { amountYen: amount, confirmedByUser: true },
     create: {
       userId,
       eventId,
       failureLogId,
-      amountYen: log.estimatedLossYen,
+      amountYen: amount,
       confirmedByUser: true,
     },
   });

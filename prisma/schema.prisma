@@ -102,6 +102,9 @@ model Event {
   // この予定の準備リストを個別に編集して、同名グループから切り離したか。
   // false = 同名の未編集予定と内容を共有（一方の編集は全体に波及）。
   listCustomized Boolean  @default(false)
+  // 準備リストの「枠」（セクション）のキーと表示順。JSON string[]。
+  // 既定は ["task","belonging"]（＝準備すること・持ち物）。ユーザーが枠を足すとキーが増える。
+  sectionOrder  String   @default("[\"task\",\"belonging\"]")
   // 生成されたリストを、編集せずに「確認しました」と押した日時。
   // これが null かつ EditRecord も無いと「未確認」表示（説明欄にも注記）。
   listReviewedAt DateTime?

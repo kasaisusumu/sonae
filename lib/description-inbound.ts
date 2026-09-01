@@ -8,7 +8,8 @@ import {
 import { syncEventDescription } from "@/lib/description-sync";
 import { resolveNameGroupOnEdit } from "@/lib/checklist";
 import { extractEventFeature } from "@/lib/features";
-import { recordEdit, type GeneratedItem, type ItemKind } from "@/lib/learning";
+import { recordEdit, type GeneratedItem } from "@/lib/learning";
+import { resolveSections, stringifySectionOrder } from "@/lib/sections";
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, "").trim();
 
@@ -82,20 +83,21 @@ export async function applyInboundDescription(
   }
 
   const prevAll = event.checklistItems;
-  const kinds: ItemKind[] = ["task", "belonging"];
+  // 枠（セクション）は固定ではなく、既存＋受信テキストに現れたキー全部が対象。
+  const kinds: string[] = Array.from(
+    new Set([
+      ...prevAll.map((c) => c.kind),
+      ...parsed.items.map((i) => i.kind),
+    ]),
+  );
 
-  // 差分（種別ごと）
-  const diffs: Record<
-    ItemKind,
-    {
-      removed: string[];
-      added: GeneratedItem[];
-      renotified: { title: string; leadMinutes: number | null }[];
-    }
-  > = {
-    task: { removed: [], added: [], renotified: [] },
-    belonging: { removed: [], added: [], renotified: [] },
+  type Diff = {
+    removed: string[];
+    added: GeneratedItem[];
+    renotified: { title: string; leadMinutes: number | null }[];
   };
+  const diffs: Record<string, Diff> = {};
+  for (const k of kinds) diffs[k] = { removed: [], added: [], renotified: [] };
   let doneOrCommentChanged = false;
 
   for (const kind of kinds) {
@@ -179,6 +181,14 @@ export async function applyInboundDescription(
     };
   });
 
+  // 説明欄で新しい【枠】が増えていたら順序に取り込む。
+  const nextSectionOrder = stringifySectionOrder(
+    resolveSections(event.sectionOrder, [
+      ...prevAll.map((c) => c.kind),
+      ...rows.map((r) => r.kind),
+    ]),
+  );
+
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({
       where: { eventId, isSuggested: false },
@@ -186,7 +196,11 @@ export async function applyInboundDescription(
     prisma.checklistItem.createMany({ data: rows }),
     prisma.event.update({
       where: { id: eventId },
-      data: { memo: memoPart, lastInboundHash: inboundHash },
+      data: {
+        memo: memoPart,
+        lastInboundHash: inboundHash,
+        sectionOrder: nextSectionOrder,
+      },
     }),
   ]);
 

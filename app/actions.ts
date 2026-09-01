@@ -33,6 +33,12 @@ import { parseLead } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
 import { parseJstDate, parseJstDateTimeLocal } from "@/lib/format";
 import { clusterKey } from "@/lib/failures";
+import {
+  isBuiltinSection,
+  parseSectionOrder,
+  sectionKeyFromLabel,
+  stringifySectionOrder,
+} from "@/lib/sections";
 
 async function requireUserId(): Promise<string> {
   const userId = await getSessionUserId();
@@ -365,7 +371,8 @@ export async function setItemNotifyLead(
 
 interface SaveChecklistInput {
   eventId: string;
-  kind: "task" | "belonging";
+  /** "task" / "belonging" / ユーザーが足した枠名 */
+  kind: string;
   items: {
     title: string;
     comment: string | null;
@@ -386,12 +393,19 @@ function cleanLead(v: unknown): number | null {
 /** チェックリストの編集を保存し、学習ルールに反映する（種別ごと・提案項目は残す）。 */
 export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   const userId = await requireUserId();
-  const kind = input.kind === "belonging" ? "belonging" : "task";
+  const kind = (input.kind || "task").trim() || "task";
   const event = await prisma.event.findFirst({
     where: { id: input.eventId, userId },
     include: { checklistItems: true },
   });
   if (!event) return;
+
+  // ユーザーが足した枠なら、予定の枠順に確実に含めておく（説明欄・学習と整合）。
+  const curOrder = parseSectionOrder(event.sectionOrder);
+  const nextOrder =
+    isBuiltinSection(kind) || curOrder.includes(kind)
+      ? curOrder
+      : [...curOrder, kind];
 
   const cleanItems = input.items
     .map((it) => ({
@@ -456,10 +470,18 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
           notifyLeadMinutes: it.notifyLeadMinutes,
           // リード時間が変わっていなければ送信済みフラグを引き継ぐ（再送しない）
           notifiedAt: leadUnchanged ? (p?.notifiedAt ?? null) : null,
-          sortOrder: (kind === "belonging" ? maxOrder + 1 : 0) + i,
+          sortOrder: (kind === "task" ? 0 : maxOrder + 1) + i,
         };
       }),
     }),
+    ...(nextOrder === curOrder
+      ? []
+      : [
+          prisma.event.update({
+            where: { id: input.eventId },
+            data: { sectionOrder: stringifySectionOrder(nextOrder) },
+          }),
+        ]),
   ]);
 
   if (
@@ -498,6 +520,105 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   });
 
   revalidateAppViews(input.eventId);
+}
+
+// ── 準備リストの「枠」（セクション）を追加・改名・削除する ──────────
+//   組み込みの「準備すること」「持ち物」は改名・削除できない。
+//   枠を足す／消すと、説明欄の同期（after）と学習ページも即座に追随する。
+
+async function loadEventForSection(eventId: string) {
+  const userId = await requireUserId();
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    include: { checklistItems: { select: { kind: true } } },
+  });
+  return event;
+}
+
+/** 新しい枠を追加する。枠名がキーになる（組み込み名は不可）。 */
+export async function addChecklistSection(formData: FormData): Promise<void> {
+  const eventId = String(formData.get("eventId") ?? "");
+  const name = String(formData.get("name") ?? "").trim().slice(0, 24);
+  if (!name) return;
+  const key = sectionKeyFromLabel(name);
+  if (isBuiltinSection(key)) return; // 「準備すること」等はすでにある
+
+  const event = await loadEventForSection(eventId);
+  if (!event) return;
+
+  const order = parseSectionOrder(event.sectionOrder);
+  if (order.includes(key)) return;
+  await prisma.event.update({
+    where: { id: eventId },
+    data: { sectionOrder: stringifySectionOrder([...order, key]) },
+  });
+  await markAutoManaged(eventId);
+  after(() => void syncEventDescription(eventId));
+  revalidateAppViews(eventId);
+}
+
+/** 枠の名前を変える。中の項目の kind も新しい名前へ付け替える。 */
+export async function renameChecklistSection(
+  formData: FormData,
+): Promise<void> {
+  const eventId = String(formData.get("eventId") ?? "");
+  const from = String(formData.get("from") ?? "").trim();
+  const to = sectionKeyFromLabel(
+    String(formData.get("to") ?? "").trim().slice(0, 24),
+  );
+  if (!from || !to || isBuiltinSection(from) || isBuiltinSection(to)) return;
+
+  const event = await loadEventForSection(eventId);
+  if (!event) return;
+
+  const order = parseSectionOrder(event.sectionOrder);
+  if (!order.includes(from) || order.includes(to)) return;
+
+  await prisma.$transaction([
+    prisma.checklistItem.updateMany({
+      where: { eventId, kind: from },
+      data: { kind: to },
+    }),
+    prisma.event.update({
+      where: { id: eventId },
+      data: {
+        sectionOrder: stringifySectionOrder(
+          order.map((k) => (k === from ? to : k)),
+        ),
+      },
+    }),
+  ]);
+  await markAutoManaged(eventId);
+  after(() => void syncEventDescription(eventId));
+  revalidateAppViews(eventId);
+}
+
+/** 枠を削除する。中の項目もまとめて消える（組み込みは不可）。 */
+export async function removeChecklistSection(
+  formData: FormData,
+): Promise<void> {
+  const eventId = String(formData.get("eventId") ?? "");
+  const key = String(formData.get("key") ?? "").trim();
+  if (!key || isBuiltinSection(key)) return;
+
+  const event = await loadEventForSection(eventId);
+  if (!event) return;
+
+  const order = parseSectionOrder(event.sectionOrder);
+  if (!order.includes(key)) return;
+
+  await prisma.$transaction([
+    prisma.checklistItem.deleteMany({ where: { eventId, kind: key } }),
+    prisma.event.update({
+      where: { id: eventId },
+      data: {
+        sectionOrder: stringifySectionOrder(order.filter((k) => k !== key)),
+      },
+    }),
+  ]);
+  await markAutoManaged(eventId);
+  after(() => void syncEventDescription(eventId));
+  revalidateAppViews(eventId);
 }
 
 /** 提案項目を「適用」する（1タップ）。ルールの確信度を上げる。 */
@@ -916,7 +1037,11 @@ export async function updateFailureAmount(formData: FormData): Promise<void> {
   revalidateAppViews(log.eventId ?? undefined);
 }
 
-/** 失敗ログの内容（説明・金額・日付）をまとめて編集する。 */
+/**
+ * 失敗ログの内容（失敗内容・金額・日付・結果／状態）をまとめて編集する。
+ * 予定ページからいつでも呼べる。結果（防げた／防げなかった／未選択）を変えたら
+ * 節約ダッシュボードの計上も揃える。
+ */
 export async function updateFailureLog(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const id = String(formData.get("id") ?? "");
@@ -924,7 +1049,7 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
 
   const log = await prisma.failureLog.findFirst({
     where: { id, userId },
-    select: { id: true, eventId: true },
+    select: { id: true, eventId: true, estimatedLossYen: true },
   });
   if (!log) return;
 
@@ -935,19 +1060,53 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
   const occurredAtRaw = String(formData.get("occurredAt") ?? "").trim();
   const occurredAt = occurredAtRaw ? parseJstDate(occurredAtRaw) : null;
 
+  const rawOutcome = formData.get("outcome");
+  const hasOutcome = rawOutcome !== null;
+  const outcomeStr = String(rawOutcome ?? "");
+  const outcome: string | null =
+    outcomeStr === "prevented" || outcomeStr === "not_prevented"
+      ? outcomeStr
+      : null;
+
   await prisma.failureLog.update({
     where: { id },
     data: {
       ...(description ? { description } : {}),
       ...(hasAmount ? { estimatedLossYen: amount! } : {}),
       ...(occurredAt ? { occurredAt } : {}),
+      ...(hasOutcome ? { outcome } : {}),
     },
   });
+
+  const effectiveAmount = hasAmount ? amount! : log.estimatedLossYen;
   if (hasAmount) {
     await prisma.savingsEntry.updateMany({
       where: { userId, failureLogId: id },
-      data: { amountYen: amount! },
+      data: { amountYen: effectiveAmount },
     });
+  }
+
+  // 結果を変えたら節約計上も合わせる（setFailureOutcome と同じ扱い）。
+  if (hasOutcome) {
+    if (outcome === "prevented") {
+      const existing = await prisma.savingsEntry.findFirst({
+        where: { userId, failureLogId: id },
+        select: { id: true },
+      });
+      if (!existing) {
+        await prisma.savingsEntry.create({
+          data: {
+            userId,
+            failureLogId: id,
+            eventId: log.eventId,
+            amountYen: effectiveAmount,
+            confirmedByUser: true,
+          },
+        });
+      }
+    } else {
+      await prisma.savingsEntry.deleteMany({ where: { userId, failureLogId: id } });
+    }
   }
 
   revalidateAppViews(log.eventId ?? undefined);
@@ -1139,7 +1298,8 @@ export async function submitFeedback(formData: FormData): Promise<void> {
 // ─────────────────────────────────────────────
 
 type TemplateSeed = {
-  kind: "task" | "belonging";
+  /** "task" / "belonging" / ユーザーが足した枠名 */
+  kind: string;
   title: string;
   notifyLeadMinutes: number | null;
 };
@@ -1319,10 +1479,9 @@ async function addSeedItemsToEvent(
   const existing = new Set(
     event.checklistItems.map((c) => `${c.kind}:${normTitle(c.title)}`),
   );
-  const nextSort: Record<string, number> = { task: 0, belonging: 0 };
+  const nextSort: Record<string, number> = {};
   for (const c of event.checklistItems) {
-    const k = c.kind === "belonging" ? "belonging" : "task";
-    nextSort[k] = Math.max(nextSort[k], c.sortOrder + 1);
+    nextSort[c.kind] = Math.max(nextSort[c.kind] ?? 0, c.sortOrder + 1);
   }
 
   const fresh = seeds.filter(
@@ -1330,16 +1489,42 @@ async function addSeedItemsToEvent(
   );
   if (fresh.length === 0) return 0;
 
-  await prisma.checklistItem.createMany({
-    data: fresh.map((s) => ({
+  const data = fresh.map((s) => {
+    const so = nextSort[s.kind] ?? 0;
+    nextSort[s.kind] = so + 1;
+    return {
       eventId,
       kind: s.kind,
       title: s.title.trim().slice(0, 120),
       notifyLeadMinutes: s.notifyLeadMinutes,
       isUserAdded: true,
-      sortOrder: nextSort[s.kind]++,
-    })),
+      sortOrder: so,
+    };
   });
+
+  // コピー元にあってこの予定の枠順に無いユーザー枠は、枠順にも足す
+  const order = parseSectionOrder(event.sectionOrder);
+  const missing = [
+    ...new Set(
+      fresh
+        .map((s) => s.kind)
+        .filter((k) => !isBuiltinSection(k) && !order.includes(k)),
+    ),
+  ];
+
+  await prisma.$transaction([
+    prisma.checklistItem.createMany({ data }),
+    ...(missing.length
+      ? [
+          prisma.event.update({
+            where: { id: eventId },
+            data: {
+              sectionOrder: stringifySectionOrder([...order, ...missing]),
+            },
+          }),
+        ]
+      : []),
+  ]);
 
   await markAutoManaged(eventId);
   const twinIds = await resolveNameGroupOnEdit(eventId);
@@ -1380,8 +1565,9 @@ export async function copyListFromEvent(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const eventId = String(formData.get("eventId") ?? "");
   const sourceEventId = String(formData.get("sourceEventId") ?? "");
-  const onlyKind = readKind(formData.get("kind")); // "task" | "belonging"
-  const filterByKind = formData.get("kind") != null; // 指定があればその種類だけ
+  const rawKind = formData.get("kind");
+  const onlyKind = rawKind != null ? String(rawKind) : null; // 枠キー（組み込み or ユーザー枠名）
+  const filterByKind = onlyKind != null; // 指定があればその枠だけ
   if (!eventId || !sourceEventId || eventId === sourceEventId) return;
 
   const source = await prisma.event.findFirst({
@@ -1398,9 +1584,7 @@ export async function copyListFromEvent(formData: FormData): Promise<void> {
 
   const picked = source.checklistItems
     .map((it) => ({
-      kind: (it.kind === "belonging" ? "belonging" : "task") as
-        | "task"
-        | "belonging",
+      kind: it.kind,
       title: it.title,
       notifyLeadMinutes: it.notifyLeadMinutes ?? null,
     }))

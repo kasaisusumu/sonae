@@ -10,10 +10,16 @@ import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
 import { markListReviewed, regenerateChecklist } from "@/app/actions";
+import {
+  isBuiltinSection,
+  resolveSections,
+  sectionLabel,
+} from "@/lib/sections";
 import { ChecklistEditor } from "./checklist-editor";
 import { SuggestionList } from "./suggestion-list";
 import { WarningPanel } from "./warning-panel";
 import { ListReminderControl } from "./list-reminder-control";
+import { AddSectionButton, SectionControls } from "./section-manager";
 import { SubmitButton } from "@/app/components/submit-button";
 
 type TplOpt = { id: string; name: string };
@@ -35,12 +41,14 @@ type Row = {
 function KindBlock({
   eventId,
   kind,
+  label,
   rows,
   templates,
   pastEvents,
 }: {
   eventId: string;
-  kind: "task" | "belonging";
+  kind: string;
+  label: string;
   rows: Row[];
   templates: TplOpt[];
   pastEvents: PastOpt[];
@@ -68,6 +76,7 @@ function KindBlock({
       <ChecklistEditor
         eventId={eventId}
         kind={kind}
+        label={label}
         templates={templates}
         pastEvents={pastEvents}
         initialItems={normal.map((c) => ({
@@ -140,6 +149,7 @@ export async function ChecklistSection({
         listReviewedAt: true,
         listCustomized: true,
         listReminderLeadMinutes: true,
+        sectionOrder: true,
         _count: { select: { editRecords: true } },
       },
     }),
@@ -148,6 +158,10 @@ export async function ChecklistSection({
   ]);
   const forced = [...taskRules, ...belongingRules].filter((r) => r.forced);
   const rows = items as unknown as Row[];
+  const sections = resolveSections(
+    reviewState?.sectionOrder ?? null,
+    items.map((i) => i.kind),
+  );
 
   const tplByKind = (k: "task" | "belonging"): TplOpt[] =>
     allTemplates
@@ -214,20 +228,34 @@ export async function ChecklistSection({
           </div>
         )}
 
-        <KindBlock
-          eventId={event.id}
-          kind="task"
-          rows={rows}
-          templates={tplByKind("task")}
-          pastEvents={pastByKind("task")}
-        />
-        <KindBlock
-          eventId={event.id}
-          kind="belonging"
-          rows={rows}
-          templates={tplByKind("belonging")}
-          pastEvents={pastByKind("belonging")}
-        />
+        {sections.map((key) => {
+          const builtin = isBuiltinSection(key);
+          return (
+            <div key={key} className="space-y-1.5">
+              {!builtin && (
+                <div className="flex items-center justify-end">
+                  <SectionControls eventId={event.id} sectionKey={key} />
+                </div>
+              )}
+              <KindBlock
+                eventId={event.id}
+                kind={key}
+                label={sectionLabel(key)}
+                rows={rows}
+                templates={
+                  builtin ? tplByKind(key as "task" | "belonging") : []
+                }
+                pastEvents={
+                  builtin ? pastByKind(key as "task" | "belonging") : []
+                }
+              />
+            </div>
+          );
+        })}
+
+        <div className="pt-0.5">
+          <AddSectionButton eventId={event.id} />
+        </div>
       </section>
 
       {forced.length > 0 && (

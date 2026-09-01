@@ -49,24 +49,39 @@ export async function EventFailureLog({
         この予定の失敗ログ（{linked.length}）
       </summary>
       <p className="mt-2 text-xs text-muted">
-        責めるためではなく、次に似た予定が来たときに先回りするためです。金額は分からなければ空でOK。
+        責めるためではなく、次に似た予定が来たときに先回りするためです。失敗内容・金額・日付・結果は、この予定のページからいつでも直せます。金額は分からなければ空でOK。
       </p>
 
-      {/* 紐づく失敗ログ：その場で編集・削除 */}
+      {/* 紐づく失敗ログ：その場で編集（失敗内容・金額・日付・結果／状態）・削除 */}
       {linked.length > 0 && (
         <ul className="mt-4 space-y-2">
           {linked.map((l) => (
             <li key={l.id} className="rounded-xl bg-surface-muted p-3">
               <form action={updateFailureLog} className="space-y-2">
                 <input type="hidden" name="id" value={l.id} />
-                <textarea
-                  name="description"
-                  required
-                  rows={2}
-                  defaultValue={l.description}
-                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                />
+                <label className="block text-xs text-muted">
+                  失敗内容
+                  <textarea
+                    name="description"
+                    required
+                    rows={2}
+                    defaultValue={l.description}
+                    className="mt-0.5 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                  />
+                </label>
                 <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs text-muted">
+                    結果・状態
+                    <select
+                      name="outcome"
+                      defaultValue={l.outcome ?? ""}
+                      className="ml-1 rounded-md border bg-background px-2 py-1 text-sm text-foreground"
+                    >
+                      <option value="">未選択</option>
+                      <option value="prevented">防げた</option>
+                      <option value="not_prevented">防げなかった</option>
+                    </select>
+                  </label>
                   <label className="text-xs text-muted">
                     金額（円）
                     <input
@@ -93,15 +108,16 @@ export async function EventFailureLog({
               </form>
               <div className="mt-1.5 flex items-center gap-3 text-[11px] text-muted">
                 <span>
-                  {formatDateOnly(l.occurredAt)}
+                  現在: {formatDateOnly(l.occurredAt)}
                   {l.estimatedLossYen > 0
                     ? ` ・ 推定 ${formatYen(l.estimatedLossYen)}`
                     : ""}
+                  {" ・ "}
                   {l.outcome === "prevented"
-                    ? " ・ 防げた"
+                    ? "防げた"
                     : l.outcome === "not_prevented"
-                      ? " ・ 防げなかった"
-                      : ""}
+                      ? "防げなかった"
+                      : "未選択"}
                 </span>
                 <form action={deleteFailureLog}>
                   <input type="hidden" name="id" value={l.id} />

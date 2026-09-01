@@ -5,6 +5,7 @@ import {
   hashDescription,
   stripSonaeBlock,
 } from "@/lib/description";
+import { resolveSections } from "@/lib/sections";
 
 /**
  * 予定の説明欄に、そなえの準備リスト（リンク＋箇条書き）を書き込む。
@@ -52,18 +53,23 @@ export async function syncEventDescription(eventId: string): Promise<void> {
     !event.listCustomized &&
     event._count.editRecords === 0;
 
+  const sections = resolveSections(
+    event.sectionOrder,
+    event.checklistItems.map((c) => c.kind),
+  );
+
   const url = `${appBaseUrl()}/events/${eventId}`;
   const description = composeDescription(
     event.memo,
     url,
     event.checklistItems.map((c) => ({
-      kind: c.kind === "belonging" ? "belonging" : "task",
+      kind: c.kind,
       title: c.title,
       notifyLeadMinutes: c.notifyLeadMinutes,
       isDone: c.isDone,
       comment: c.comment,
     })),
-    { unreviewed },
+    { unreviewed, sections },
   );
   const hash = hashDescription(description);
   if (hash === event.lastWrittenHash) return;

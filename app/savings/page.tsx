@@ -12,7 +12,7 @@ import { getUserTemplates } from "@/lib/templates";
 import { type SearchEntry } from "./learning-search";
 import { LearningExplorer } from "./learning-explorer";
 import { LazyLeaf } from "./lazy-leaf";
-import { LeafBody, type LeafItem } from "./leaf-body";
+import { LeafBody, type LeafItem, type LeafSectionData } from "./leaf-body";
 import { KindGroup } from "./templates-panel";
 
 const OUTCOME_LABEL: Record<string, string> = {
@@ -79,48 +79,35 @@ function CompactLine({ it }: { it: LeafItem }) {
   );
 }
 
-function CompactList({
-  task,
-  belonging,
-}: {
-  task: LeafItem[];
-  belonging: LeafItem[];
-}) {
+function CompactList({ sections }: { sections: LeafSectionData[] }) {
   const prog = (arr: LeafItem[]) =>
     arr.length ? ` ${arr.filter((i) => i.isDone).length}/${arr.length}` : "";
   return (
     <div className="grid gap-2 sm:grid-cols-2">
-      <div>
-        <p className="text-[11px] font-semibold text-teal-dark">
-          準備すること<span className="text-muted">{prog(task)}</span>
-        </p>
-        <ul className="mt-0.5 space-y-0.5">
-          {task.length === 0 ? (
-            <li className="text-[11px] text-muted">（なし）</li>
-          ) : (
-            task.map((it) => <CompactLine key={it.id} it={it} />)
-          )}
-        </ul>
-      </div>
-      <div>
-        <p className="text-[11px] font-semibold text-teal-dark">
-          持ち物<span className="text-muted">{prog(belonging)}</span>
-        </p>
-        <ul className="mt-0.5 space-y-0.5">
-          {belonging.length === 0 ? (
-            <li className="text-[11px] text-muted">（なし）</li>
-          ) : (
-            belonging.map((it) => <CompactLine key={it.id} it={it} />)
-          )}
-        </ul>
-      </div>
+      {sections.map((s) => (
+        <div key={s.key}>
+          <p className="text-[11px] font-semibold text-teal-dark">
+            {s.label}
+            <span className="text-muted">{prog(s.items)}</span>
+          </p>
+          <ul className="mt-0.5 space-y-0.5">
+            {s.items.length === 0 ? (
+              <li className="text-[11px] text-muted">（なし）</li>
+            ) : (
+              s.items.map((it) => <CompactLine key={it.id} it={it} />)
+            )}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }
 
 function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
-  const pick = (kind: "task" | "belonging"): LeafItem[] =>
-    leaf.list[kind]
+  const sections: LeafSectionData[] = leaf.sections.map((s) => ({
+    key: s.key,
+    label: s.label,
+    items: s.items
       .map((it) => ({
         id: it.id,
         title: it.title,
@@ -130,9 +117,8 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
         notifyLeadMinutes: it.notifyLeadMinutes,
       }))
       // 未チェックを上・チェック済みを下（安定ソート）
-      .sort((a, b) => (a.isDone ? 1 : 0) - (b.isDone ? 1 : 0));
-  const task = pick("task");
-  const belonging = pick("belonging");
+      .sort((a, b) => (a.isDone ? 1 : 0) - (b.isDone ? 1 : 0)),
+  }));
 
   return (
     <LazyLeaf
@@ -158,9 +144,8 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
       )}
       <LeafBody
         eventId={leaf.eventId}
-        compact={<CompactList task={task} belonging={belonging} />}
-        taskInitial={task}
-        belongingInitial={belonging}
+        compact={<CompactList sections={sections} />}
+        sections={sections}
       />
       <FailureList failures={leaf.failures} />
     </LazyLeaf>

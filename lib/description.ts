@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { formatLead, parseLead } from "@/lib/lead-time";
+import { sectionKeyFromLabel, sectionLabel } from "@/lib/sections";
 
 const START = "--- 私のマネージャー ---";
 const START_ALT = "--- そなえ ---"; // 旧マーカー（互換のため除去対象に含める）
@@ -37,7 +38,7 @@ export function stripSonaeBlock(desc: string | null | undefined): string {
 }
 
 export interface DescItem {
-  kind?: "task" | "belonging";
+  kind?: string;
   title: string;
   /** 予定開始の何分前に通知するか。null = 通知なし。説明欄では「（3時間前）」等で表示。 */
   notifyLeadMinutes?: number | null;
@@ -80,6 +81,8 @@ function progress(items: DescItem[]): string {
 export interface BuildBlockOpts {
   /** 生成後まだ確認も編集もされていない → 冒頭に注記を入れる。 */
   unreviewed?: boolean;
+  /** 枠（セクション）のキー順。省略時は項目から task→belonging→その他 で導出。 */
+  sections?: string[];
 }
 
 export function buildSonaeBlock(
@@ -87,21 +90,33 @@ export function buildSonaeBlock(
   items: DescItem[],
   opts: BuildBlockOpts = {},
 ): string {
-  const tasks = items
-    .filter((i) => (i.kind ?? "task") === "task")
-    .sort(checkedLast);
-  const belongings = items
-    .filter((i) => i.kind === "belonging")
-    .sort(checkedLast);
+  const kindOf = (i: DescItem) => i.kind ?? "task";
+  const used = new Set(items.map(kindOf));
+  const order =
+    opts.sections && opts.sections.length > 0
+      ? opts.sections
+      : [
+          "task",
+          "belonging",
+          ...[...used].filter((k) => k !== "task" && k !== "belonging"),
+        ];
 
   const lines = [START, `準備リスト: ${url}`];
   if (opts.unreviewed) lines.push("", UNREVIEWED_NOTE);
-  lines.push("", `【準備すること】${progress(tasks)}`);
-  lines.push(...(tasks.length ? tasks.map(bullet) : [`${CHECK_TODO} （なし）`]));
-  if (belongings.length) {
-    lines.push("", `【持ち物】${progress(belongings)}`);
-    lines.push(...belongings.map(bullet));
+
+  const seen = new Set<string>();
+  for (const key of order) {
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const group = items.filter((i) => kindOf(i) === key).sort(checkedLast);
+    const builtin = key === "task" || key === "belonging";
+    // 組み込みの2枠は常に見出しを出す。ユーザーが足した枠は項目があるときだけ。
+    if (group.length === 0 && !builtin) continue;
+    lines.push("", `【${sectionLabel(key)}】${progress(group)}`);
+    if (group.length > 0) lines.push(...group.map(bullet));
+    else lines.push(`${CHECK_TODO} （なし）`);
   }
+
   lines.push(END);
   return lines.join("\n");
 }
@@ -124,7 +139,7 @@ export function hashDescription(s: string): string {
 // ── 説明欄の逆パース（ユーザーが Google 上で直接編集した内容を取り込む）──
 
 export interface ParsedItem {
-  kind: "task" | "belonging";
+  kind: string;
   title: string;
   /** 末尾「（3時間前）」等から解釈した通知リード時間（分）。解釈できなければ null。 */
   notifyLeadMinutes: number | null;
@@ -161,7 +176,7 @@ export function parseSonaeBlock(desc: string | null | undefined): {
   if (body === null) return { hasBlock: false, items: [] };
 
   const items: ParsedItem[] = [];
-  let kind: "task" | "belonging" = "task";
+  let kind = "task";
 
   for (const rawLine of body.split("\n")) {
     // 行頭の字下げ（半角/全角スペース・タブ・ノーブレークスペース）を検出してから整形する
@@ -170,13 +185,11 @@ export function parseSonaeBlock(desc: string | null | undefined): {
     const line = probe.trim();
     if (!line) continue;
 
-    // 見出し（末尾に「 2/5」等の進捗が付くことがあるので $ で固定しない）
-    if (/^【\s*準備すること\s*】/.test(line)) {
-      kind = "task";
-      continue;
-    }
-    if (/^【\s*持ち物\s*】/.test(line)) {
-      kind = "belonging";
+    // 見出し【〜】（末尾に「 2/5」等の進捗が付くことがあるので $ で固定しない）。
+    // 組み込みは英語キーに、それ以外は見出し名そのものを枠キーにする。
+    const hm = line.match(/^【\s*([^【】]+?)\s*】/);
+    if (hm) {
+      kind = sectionKeyFromLabel(hm[1]);
       continue;
     }
     // 「未確認」注記行は取り込み対象外

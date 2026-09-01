@@ -7,13 +7,15 @@ import {
   signatureSpecificity,
   WILDCARD_SIGNATURE,
 } from "@/lib/signature";
+import { resolveSections, sectionLabel } from "@/lib/sections";
 
 export type RuleType =
   | "exclude_item"
   | "fixed_item"
   | "timing_override"
   | "notify_override"; // value = 予定開始の何分前に通知するか（分）／"off" = 通知しない
-export type ItemKind = "task" | "belonging";
+// 組み込みは task / belonging。ユーザーが足した枠は枠名そのものがキーになる。
+export type ItemKind = "task" | "belonging" | (string & {});
 
 export const CONFIDENCE_THRESHOLD = 0.7;
 
@@ -365,6 +367,12 @@ export interface LeafFailure {
   outcome: string | null; // "prevented" | "not_prevented" | null
 }
 
+export interface LeafSection {
+  key: string; // "task" | "belonging" | 任意の枠名
+  label: string; // 表示名
+  items: LeafListItem[];
+}
+
 /** 樹形図の葉 = 実際に学習した予定（内容が同じものはまとめて 1 つ） */
 export interface NameTreeLeaf {
   eventId: string; // 代表（最新）の予定
@@ -374,7 +382,7 @@ export interface NameTreeLeaf {
   /** "国内・日帰り・平日・午前" など。まとめた場合は件数表示 */
   situationLabel: string;
   keywords: string[];
-  list: { task: LeafListItem[]; belonging: LeafListItem[] };
+  sections: LeafSection[];
   failures: LeafFailure[];
 }
 
@@ -441,7 +449,7 @@ interface RawLeaf {
   sig: string;
   customized: boolean; // 個別編集で同名グループから切り離されたか
   keywords: string[];
-  list: { task: LeafListItem[]; belonging: LeafListItem[] };
+  sections: LeafSection[];
   failures: LeafFailure[];
 }
 
@@ -488,7 +496,7 @@ function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
               ? `${describeSignature(rep.sig).text}（個別編集）`
               : describeSignature(rep.sig).text,
         keywords: rep.keywords,
-        list: rep.list,
+        sections: rep.sections,
         failures,
       } satisfies NameTreeLeaf;
     })
@@ -526,7 +534,7 @@ function collectSearch(
       title: leaf.title,
       crumb: parts.join(" › "),
       keywords: leaf.keywords,
-      items: [...leaf.list.task, ...leaf.list.belonging].map((i) => i.title),
+      items: leaf.sections.flatMap((s) => s.items).map((i) => i.title),
     });
   }
   for (const child of node.children) collectSearch(child, parts, acc);
@@ -566,6 +574,7 @@ export async function getLearningNameTree(userId: string): Promise<{
           id: true,
           title: true,
           listCustomized: true,
+          sectionOrder: true,
           feature: {
             select: {
               isOverseas: true,
@@ -635,20 +644,27 @@ export async function getLearningNameTree(userId: string): Promise<{
           notifyLeadMinutes: i.notifyLeadMinutes,
         });
 
+        const kinds = ev.checklistItems.map((i) => i.kind);
+        const sections: LeafSection[] = resolveSections(ev.sectionOrder, kinds)
+          .map((key) => ({
+            key,
+            label: sectionLabel(key),
+            items: ev.checklistItems
+              .filter((i) => i.kind === key)
+              .map(toItem),
+          }))
+          // 組み込みの2枠は常に表示。ユーザーが足した枠は項目があるときだけ。
+          .filter(
+            (s) => s.items.length > 0 || s.key === "task" || s.key === "belonging",
+          );
+
         const rawLeaf: RawLeaf = {
           eventId: ev.id,
           title: ev.title,
           sig: signatureFromFeatureRow(ev.feature ?? null),
           customized: ev.listCustomized,
           keywords: evKw.get(ev.id) ?? [],
-          list: {
-            task: ev.checklistItems
-              .filter((i) => i.kind !== "belonging")
-              .map(toItem),
-            belonging: ev.checklistItems
-              .filter((i) => i.kind === "belonging")
-              .map(toItem),
-          },
+          sections,
           failures: ev.failureLogs.map((f) => ({
             id: f.id,
             description: f.description,

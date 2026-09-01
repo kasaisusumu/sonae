@@ -77,18 +77,21 @@ function parseBulk(text: string): { title: string }[] {
 export function ChecklistEditor({
   eventId,
   kind = "task",
+  label,
   initialItems,
   templates = [],
   pastEvents = [],
 }: {
   eventId: string;
-  kind?: "task" | "belonging";
+  kind?: string;
+  /** 見出しの表示名。省略時は組み込みの「準備すること／持ち物」。 */
+  label?: string;
   initialItems: InitialItem[];
   templates?: { id: string; name: string }[];
   pastEvents?: { id: string; label: string; count: number }[];
 }) {
   const isBelonging = kind === "belonging";
-  const kindLabel = isBelonging ? "持ち物" : "準備すること";
+  const kindLabel = label ?? (isBelonging ? "持ち物" : "準備すること");
   const router = useRouter();
   const initial = useMemo<Item[]>(
     () =>
@@ -383,9 +386,7 @@ export function ChecklistEditor({
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="mb-1.5 flex items-baseline gap-2">
-        <h3 className="text-sm font-semibold text-foreground">
-          {isBelonging ? "持ち物" : "準備すること"}
-        </h3>
+        <h3 className="text-sm font-semibold text-foreground">{kindLabel}</h3>
         <span className="text-xs text-muted tabular-nums">
           {doneCount}/{items.length}
         </span>
@@ -402,10 +403,6 @@ export function ChecklistEditor({
               ? "none"
               : String(it.notifyLeadMinutes);
           const open = openKeys.has(it.key);
-          const leadLabel =
-            it.notifyLeadMinutes == null
-              ? "🔔なし"
-              : `🔔${formatLead(it.notifyLeadMinutes)}`;
           return (
             <li key={it.key} className="py-1">
               {/* 1 行に集約：チェック / 文言 / 通知チップ */}
@@ -420,7 +417,7 @@ export function ChecklistEditor({
                 <input
                   value={it.title}
                   onChange={(e) => update(it.key, { title: e.target.value })}
-                  placeholder={isBelonging ? "持ち物を書く" : "準備することを書く"}
+                  placeholder={`${kindLabel}を書く`}
                   className={`min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-1 text-sm hover:border-border focus:border-border focus:bg-background ${
                     it.isDone ? "text-muted line-through" : ""
                   }`}
@@ -430,19 +427,23 @@ export function ChecklistEditor({
                     追加
                   </span>
                 )}
+                {it.notifyLeadMinutes != null && (
+                  <span className="shrink-0 text-[11px] tabular-nums text-teal-dark">
+                    🔔{formatLead(it.notifyLeadMinutes)}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => toggleOpen(it.key)}
                   aria-expanded={open}
-                  className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] tabular-nums transition-colors ${
+                  aria-label={open ? "詳細を閉じる" : "詳細を開く"}
+                  className={`shrink-0 rounded-md border px-1.5 py-0.5 text-xs leading-none transition-colors ${
                     open
                       ? "border-teal bg-teal-soft text-teal-dark"
-                      : it.notifyLeadMinutes == null
-                        ? "border-border text-muted hover:border-teal"
-                        : "border-teal/40 text-teal-dark hover:border-teal"
+                      : "border-border text-muted hover:border-teal hover:text-teal-dark"
                   }`}
                 >
-                  {leadLabel}
+                  {open ? "∧" : "∨"}
                 </button>
                 <button
                   type="button"
@@ -636,12 +637,12 @@ export function ChecklistEditor({
       {bulkNote && <p className="mt-2 text-xs text-teal-dark">{bulkNote}</p>}
 
       <p className="mt-1.5 text-[11px] text-muted">
-        すべて自動保存（入力を止めると保存）。🔔チップで通知・メモ、✕で削除。
+        すべて自動保存（入力を止めると保存）。∨で通知・メモ、✕で削除。
       </p>
 
       {modal && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           onClick={() => {
             if (!pending) setModal(null);
           }}

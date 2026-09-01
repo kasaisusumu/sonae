@@ -86,7 +86,11 @@ export async function generateAndSaveChecklist(
 
   const items = await buildChecklistForEvent(eventId);
   await prisma.$transaction([
-    prisma.checklistItem.deleteMany({ where: { eventId } }),
+    // 作り直すのは組み込みの2枠（準備すること・持ち物）だけ。
+    // ユーザーが足した枠（買うもの等）は AI では再生成できないので残す。
+    prisma.checklistItem.deleteMany({
+      where: { eventId, kind: { in: ["task", "belonging"] } },
+    }),
     prisma.checklistItem.createMany({
       data: persistData(eventId, items, comments),
     }),
@@ -143,12 +147,26 @@ async function copyChecklistItems(
   fromEventId: string,
   toEventId: string,
 ): Promise<void> {
-  const src = await prisma.checklistItem.findMany({
-    where: { eventId: fromEventId },
-    orderBy: { sortOrder: "asc" },
-  });
+  const [src, fromEvent] = await Promise.all([
+    prisma.checklistItem.findMany({
+      where: { eventId: fromEventId },
+      orderBy: { sortOrder: "asc" },
+    }),
+    prisma.event.findUnique({
+      where: { id: fromEventId },
+      select: { sectionOrder: true },
+    }),
+  ]);
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({ where: { eventId: toEventId } }),
+    // 枠（セクション）の構成もコピー元に合わせる（同名グループの整合）
+    prisma.event.update({
+      where: { id: toEventId },
+      data: {
+        sectionOrder:
+          fromEvent?.sectionOrder ?? '["task","belonging"]',
+      },
+    }),
     prisma.checklistItem.createMany({
       data: src.map((it) => ({
         eventId: toEventId,

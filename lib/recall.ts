@@ -172,9 +172,11 @@ export async function recallBaseChecklist(
 
   if (!best) return null;
 
+  // 組み込みの2枠だけをたたき台にする。ユーザーが足した枠（買うもの等）は
+  // AI 生成のもとには使わない（同名グループのコピー経路で引き継がれる）。
   const pick = (kind: "task" | "belonging"): GeneratedItem[] =>
     best!.items
-      .filter((i) => (i.kind === "belonging" ? "belonging" : "task") === kind)
+      .filter((i) => i.kind === kind)
       .map((i) => ({
         title: i.title,
         timingLabel: i.timingLabel,

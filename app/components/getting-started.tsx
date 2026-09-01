@@ -51,16 +51,13 @@ export async function GettingStarted({ userId }: { userId: string }) {
           title="予定を用意する"
         >
           {step1 && !step2 && (
-            <div className="mt-1.5 flex flex-wrap gap-2">
+            <div className="mt-1.5 space-y-1.5">
               <form action={syncCalendar}>
                 <SubmitButton>カレンダーから取り込む</SubmitButton>
               </form>
-              <Link
-                href="/events"
-                className="rounded-lg border border-teal/40 px-4 py-2 text-sm font-medium text-teal-dark no-underline hover:bg-teal/10"
-              >
-                手動で1件追加する
-              </Link>
+              <p className="text-xs text-teal-dark/70">
+                Google カレンダーに予定を入れると自動で取り込まれます。
+              </p>
             </div>
           )}
           {!step1 && (

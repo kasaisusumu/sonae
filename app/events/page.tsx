@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { createManualEvent, syncCalendar } from "@/app/actions";
+import { syncCalendar } from "@/app/actions";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
 import { formatDateShort, formatDateTime } from "@/lib/format";
 import { CategorySelect } from "./category-select";
@@ -92,61 +92,6 @@ export default async function EventsPage({
         )}
       </section>
 
-      {/* 手動登録（予定がまだ無いときは開いておく） */}
-      <details
-        className="rounded-2xl bg-surface p-4"
-        open={events.length === 0}
-      >
-        <summary className="cursor-pointer text-sm font-medium text-teal-dark">
-          ＋ 手動で予定を追加
-        </summary>
-        <form action={createManualEvent} className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="text-sm sm:col-span-2">
-            <span className="text-muted">予定タイトル</span>
-            <input
-              name="title"
-              required
-              placeholder="例: 大阪へ出張"
-              className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
-            />
-          </label>
-          <label className="text-sm">
-            <span className="text-muted">日時</span>
-            <input
-              type="datetime-local"
-              name="eventDatetime"
-              required
-              className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
-            />
-          </label>
-          <label className="text-sm">
-            <span className="text-muted">カテゴリ（空欄で自動判定）</span>
-            <input
-              name="categoryName"
-              list="category-options"
-              placeholder="自動"
-              className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
-            />
-            <datalist id="category-options">
-              {categoryNames.map((n) => (
-                <option key={n} value={n} />
-              ))}
-            </datalist>
-          </label>
-          <label className="text-sm sm:col-span-2">
-            <span className="text-muted">メモ（任意）</span>
-            <textarea
-              name="memo"
-              rows={2}
-              className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
-            />
-          </label>
-          <div className="sm:col-span-2">
-            <SubmitButton>追加して準備リストを作る</SubmitButton>
-          </div>
-        </form>
-      </details>
-
       {/* これからの予定 */}
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">これからの予定</h2>
@@ -156,7 +101,7 @@ export default async function EventsPage({
               <>
                 これからの予定がありません。
                 <br />
-                上の「カレンダーから取り込む」を押すか、予定を1件追加してみてください。
+                Google カレンダーに予定を入れると、ここに並びます（「カレンダーから取り込む」でも読み込めます）。
               </>
             ) : (
               <>まず上の「接続する」で Google カレンダーをつないでください。</>

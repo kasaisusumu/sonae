@@ -1380,6 +1380,8 @@ export async function copyListFromEvent(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const eventId = String(formData.get("eventId") ?? "");
   const sourceEventId = String(formData.get("sourceEventId") ?? "");
+  const onlyKind = readKind(formData.get("kind")); // "task" | "belonging"
+  const filterByKind = formData.get("kind") != null; // 指定があればその種類だけ
   if (!eventId || !sourceEventId || eventId === sourceEventId) return;
 
   const source = await prisma.event.findFirst({
@@ -1394,15 +1396,17 @@ export async function copyListFromEvent(formData: FormData): Promise<void> {
   });
   if (!source) return;
 
-  await addSeedItemsToEvent(
-    userId,
-    eventId,
-    source.checklistItems.map((it) => ({
-      kind: it.kind === "belonging" ? "belonging" : "task",
+  const picked = source.checklistItems
+    .map((it) => ({
+      kind: (it.kind === "belonging" ? "belonging" : "task") as
+        | "task"
+        | "belonging",
       title: it.title,
       notifyLeadMinutes: it.notifyLeadMinutes ?? null,
-    })),
-  );
+    }))
+    .filter((it) => !filterByKind || it.kind === onlyKind);
+
+  await addSeedItemsToEvent(userId, eventId, picked);
 }
 
 /** テンプレートの名前を変更する。 */

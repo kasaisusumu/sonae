@@ -7,13 +7,17 @@ import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
 import { getWarningForEvent } from "@/lib/failures";
 import { refreshEventFromGoogle } from "@/lib/sync";
+import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
+import { formatDateOnly } from "@/lib/format";
 import { markListReviewed, regenerateChecklist } from "@/app/actions";
 import { ChecklistEditor } from "./checklist-editor";
 import { SuggestionList } from "./suggestion-list";
 import { WarningPanel } from "./warning-panel";
-import { ListToolbox } from "./list-toolbox";
 import { ListReminderControl } from "./list-reminder-control";
 import { SubmitButton } from "@/app/components/submit-button";
+
+type TplOpt = { id: string; name: string };
+type PastOpt = { id: string; label: string; count: number };
 
 type Row = {
   id: string;
@@ -32,15 +36,18 @@ function KindBlock({
   eventId,
   kind,
   rows,
+  templates,
+  pastEvents,
 }: {
   eventId: string;
   kind: "task" | "belonging";
   rows: Row[];
+  templates: TplOpt[];
+  pastEvents: PastOpt[];
 }) {
   const mine = rows.filter((r) => r.kind === kind);
   const suggestions = mine.filter((r) => r.isSuggested);
   const normal = mine.filter((r) => !r.isSuggested);
-
 
   return (
     <div className="space-y-2">
@@ -61,6 +68,8 @@ function KindBlock({
       <ChecklistEditor
         eventId={eventId}
         kind={kind}
+        templates={templates}
+        pastEvents={pastEvents}
         initialItems={normal.map((c) => ({
           id: c.id,
           title: c.title,
@@ -114,7 +123,14 @@ export async function ChecklistSection({
     eventDatetime: event.eventDatetime,
     endDatetime: event.endDatetime,
   });
-  const [warning, taskRules, belongingRules, reviewState] = await Promise.all([
+  const [
+    warning,
+    taskRules,
+    belongingRules,
+    reviewState,
+    allTemplates,
+    pastEventsRaw,
+  ] = await Promise.all([
     getWarningForEvent(event),
     getApplicableRules(event.categoryId, feature, "task"),
     getApplicableRules(event.categoryId, feature, "belonging"),
@@ -127,9 +143,24 @@ export async function ChecklistSection({
         _count: { select: { editRecords: true } },
       },
     }),
+    getUserTemplates(event.userId),
+    getEventsWithLists(event.userId, event.id),
   ]);
   const forced = [...taskRules, ...belongingRules].filter((r) => r.forced);
   const rows = items as unknown as Row[];
+
+  const tplByKind = (k: "task" | "belonging"): TplOpt[] =>
+    allTemplates
+      .filter((t) => t.kind === k)
+      .map((t) => ({ id: t.id, name: t.name }));
+  const pastByKind = (k: "task" | "belonging"): PastOpt[] =>
+    pastEventsRaw
+      .map((e) => ({
+        id: e.id,
+        label: `${formatDateOnly(e.eventDatetime)} ${e.title}`,
+        count: k === "belonging" ? e.belongingCount : e.taskCount,
+      }))
+      .filter((e) => e.count > 0);
   const unreviewed =
     !!reviewState &&
     !reviewState.listReviewedAt &&
@@ -183,10 +214,20 @@ export async function ChecklistSection({
           </div>
         )}
 
-        <KindBlock eventId={event.id} kind="task" rows={rows} />
-        <KindBlock eventId={event.id} kind="belonging" rows={rows} />
-
-        <ListToolbox eventId={event.id} userId={event.userId} />
+        <KindBlock
+          eventId={event.id}
+          kind="task"
+          rows={rows}
+          templates={tplByKind("task")}
+          pastEvents={pastByKind("task")}
+        />
+        <KindBlock
+          eventId={event.id}
+          kind="belonging"
+          rows={rows}
+          templates={tplByKind("belonging")}
+          pastEvents={pastByKind("belonging")}
+        />
       </section>
 
       {forced.length > 0 && (

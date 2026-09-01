@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
+  applyTemplateToEvent,
+  copyListFromEvent,
   saveChecklist,
+  saveListAsTemplate,
   setItemNotifyLead,
   toggleChecklistItemDone,
 } from "@/app/actions";
@@ -74,12 +78,18 @@ export function ChecklistEditor({
   eventId,
   kind = "task",
   initialItems,
+  templates = [],
+  pastEvents = [],
 }: {
   eventId: string;
   kind?: "task" | "belonging";
   initialItems: InitialItem[];
+  templates?: { id: string; name: string }[];
+  pastEvents?: { id: string; label: string; count: number }[];
 }) {
   const isBelonging = kind === "belonging";
+  const kindLabel = isBelonging ? "持ち物" : "準備すること";
+  const router = useRouter();
   const initial = useMemo<Item[]>(
     () =>
       initialItems.map((it) => ({
@@ -306,23 +316,68 @@ export function ChecklistEditor({
 
   const doneCount = items.filter((it) => it.isDone).length;
 
-  // 別セクションの「📋 テンプレート・他の予定から」を開いて、該当フォームへ誘導する。
-  function jumpToToolbox(which: "save" | "apply") {
-    const box = document.getElementById("list-toolbox");
-    if (box instanceof HTMLDetailsElement) box.open = true;
-    if (which === "save") {
-      const sel = document.querySelector<HTMLSelectElement>(
-        '#tpl-save select[name="kind"]',
-      );
-      if (sel) sel.value = kind;
+  // ── テンプレート／他の予定 のポップアップ ──
+  const [modal, setModal] = useState<null | "save" | "apply" | "copy">(null);
+  const [tplName, setTplName] = useState("");
+  const [applyId, setApplyId] = useState("");
+  const [copyId, setCopyId] = useState("");
+
+  async function flushPending() {
+    if (dirty) {
+      await saveChecklist({
+        eventId,
+        kind,
+        items: toPayload(items),
+        removedTitles,
+      });
+      setRemovedTitles([]);
     }
-    const el = document.getElementById(
-      which === "save" ? "tpl-save" : "tpl-apply",
-    );
-    if (!el) return;
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-    el.classList.add("ring-2", "ring-teal", "rounded-lg");
-    window.setTimeout(() => el.classList.remove("ring-2", "ring-teal"), 2000);
+  }
+
+  function doSaveTemplate() {
+    const name = tplName.trim();
+    if (!name) return;
+    startTransition(async () => {
+      await flushPending();
+      const fd = new FormData();
+      fd.set("eventId", eventId);
+      fd.set("kind", kind);
+      fd.set("name", name);
+      await saveListAsTemplate(fd);
+      setTplName("");
+      setModal(null);
+      setSaved(true);
+      router.refresh();
+    });
+  }
+
+  function doApplyTemplate() {
+    if (!applyId) return;
+    startTransition(async () => {
+      await flushPending();
+      const fd = new FormData();
+      fd.set("eventId", eventId);
+      fd.set("templateId", applyId);
+      await applyTemplateToEvent(fd);
+      setApplyId("");
+      setModal(null);
+      router.refresh();
+    });
+  }
+
+  function doCopyFromEvent() {
+    if (!copyId) return;
+    startTransition(async () => {
+      await flushPending();
+      const fd = new FormData();
+      fd.set("eventId", eventId);
+      fd.set("sourceEventId", copyId);
+      fd.set("kind", kind);
+      await copyListFromEvent(fd);
+      setCopyId("");
+      setModal(null);
+      router.refresh();
+    });
   }
 
   return (
@@ -497,14 +552,21 @@ export function ChecklistEditor({
           </button>
           <button
             type="button"
-            onClick={() => jumpToToolbox("apply")}
+            onClick={() => setModal("apply")}
             className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
           >
             📋 テンプレから
           </button>
           <button
             type="button"
-            onClick={() => jumpToToolbox("save")}
+            onClick={() => setModal("copy")}
+            className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
+          >
+            📆 他の予定から
+          </button>
+          <button
+            type="button"
+            onClick={() => setModal("save")}
             className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
           >
             ⭐ 名前をつけて保存
@@ -576,6 +638,153 @@ export function ChecklistEditor({
       <p className="mt-1.5 text-[11px] text-muted">
         すべて自動保存（入力を止めると保存）。🔔チップで通知・メモ、✕で削除。
       </p>
+
+      {modal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center"
+          onClick={() => {
+            if (!pending) setModal(null);
+          }}
+        >
+          <div
+            className="w-full max-w-sm space-y-3 rounded-2xl bg-surface p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {modal === "save" && (
+              <>
+                <h3 className="text-sm font-semibold text-foreground">
+                  ⭐ この{kindLabel}リストを保存
+                </h3>
+                <p className="text-[11px] text-muted">
+                  名前を付けて保存すると、どの予定でも「📋 テンプレから」で追加できます。同じ名前は上書きします。
+                </p>
+                <input
+                  value={tplName}
+                  onChange={(e) => setTplName(e.target.value)}
+                  maxLength={60}
+                  placeholder={
+                    isBelonging ? "例: 日帰り出張の持ち物" : "例: 出張の準備"
+                  }
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModal(null)}
+                    className="rounded-lg px-3 py-1.5 text-sm text-muted"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={doSaveTemplate}
+                    disabled={pending || !tplName.trim()}
+                    className="rounded-lg bg-teal px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    {pending ? "保存中…" : "保存"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {modal === "apply" && (
+              <>
+                <h3 className="text-sm font-semibold text-foreground">
+                  📋 テンプレから{kindLabel}を追加
+                </h3>
+                {templates.length === 0 ? (
+                  <p className="text-xs text-muted">
+                    まだ{kindLabel}のテンプレートはありません。「⭐ 名前をつけて保存」か、学習ページで作成できます。
+                  </p>
+                ) : (
+                  <>
+                    <select
+                      value={applyId}
+                      onChange={(e) => setApplyId(e.target.value)}
+                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">テンプレートを選ぶ</option>
+                      {templates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-muted">
+                      すでにある項目（同じ名前）はスキップします。
+                    </p>
+                  </>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModal(null)}
+                    className="rounded-lg px-3 py-1.5 text-sm text-muted"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={doApplyTemplate}
+                    disabled={pending || !applyId}
+                    className="rounded-lg bg-teal px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    {pending ? "追加中…" : "追加"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {modal === "copy" && (
+              <>
+                <h3 className="text-sm font-semibold text-foreground">
+                  📆 他の予定から{kindLabel}をコピー
+                </h3>
+                {pastEvents.length === 0 ? (
+                  <p className="text-xs text-muted">
+                    {kindLabel}リストのある他の予定がまだありません。
+                  </p>
+                ) : (
+                  <>
+                    <select
+                      value={copyId}
+                      onChange={(e) => setCopyId(e.target.value)}
+                      className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">予定を選ぶ</option>
+                      {pastEvents.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.label}（{e.count}）
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-muted">
+                      選んだ予定の{kindLabel}をこの予定に追加します（同じ名前はスキップ）。
+                    </p>
+                  </>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setModal(null)}
+                    className="rounded-lg px-3 py-1.5 text-sm text-muted"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={doCopyFromEvent}
+                    disabled={pending || !copyId}
+                    className="rounded-lg bg-teal px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                  >
+                    {pending ? "コピー中…" : "コピー"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

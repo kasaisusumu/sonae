@@ -43,7 +43,7 @@ export default async function EventDetailPage({
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <ScrollToHash />
       <Link
         href="/events"
@@ -52,31 +52,34 @@ export default async function EventDetailPage({
         ← 予定一覧
       </Link>
 
-      <header className="rounded-2xl bg-surface p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold">{event.title}</h1>
-            <p className="mt-1 text-sm text-muted">
-              {formatDateTime(event.eventDatetime)}
-              {event.source === "google" ? " ・ Google" : " ・ 手動"}
-            </p>
-          </div>
-          <CategorySelect
-            eventId={event.id}
-            current={event.category?.name ?? "その他"}
-            options={categoryNames}
-          />
-        </div>
-        {event.memo && (
-          <p className="mt-3 whitespace-pre-wrap rounded-lg bg-surface-muted p-3 text-sm text-muted">
-            {event.memo}
+      {/* 予定の情報は「見出し」程度に。主役は下の準備リスト。 */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {event.title}
+          </h1>
+          <p className="mt-1 text-sm text-muted">
+            {formatDateTime(event.eventDatetime)}
+            {event.source === "google" ? " ・ Google" : " ・ 手動"}
           </p>
-        )}
-      </header>
+        </div>
+        <CategorySelect
+          eventId={event.id}
+          current={event.category?.name ?? "その他"}
+          options={categoryNames}
+        />
+      </div>
+      {event.memo && (
+        <p className="whitespace-pre-wrap rounded-xl bg-surface-muted p-3 text-sm text-muted">
+          {event.memo}
+        </p>
+      )}
 
       <Suspense fallback={null}>
         <FailureSuggestions eventId={event.id} />
       </Suspense>
+
+      <h2 className="pt-1 text-lg font-semibold tracking-tight">準備リスト</h2>
 
       <Suspense fallback={<ChecklistSectionSkeleton />}>
         <ChecklistSection

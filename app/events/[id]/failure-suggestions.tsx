@@ -12,13 +12,13 @@ export async function FailureSuggestions({ eventId }: { eventId: string }) {
   if (suggestions.length === 0) return null;
 
   return (
-    <section
+    <details
       data-coach="failure-suggest"
-      className="rounded-2xl border border-warn/30 bg-warn-soft p-4"
+      className="rounded-2xl border border-warn/30 bg-warn-soft p-4 [&_summary::-webkit-details-marker]:hidden"
     >
-      <h2 className="text-sm font-semibold text-warn">
-        こんな失敗もあり得ます（似た予定から）
-      </h2>
+      <summary className="cursor-pointer list-none text-sm font-semibold text-warn">
+        ⚠ 似た予定でよくある失敗（{suggestions.length}）— 確認する
+      </summary>
       <p className="mt-1 text-xs text-warn/80">
         責めるためではありません。当てはまりそうなら結果を選んで記録、関係なければ「今回は関係ない」で消せます。
       </p>
@@ -91,6 +91,6 @@ export async function FailureSuggestions({ eventId }: { eventId: string }) {
           </form>
         ))}
       </div>
-    </section>
+    </details>
   );
 }

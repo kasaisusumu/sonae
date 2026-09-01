@@ -54,61 +54,56 @@ export default async function EventsPage({
   const upcoming = events.filter((e) => e.eventDatetime >= now);
   const past = [...events.filter((e) => e.eventDatetime < now)].reverse();
 
-  return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">予定</h1>
+  // 未接続なら「つなぐ」ことがこのページで唯一のやること → それだけを大きく出す
+  if (!account) {
+    return (
+      <div className="mx-auto max-w-md">
+        <section className="rounded-2xl border border-teal/25 bg-teal-soft p-7 text-center">
+          <h1 className="text-lg font-semibold text-teal-dark">
+            まず Google カレンダーとつなぐ
+          </h1>
+          <p className="mt-2 text-sm text-muted">
+            つなぐと、予定を入れるだけで「準備すること」と「持ち物」が
+            自動で用意されます。カレンダーは読み取りのみ。
+          </p>
+          <a
+            href="/api/auth/google"
+            className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-teal px-6 py-3 text-sm font-medium text-white no-underline shadow-sm transition-colors hover:bg-teal-dark"
+          >
+            接続する（約30秒）
+          </a>
+        </section>
+      </div>
+    );
+  }
 
+  return (
+    <div className="space-y-5">
       {connected === "1" && (
-        <p className="rounded-lg bg-accent-soft px-4 py-3 text-sm text-teal-dark">
-          Google カレンダーに接続しました。「カレンダーから取り込む」で予定が読み込まれます。
+        <p className="rounded-xl bg-accent-soft px-4 py-3 text-sm text-teal-dark">
+          Google カレンダーに接続しました。予定を取り込んでいます。
         </p>
       )}
 
-      {/* Google 連携 / 同期 */}
-      <section className="rounded-2xl bg-surface p-4">
-        {account ? (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted">
-              {account.googleAccountEmail}
-              {" ・ "}
-              {account.lastSyncedAt
-                ? `最終取り込み ${formatDateTime(account.lastSyncedAt)}`
-                : "未取り込み"}
-            </p>
-            <form action={syncCalendar}>
-              <SubmitButton>カレンダーから取り込む</SubmitButton>
-            </form>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted">Google カレンダー未接続</p>
-            <a
-              href="/api/auth/google"
-              className="rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white no-underline hover:bg-teal-dark"
-            >
-              接続する
-            </a>
-          </div>
-        )}
-      </section>
+      {/* ── このページの主役: これからの予定 ── */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            これからの予定
+          </h1>
+          <form action={syncCalendar}>
+            <SubmitButton variant="ghost">↻ 取り込む</SubmitButton>
+          </form>
+        </div>
 
-      {/* これからの予定 */}
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">これからの予定</h2>
         {upcoming.length === 0 ? (
-          <div className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">
-            {account ? (
-              <>
-                これからの予定がありません。
-                <br />
-                Google カレンダーに予定を入れると、ここに並びます（「カレンダーから取り込む」でも読み込めます）。
-              </>
-            ) : (
-              <>まず上の「接続する」で Google カレンダーをつないでください。</>
-            )}
+          <div className="rounded-2xl bg-surface px-4 py-10 text-center text-sm text-muted">
+            これからの予定がありません。
+            <br />
+            Google カレンダーに予定を入れると、ここに並びます。
           </div>
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-2.5">
             {upcoming.map((ev) => (
               <EventRow
                 key={ev.id}
@@ -125,17 +120,31 @@ export default async function EventsPage({
         )}
       </section>
 
-      {/* 済んだ予定（チェックリストはいつでも開ける） */}
+      {/* 済んだ予定は折りたたんで、主役の邪魔をしない */}
       {past.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-lg font-semibold">済んだ予定</h2>
-          <ul className="space-y-2">
+        <details className="rounded-2xl bg-surface p-4 [&_summary::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-muted">
+            済んだ予定（{past.length}）
+          </summary>
+          <ul className="mt-3 space-y-2.5">
             {past.map((ev) => (
-              <EventRow key={ev.id} ev={ev} categoryNames={categoryNames} past />
+              <EventRow
+                key={ev.id}
+                ev={ev}
+                categoryNames={categoryNames}
+                past
+              />
             ))}
           </ul>
-        </section>
+        </details>
       )}
+
+      <p className="px-1 text-[11px] text-muted">
+        {account.googleAccountEmail}
+        {account.lastSyncedAt
+          ? ` ・ 最終取り込み ${formatDateTime(account.lastSyncedAt)}`
+          : ""}
+      </p>
     </div>
   );
 }

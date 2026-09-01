@@ -145,44 +145,23 @@ export default async function HomePage({
 
   return (
     <div className="space-y-6">
+      {/* 未オンボーディングのときだけ出る。出ているならこれがこのページの主役。 */}
       <GettingStarted userId={user.id} />
 
-      <HowTo open={upcoming.length === 0} />
-
+      {/* ── このページの主役: これまでの節約 ── */}
       <div data-coach="savings">
         <SavingsDashboard userId={user.id} />
       </div>
 
-      {warnings.length > 0 && (
-        <section className="rounded-2xl border border-warn/30 bg-warn-soft p-5">
-          <h2 className="text-sm font-semibold text-warn">気をつけたい予定</h2>
-          <ul className="mt-3 space-y-2">
-            {warnings.slice(0, 4).map((w) => (
-              <li key={w.event.id}>
-                <Link
-                  href={`/events/${w.event.id}`}
-                  className="block rounded-xl bg-surface px-4 py-3 no-underline transition-colors hover:bg-surface-muted active:bg-accent-soft"
-                >
-                  <span className="block text-sm font-medium text-foreground">
-                    {w.event.title}
-                  </span>
-                  <span className="block text-xs text-muted">
-                    {w.event.categoryName}で過去に「
-                    {w.logs[0]?.description.slice(0, 28)}
-                    {(w.logs[0]?.description.length ?? 0) > 28 ? "…" : ""}」
-                    {w.logs.length > 1 ? ` ほか${w.logs.length - 1}件` : ""}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
       <section>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">これからの予定</h2>
-          <Link href="/events" className="text-sm no-underline hover:text-teal-dark">
+          <h2 className="text-lg font-semibold tracking-tight">
+            これからの予定
+          </h2>
+          <Link
+            href="/events"
+            className="text-sm no-underline hover:text-teal-dark"
+          >
             すべて見る →
           </Link>
         </div>
@@ -191,7 +170,7 @@ export default async function HomePage({
           <p className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">
             予定がまだありません。
             <Link href="/events" className="ml-1 no-underline">
-              取り込む / 追加する
+              取り込む
             </Link>
           </p>
         ) : (
@@ -226,6 +205,35 @@ export default async function HomePage({
           </ul>
         )}
       </section>
+
+      {warnings.length > 0 && (
+        <section className="rounded-2xl border border-warn/30 bg-warn-soft p-5">
+          <h2 className="text-sm font-semibold text-warn">気をつけたい予定</h2>
+          <ul className="mt-3 space-y-2">
+            {warnings.slice(0, 4).map((w) => (
+              <li key={w.event.id}>
+                <Link
+                  href={`/events/${w.event.id}`}
+                  className="block rounded-xl bg-surface px-4 py-3 no-underline transition-colors hover:bg-surface-muted active:bg-accent-soft"
+                >
+                  <span className="block text-sm font-medium text-foreground">
+                    {w.event.title}
+                  </span>
+                  <span className="block text-xs text-muted">
+                    {w.event.categoryName}で過去に「
+                    {w.logs[0]?.description.slice(0, 28)}
+                    {(w.logs[0]?.description.length ?? 0) > 28 ? "…" : ""}」
+                    {w.logs.length > 1 ? ` ほか${w.logs.length - 1}件` : ""}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* 使い方は一番下に、たたんで置く */}
+      <HowTo />
     </div>
   );
 }

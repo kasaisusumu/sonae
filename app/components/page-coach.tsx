@@ -91,13 +91,13 @@ const TOURS: Tour[] = [
     ],
   },
   {
-    key: "settings_v2",
+    key: "settings_v3",
     match: (p) => p === "/settings",
     steps: [
       {
-        sel: '[data-coach="replay-tutorial"]',
-        title: "チュートリアル",
-        body: "最初の説明をいつでも見返せます。困ったらここへ。",
+        sel: '[data-coach="menu"]',
+        title: "困ったら左上の ☰",
+        body: "メニューから、使い方・アプリのチュートリアル・注意をいつでも開けます。ページの移動もここから。",
       },
     ],
   },
@@ -179,6 +179,26 @@ export function PageCoach() {
       cancelled = true;
       window.clearTimeout(timer);
     };
+  }, [pathname]);
+
+  // メニューの「このページの使い方をみる」から手動で開始する。
+  // このページにツアーが無ければ何もしない。
+  useEffect(() => {
+    const onOpen = () => {
+      const t = TOURS.find((x) => x.match(pathname)) ?? null;
+      if (!t) return;
+      try {
+        localStorage.removeItem(FLAG_PREFIX + t.key);
+      } catch {
+        /* ignore */
+      }
+      rectRef.current = null;
+      setRect(null);
+      setIdx(0);
+      setTour(t);
+    };
+    window.addEventListener("mm:open-coach", onOpen);
+    return () => window.removeEventListener("mm:open-coach", onOpen);
   }, [pathname]);
 
   const finish = useCallback(() => {

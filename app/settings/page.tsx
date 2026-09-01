@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -10,11 +9,9 @@ import {
   submitFeedback,
 } from "@/app/actions";
 import { listCalendars, type CalendarChoice } from "@/lib/google";
-import { getUserTemplates } from "@/lib/templates";
 import { formatDateOnly, formatDateTime, formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { PushControls } from "@/app/components/push-controls";
-import { ReplayTutorialButton } from "@/app/components/tutorial";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -27,7 +24,6 @@ export default async function SettingsPage() {
     take: 5,
   });
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
-  const templates = await getUserTemplates(user.id);
 
   let calendars: CalendarChoice[] = [];
   if (account) {
@@ -48,18 +44,6 @@ export default async function SettingsPage() {
           {user.name ? `${user.name}（${user.email}）` : user.email}
         </p>
       </section>
-
-      <ReplayTutorialButton />
-
-      <Link
-        href="/savings"
-        className="block rounded-2xl bg-surface p-5 no-underline transition-colors hover:bg-surface-muted"
-      >
-        <h2 className="text-sm font-semibold text-muted">学習内容</h2>
-        <p className="mt-2 text-sm">
-          「学習」タブ。予定名の樹形図で、どの予定のときにどんなリストになるかを確認・検索できます →
-        </p>
-      </Link>
 
       <section className="rounded-2xl bg-surface p-5">
         <h2 className="text-sm font-semibold text-muted">Google カレンダー連携</h2>
@@ -172,21 +156,6 @@ export default async function SettingsPage() {
           </p>
         )}
       </section>
-
-      <Link
-        href="/savings"
-        className="block rounded-2xl bg-surface p-5 no-underline transition-colors hover:bg-surface-muted"
-      >
-        <h2 className="text-sm font-semibold text-muted">
-          名前をつけたリスト（テンプレート）
-        </h2>
-        <p className="mt-2 text-sm">
-          {templates.length > 0
-            ? `${templates.length} 件保存済み。`
-            : "まだありません。"}
-          「学習」タブで、準備すること用・持ち物用に分けて作成・編集できます（一括貼り付け対応）→
-        </p>
-      </Link>
 
       <section className="rounded-2xl bg-surface p-5">
         <h2 className="text-sm font-semibold text-muted">フィードバック（WTP アンケート）</h2>

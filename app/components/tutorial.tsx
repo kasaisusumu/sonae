@@ -141,33 +141,6 @@ function Visual({ id }: { id: string }): ReactNode {
   return null;
 }
 
-/** 設定ページの「チュートリアルをもう一度見る」ボタン。 */
-export function ReplayTutorialButton() {
-  const replay = () => {
-    // ページ内コーチマークも「初回」に戻して、各ページで出直すようにする
-    try {
-      for (let n = localStorage.length - 1; n >= 0; n--) {
-        const k = localStorage.key(n);
-        if (k && k.startsWith("mm_coach_")) localStorage.removeItem(k);
-      }
-    } catch {
-      /* ignore */
-    }
-    window.dispatchEvent(new Event(EVENT));
-  };
-  return (
-    <button
-      type="button"
-      data-coach="replay-tutorial"
-      onClick={replay}
-      className="block w-full rounded-2xl bg-surface p-5 text-left transition-colors hover:bg-surface-muted"
-    >
-      <span className="text-sm font-semibold text-muted">使い方</span>
-      <span className="mt-2 block text-sm">チュートリアルをもう一度見る →</span>
-    </button>
-  );
-}
-
 export function Tutorial() {
   const [open, setOpen] = useState(false);
   const [i, setI] = useState(0);

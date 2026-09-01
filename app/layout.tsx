@@ -10,6 +10,7 @@ import { BottomNav } from "@/app/components/bottom-nav";
 import { LiveSync } from "@/app/components/live-sync";
 import { Tutorial } from "@/app/components/tutorial";
 import { PageCoach } from "@/app/components/page-coach";
+import { MenuButton } from "@/app/components/menu-button";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -56,15 +57,18 @@ export default async function RootLayout({
         {isLoggedIn ? <PageCoach /> : null}
 
         <header className="sticky top-0 z-30 border-b border-border bg-surface">
-          <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-3">
-            <Link href="/" className="flex items-baseline gap-2 no-underline">
-              <span className="text-[15px] font-semibold tracking-tight text-foreground">
-                私のマネージャー
-              </span>
-              <span className="hidden text-xs text-muted sm:inline">
-                予定の準備、わすれない
-              </span>
-            </Link>
+          <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5 sm:px-5 sm:py-3">
+            <div className="flex min-w-0 items-center gap-2">
+              {isLoggedIn ? <MenuButton /> : null}
+              <Link href="/" className="flex items-baseline gap-2 no-underline">
+                <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+                  私のマネージャー
+                </span>
+                <span className="hidden text-xs text-muted sm:inline">
+                  予定の準備、わすれない
+                </span>
+              </Link>
+            </div>
             {isLoggedIn ? (
               <nav className="hidden items-center gap-1 text-sm sm:flex">
                 {[

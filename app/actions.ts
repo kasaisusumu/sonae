@@ -229,6 +229,93 @@ export async function updateEventCategory(formData: FormData): Promise<void> {
   revalidateAppViews(eventId);
 }
 
+// ── メモ欄（本文＋画像）─────────────────────────────────────
+//   本文は Google カレンダーの説明欄にも同期（従来どおり）。
+//   画像はアプリ内のみ。圧縮済みデータ URL を EventImage に保存し、
+//   ストレージを圧迫しないよう枚数・サイズに上限を設ける。
+
+const MAX_MEMO_LEN = 4000;
+const MAX_EVENT_IMAGE_BYTES = 500 * 1024; // 圧縮後 1 枚あたり
+const MAX_EVENT_IMAGES = 6; // 1 予定あたり
+
+/** メモ本文を保存する。変更があれば説明欄にも書き戻す。 */
+export async function setEventMemo(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  const raw = String(formData.get("memo") ?? "").replace(/\r\n/g, "\n");
+  const memo = raw.trim().slice(0, MAX_MEMO_LEN) || null;
+
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    select: { id: true, memo: true },
+  });
+  if (!event || event.memo === memo) return;
+
+  await prisma.event.update({ where: { id: eventId }, data: { memo } });
+  await markAutoManaged(eventId);
+  after(() => void syncEventDescription(eventId));
+  revalidateAppViews(eventId);
+}
+
+/** メモ欄に圧縮済み画像を 1 枚追加する（クライアントで縮小・再エンコード済み）。 */
+export async function addEventImage(input: {
+  eventId: string;
+  data: string;
+  width: number;
+  height: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireUserId();
+  const data = String(input.data ?? "");
+  if (!/^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(data)) {
+    return { ok: false, error: "画像として読み取れませんでした。" };
+  }
+  const b64 = data.slice(data.indexOf(",") + 1);
+  const bytes = Math.floor((b64.length * 3) / 4);
+  if (bytes > MAX_EVENT_IMAGE_BYTES) {
+    return {
+      ok: false,
+      error: "画像が大きすぎます。もう少し小さいものを選んでください。",
+    };
+  }
+
+  const event = await prisma.event.findFirst({
+    where: { id: input.eventId, userId },
+    select: { id: true, _count: { select: { images: true } } },
+  });
+  if (!event) return { ok: false, error: "予定が見つかりません。" };
+  if (event._count.images >= MAX_EVENT_IMAGES) {
+    return {
+      ok: false,
+      error: `画像は 1 つの予定につき ${MAX_EVENT_IMAGES} 枚までです。`,
+    };
+  }
+
+  await prisma.eventImage.create({
+    data: {
+      eventId: input.eventId,
+      data,
+      width: Math.max(1, Math.round(input.width) || 1),
+      height: Math.max(1, Math.round(input.height) || 1),
+      bytes,
+    },
+  });
+  revalidateAppViews(input.eventId);
+  return { ok: true };
+}
+
+/** メモ欄の画像を 1 枚削除する。 */
+export async function deleteEventImage(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const id = String(formData.get("id") ?? "");
+  const img = await prisma.eventImage.findFirst({
+    where: { id, event: { userId } },
+    select: { id: true, eventId: true },
+  });
+  if (!img) return;
+  await prisma.eventImage.delete({ where: { id } });
+  revalidateAppViews(img.eventId);
+}
+
 /** 準備リストを再生成する（学習内容を反映）。 */
 export async function regenerateChecklist(formData: FormData): Promise<void> {
   const userId = await requireUserId();

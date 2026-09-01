@@ -16,16 +16,20 @@ export async function replaceChecklistItems(
 ): Promise<void> {
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({ where: { eventId } }),
-    prisma.checklistItem.createMany({
-      data: items.map((it, i) => ({
-        eventId,
-        title: it.title.trim(),
-        timingLabel: it.timingLabel?.trim() || null,
-        isDone: Boolean(it.isDone),
-        isUserAdded: Boolean(it.isUserAdded),
-        sortOrder: i,
-      })),
-    }),
+    ...(items.length > 0
+      ? [
+          prisma.checklistItem.createMany({
+            data: items.map((it, i) => ({
+              eventId,
+              title: it.title.trim(),
+              timingLabel: it.timingLabel?.trim() || null,
+              isDone: Boolean(it.isDone),
+              isUserAdded: Boolean(it.isUserAdded),
+              sortOrder: i,
+            })),
+          }),
+        ]
+      : []),
   ]);
 }
 
@@ -85,6 +89,7 @@ export async function generateAndSaveChecklist(
   }
 
   const items = await buildChecklistForEvent(eventId);
+  const rows = persistData(eventId, items, comments);
   await prisma.$transaction([
     // 作り直すのは組み込みの2枠（準備すること・持ち物）だけ。
     // ユーザーが足した枠（買うもの等）は AI では再生成できないので残す。
@@ -95,9 +100,9 @@ export async function generateAndSaveChecklist(
     prisma.checklistItemImage.deleteMany({
       where: { eventId, kind: { in: ["task", "belonging"] } },
     }),
-    prisma.checklistItem.createMany({
-      data: persistData(eventId, items, comments),
-    }),
+    ...(rows.length > 0
+      ? [prisma.checklistItem.createMany({ data: rows })]
+      : []),
   ]);
 }
 
@@ -171,22 +176,26 @@ async function copyChecklistItems(
           fromEvent?.sectionOrder ?? '["task","belonging"]',
       },
     }),
-    prisma.checklistItem.createMany({
-      data: src.map((it) => ({
-        eventId: toEventId,
-        kind: it.kind,
-        title: it.title,
-        timingLabel: it.timingLabel,
-        comment: it.comment,
-        notifyLeadMinutes: it.notifyLeadMinutes,
-        isUserAdded: it.isUserAdded,
-        sortOrder: it.sortOrder,
-        isSuggested: it.isSuggested,
-        suggestionType: it.suggestionType,
-        suggestionRuleId: it.suggestionRuleId,
-        suggestionValue: it.suggestionValue,
-      })),
-    }),
+    ...(src.length > 0
+      ? [
+          prisma.checklistItem.createMany({
+            data: src.map((it) => ({
+              eventId: toEventId,
+              kind: it.kind,
+              title: it.title,
+              timingLabel: it.timingLabel,
+              comment: it.comment,
+              notifyLeadMinutes: it.notifyLeadMinutes,
+              isUserAdded: it.isUserAdded,
+              sortOrder: it.sortOrder,
+              isSuggested: it.isSuggested,
+              suggestionType: it.suggestionType,
+              suggestionRuleId: it.suggestionRuleId,
+              suggestionValue: it.suggestionValue,
+            })),
+          }),
+        ]
+      : []),
   ]);
 }
 

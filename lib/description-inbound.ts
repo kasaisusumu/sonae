@@ -193,18 +193,19 @@ export async function applyInboundDescription(
     prisma.checklistItem.deleteMany({
       where: { eventId, isSuggested: false },
     }),
-    prisma.checklistItem.createMany({ data: rows }),
+    ...(rows.length > 0
+      ? [prisma.checklistItem.createMany({ data: rows })]
+      : []),
     // 説明欄側で消えた項目の、メモ画像を後始末する（残った項目のスロットは追従）。
     ...kinds.map((k) => {
       const slots = rows
         .filter((r) => r.kind === k)
         .map((r) => norm(r.title));
       return prisma.checklistItemImage.deleteMany({
-        where: {
-          eventId,
-          kind: k,
-          slot: { notIn: slots.length > 0 ? slots : [" "] },
-        },
+        where:
+          slots.length > 0
+            ? { eventId, kind: k, slot: { notIn: slots } }
+            : { eventId, kind: k },
       });
     }),
     prisma.event.update({

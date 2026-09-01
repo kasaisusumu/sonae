@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma";
 import { clearSession, getSessionUserId } from "@/lib/session";
 import { syncEventDescription } from "@/lib/description-sync";
 import {
@@ -307,7 +308,7 @@ export async function deleteChecklistItemImage(
     select: { id: true, eventId: true },
   });
   if (!img) return;
-  await prisma.checklistItemImage.delete({ where: { id } });
+  await prisma.checklistItemImage.deleteMany({ where: { id } });
   revalidateAppViews(img.eventId);
 }
 
@@ -349,10 +350,12 @@ export async function toggleChecklistItemDone(
     select: { id: true, eventId: true },
   });
   if (!item) return;
-  await prisma.checklistItem.update({
+  // update ではなく updateMany（対象行が消えていても 500 にしない）
+  const res = await prisma.checklistItem.updateMany({
     where: { id: itemId },
     data: { isDone: Boolean(isDone) },
   });
+  if (res.count === 0) return;
   // 完了状態をカレンダー説明欄（取り消し線）にも反映
   await markAutoManaged(item.eventId);
   after(() => syncEventDescription(item.eventId));
@@ -418,10 +421,11 @@ export async function setItemNotifyLead(
   if (!item) return;
   if ((item.notifyLeadMinutes ?? null) === lead) return; // 変化なし
 
-  await prisma.checklistItem.update({
+  const res = await prisma.checklistItem.updateMany({
     where: { id: itemId },
     data: { notifyLeadMinutes: lead, notifiedAt: null },
   });
+  if (res.count === 0) return; // 対象行が消えていた（保存と競合）
 
   // 内容とセットで即時学習（notify_override）
   if (item.event.categoryId) {
@@ -532,87 +536,110 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     0,
     ...event.checklistItems.map((c) => c.sortOrder),
   );
-  await prisma.$transaction([
+  const survivingSlots = cleanItems.map((it) => normTitle(it.title));
+
+  // トランザクションは配列で組み立てる。createMany は空配列だと環境によって
+  // エラーになるため、項目が 1 件以上あるときだけ入れる（全削除でも落とさない）。
+  const ops: Prisma.PrismaPromise<unknown>[] = [
     prisma.checklistItem.deleteMany({
       where: { eventId: input.eventId, isSuggested: false, kind },
     }),
-    prisma.checklistItem.createMany({
-      data: cleanItems.map((it, i) => {
-        const p = prevByTitle.get(it.title);
-        const leadUnchanged =
-          p && (p.notifyLeadMinutes ?? null) === it.notifyLeadMinutes;
-        return {
-          eventId: input.eventId,
-          kind,
-          title: it.title,
-          timingLabel: p ? p.timingLabel : null,
-          comment: it.comment,
-          isDone: it.isDone,
-          isUserAdded: it.isUserAdded,
-          notifyLeadMinutes: it.notifyLeadMinutes,
-          // リード時間が変わっていなければ送信済みフラグを引き継ぐ（再送しない）
-          notifiedAt: leadUnchanged ? (p?.notifiedAt ?? null) : null,
-          sortOrder: (kind === "task" ? 0 : maxOrder + 1) + i,
-        };
+  ];
+  if (cleanItems.length > 0) {
+    ops.push(
+      prisma.checklistItem.createMany({
+        data: cleanItems.map((it, i) => {
+          const p = prevByTitle.get(it.title);
+          const leadUnchanged =
+            p && (p.notifyLeadMinutes ?? null) === it.notifyLeadMinutes;
+          return {
+            eventId: input.eventId,
+            kind,
+            title: it.title,
+            timingLabel: p ? p.timingLabel : null,
+            comment: it.comment,
+            isDone: it.isDone,
+            isUserAdded: it.isUserAdded,
+            notifyLeadMinutes: it.notifyLeadMinutes,
+            // リード時間が変わっていなければ送信済みフラグを引き継ぐ（再送しない）
+            notifiedAt: leadUnchanged ? (p?.notifiedAt ?? null) : null,
+            sortOrder: (kind === "task" ? 0 : maxOrder + 1) + i,
+          };
+        }),
       }),
-    }),
-    ...(nextOrder === curOrder
-      ? []
-      : [
-          prisma.event.update({
-            where: { id: input.eventId },
-            data: { sectionOrder: stringifySectionOrder(nextOrder) },
-          }),
-        ]),
-    // 消えた項目（削除・改名）のメモ画像を後始末する。残った項目のスロットは追従。
-    prisma.checklistItemImage.deleteMany({
-      where: {
-        eventId: input.eventId,
-        kind,
-        slot: {
-          notIn:
-            cleanItems.length > 0
-              ? cleanItems.map((it) => normTitle(it.title))
-              : [" "],
-        },
-      },
-    }),
-  ]);
-
-  if (
-    event.categoryId &&
-    (removed.length || added.length || renotified.length)
-  ) {
-    await recordEdit({
-      eventId: event.id,
-      categoryId: event.categoryId,
-      itemKind: kind,
-      feature: extractEventFeature({
-        title: event.title,
-        memo: event.memo,
-        eventDatetime: event.eventDatetime,
-        endDatetime: event.endDatetime,
-      }),
-      removed,
-      added,
-      retimed: [],
-      renotified,
-    });
+    );
   }
+  if (nextOrder !== curOrder) {
+    ops.push(
+      prisma.event.update({
+        where: { id: input.eventId },
+        data: { sectionOrder: stringifySectionOrder(nextOrder) },
+      }),
+    );
+  }
+  // 消えた項目（削除・改名）のメモ画像を後始末する。残った項目のスロットは追従。
+  // 全削除のときは、この種別の画像を丸ごと消す。
+  ops.push(
+    prisma.checklistItemImage.deleteMany({
+      where:
+        survivingSlots.length > 0
+          ? { eventId: input.eventId, kind, slot: { notIn: survivingSlots } }
+          : { eventId: input.eventId, kind },
+    }),
+  );
+  await prisma.$transaction(ops);
 
-  await markAutoManaged(input.eventId);
+  // ここから先（学習・同名グループ・説明欄同期）は「おまけ」。
+  // 失敗しても保存自体は済んでいるので、500 にはせずログだけ残す。
+  try {
+    const uniq = (a: string[]) =>
+      Array.from(new Set(a.map((s) => s.trim()).filter(Boolean)));
+    if (
+      event.categoryId &&
+      (removed.length || added.length || renotified.length)
+    ) {
+      await recordEdit({
+        eventId: event.id,
+        categoryId: event.categoryId,
+        itemKind: kind,
+        feature: extractEventFeature({
+          title: event.title,
+          memo: event.memo,
+          eventDatetime: event.eventDatetime,
+          endDatetime: event.endDatetime,
+        }),
+        removed: uniq(removed),
+        added: added.filter(
+          (a, i, arr) =>
+            !!a.title.trim() &&
+            arr.findIndex((x) => x.title.trim() === a.title.trim()) === i,
+        ),
+        retimed: [],
+        renotified,
+      });
+    }
 
-  // 内容（項目・通知時間）が変わった編集なら、同名グループの扱いを更新する。
-  const contentChanged =
-    removed.length > 0 || added.length > 0 || renotified.length > 0;
-  const twinIds = contentChanged
-    ? await resolveNameGroupOnEdit(input.eventId)
-    : [];
+    await markAutoManaged(input.eventId);
 
-  after(() => {
-    void syncEventDescription(input.eventId);
-    for (const id of twinIds) void syncEventDescription(id);
-  });
+    // 内容（項目・通知時間）が変わった編集なら、同名グループの扱いを更新する。
+    const contentChanged =
+      removed.length > 0 || added.length > 0 || renotified.length > 0;
+    const twinIds = contentChanged
+      ? await resolveNameGroupOnEdit(input.eventId)
+      : [];
+
+    after(() => {
+      void syncEventDescription(input.eventId);
+      for (const id of twinIds) void syncEventDescription(id);
+    });
+  } catch (e) {
+    console.error(
+      "[saveChecklist] 保存後の学習・同期でエラー eventId=%s",
+      input.eventId,
+      e,
+    );
+    after(() => void syncEventDescription(input.eventId));
+  }
 
   revalidateAppViews(input.eventId);
 }

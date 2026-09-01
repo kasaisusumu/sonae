@@ -342,7 +342,8 @@ export function PageCoach() {
       if (el && r && (r.width > 0 || r.height > 0)) {
         if (!visible) {
           visible = true;
-          el.scrollIntoView({ block: "center", behavior: "smooth" });
+          // 大きい要素を center で寄せると上端が画面外に出るため nearest。
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
         }
         const pad = 6;
         applyRect({
@@ -406,13 +407,34 @@ export function PageCoach() {
   const step = tour.steps[idx];
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const vw = typeof window !== "undefined" ? window.innerWidth : 400;
-  const tipW = Math.min(320, vw - 24);
-  const spaceBelow = vh - (rect.top + rect.height);
-  const placeBelow = spaceBelow > 210 || rect.top < 150;
-  const tipLeft = Math.max(12, Math.min(rect.left, vw - tipW - 12));
-  const tipStyle: CSSProperties = placeBelow
-    ? { top: rect.top + rect.height + 12, left: tipLeft, width: tipW }
-    : { bottom: vh - rect.top + 12, left: tipLeft, width: tipW };
+
+  // ── 説明カードは必ず画面内に収める ──
+  // ハイライトが画面より大きい／上端が画面外でも、はじめから読める位置に置く。
+  const M = 12; // 画面端の余白
+  const tipW = Math.min(340, vw - M * 2);
+  const budget = Math.max(120, Math.min(300, vh - M * 2)); // カードに確保する高さ
+
+  // 対象のうち「画面内に見えている範囲」を基準にする（rect.top が負でも安全）
+  const visTop = Math.max(rect.top, M);
+  const visBottom = Math.min(rect.top + rect.height, vh - M);
+
+  let tipTop: number;
+  if (vh - M - visBottom >= budget) {
+    tipTop = visBottom + M; // 対象の下に十分入る
+  } else if (visTop - M >= budget) {
+    tipTop = visTop - M - budget; // 対象の上に十分入る
+  } else {
+    tipTop = vh - M - budget; // どちらも無理 → 画面下寄せ（対象に重なってよい）
+  }
+  tipTop = Math.max(M, Math.min(tipTop, vh - M - budget));
+
+  const tipLeft = Math.max(M, Math.min(rect.left, vw - tipW - M));
+  const tipStyle: CSSProperties = {
+    top: tipTop,
+    left: tipLeft,
+    width: tipW,
+    maxHeight: budget,
+  };
 
   const last = idx === tour.steps.length - 1;
 
@@ -433,17 +455,19 @@ export function PageCoach() {
         }}
       />
 
-      {/* 説明カード */}
+      {/* 説明カード（画面内に収まるよう clamp・長い本文は内部スクロール） */}
       <div
-        className="absolute rounded-2xl bg-surface p-4 shadow-2xl"
+        className="absolute flex flex-col rounded-2xl bg-surface p-4 shadow-2xl"
         style={tipStyle}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="text-sm font-semibold text-foreground">{step.title}</h3>
-        <p className="mt-1 text-[13px] leading-relaxed text-muted">
+        <h3 className="shrink-0 text-sm font-semibold text-foreground">
+          {step.title}
+        </h3>
+        <p className="mt-1 min-h-0 flex-1 overflow-y-auto text-[13px] leading-relaxed text-muted">
           {step.body}
         </p>
-        <div className="mt-3 flex items-center justify-between">
+        <div className="mt-3 flex shrink-0 items-center justify-between">
           <button
             type="button"
             onClick={finish}

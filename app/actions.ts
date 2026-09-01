@@ -530,9 +530,28 @@ async function loadEventForSection(eventId: string) {
   const userId = await requireUserId();
   const event = await prisma.event.findFirst({
     where: { id: eventId, userId },
-    include: { checklistItems: { select: { kind: true } } },
+    select: { id: true, sectionOrder: true },
   });
   return event;
+}
+
+/**
+ * 枠の変更後、同名グループの扱い（波及 or 切り離し）を更新し、説明欄も同期する。
+ * 予定ページからでも学習ページ（まとめられた同名予定）からでも整合するように。
+ */
+async function propagateSectionChange(eventId: string): Promise<void> {
+  await markAutoManaged(eventId);
+  let twinIds: string[] = [];
+  try {
+    twinIds = await resolveNameGroupOnEdit(eventId);
+  } catch (e) {
+    console.error("[section] 同名グループ処理に失敗 eventId=%s", eventId, e);
+  }
+  after(() => {
+    void syncEventDescription(eventId);
+    for (const id of twinIds) void syncEventDescription(id);
+  });
+  revalidateAppViews(eventId);
 }
 
 /** 新しい枠を追加する。枠名がキーになる（組み込み名は不可）。 */
@@ -552,9 +571,7 @@ export async function addChecklistSection(formData: FormData): Promise<void> {
     where: { id: eventId },
     data: { sectionOrder: stringifySectionOrder([...order, key]) },
   });
-  await markAutoManaged(eventId);
-  after(() => void syncEventDescription(eventId));
-  revalidateAppViews(eventId);
+  await propagateSectionChange(eventId);
 }
 
 /** 枠の名前を変える。中の項目の kind も新しい名前へ付け替える。 */
@@ -588,9 +605,7 @@ export async function renameChecklistSection(
       },
     }),
   ]);
-  await markAutoManaged(eventId);
-  after(() => void syncEventDescription(eventId));
-  revalidateAppViews(eventId);
+  await propagateSectionChange(eventId);
 }
 
 /** 枠を削除する。中の項目もまとめて消える（組み込みは不可）。 */
@@ -616,9 +631,7 @@ export async function removeChecklistSection(
       },
     }),
   ]);
-  await markAutoManaged(eventId);
-  after(() => void syncEventDescription(eventId));
-  revalidateAppViews(eventId);
+  await propagateSectionChange(eventId);
 }
 
 /** 提案項目を「適用」する（1タップ）。ルールの確信度を上げる。 */

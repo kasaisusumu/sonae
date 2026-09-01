@@ -2,6 +2,11 @@
 
 import { Fragment, useState, type ReactNode } from "react";
 import { ChecklistEditor } from "@/app/events/[id]/checklist-editor";
+import {
+  AddSectionButton,
+  SectionControls,
+} from "@/app/events/[id]/section-manager";
+import { isBuiltinSection } from "@/lib/sections";
 
 export interface LeafItem {
   id: string;
@@ -60,6 +65,11 @@ export function LeafBody({
       {sections.map((s, i) => (
         <Fragment key={s.key}>
           {i > 0 && <div className="mt-3" />}
+          {!isBuiltinSection(s.key) && (
+            <div className="mb-1 flex items-center justify-end">
+              <SectionControls eventId={eventId} sectionKey={s.key} />
+            </div>
+          )}
           <ChecklistEditor
             eventId={eventId}
             kind={s.key}
@@ -68,6 +78,9 @@ export function LeafBody({
           />
         </Fragment>
       ))}
+      <div className="mt-3">
+        <AddSectionButton eventId={eventId} />
+      </div>
     </div>
   );
 }

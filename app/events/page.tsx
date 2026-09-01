@@ -97,7 +97,7 @@ export default async function EventsPage({
           <h1 className="text-2xl font-semibold tracking-tight">
             これからの予定
           </h1>
-          <form action={syncCalendar}>
+          <form action={syncCalendar} data-coach="sync">
             <SubmitButton variant="ghost">↻ 取り込む</SubmitButton>
           </form>
         </div>
@@ -179,6 +179,7 @@ function EventRow({
 
   return (
     <li
+      data-coach="event-card"
       className={`relative rounded-xl bg-surface p-4 transition-colors hover:bg-surface-muted active:bg-accent-soft ${
         past ? "opacity-80" : ""
       }`}

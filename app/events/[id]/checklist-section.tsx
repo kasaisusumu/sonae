@@ -242,13 +242,15 @@ export async function ChecklistSection({
           </form>
         </div>
 
-        <ListReminderControl
-          eventId={event.id}
-          current={
-            reviewState?.listReminderLeadMinutes ??
-            event.listReminderLeadMinutes
-          }
-        />
+        <div data-coach="list-reminder">
+          <ListReminderControl
+            eventId={event.id}
+            current={
+              reviewState?.listReminderLeadMinutes ??
+              event.listReminderLeadMinutes
+            }
+          />
+        </div>
 
         {unreviewed && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal/30 bg-teal-soft px-4 py-3">

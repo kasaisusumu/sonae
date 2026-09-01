@@ -37,7 +37,10 @@ export function CalendarLinkTip({ writeEnabled }: { writeEnabled: boolean }) {
   }
 
   return (
-    <section className="relative rounded-2xl border border-teal/30 bg-teal-soft p-5">
+    <section
+      data-coach="cal-link-tip"
+      className="relative rounded-2xl border border-teal/30 bg-teal-soft p-5"
+    >
       <button
         type="button"
         onClick={close}

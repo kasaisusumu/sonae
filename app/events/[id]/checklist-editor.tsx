@@ -142,6 +142,10 @@ export function ChecklistEditor({
   const [removedTitles, setRemovedTitles] = useState<string[]>([]);
   const [pending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
+  // 「ユーザーが実際に中身をいじった（メモ以外）」フラグ。
+  // これが立ったときだけ自動保存する。保存したら false に戻す。
+  // ＝ 何も書いていないのに保存が延々と走るのを防ぐ。
+  const [structEdited, setStructEdited] = useState(false);
   // 行ごとの詳細（通知タイミング・メモ・削除）を開いているか
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
   const toggleOpen = (key: string) =>
@@ -160,11 +164,6 @@ export function ChecklistEditor({
     [initialItems],
   );
 
-  // メモ（comment）以外の変更＝自動保存の対象。
-  const structuralDirty =
-    JSON.stringify(items.map(stripStructural)) !==
-      JSON.stringify(initial.map(stripStructural)) || removedTitles.length > 0;
-
   // メモは自動保存しない。保存済みの値と違う項目があるか（キー：正規化タイトル）。
   const savedCommentByTitle = useMemo(
     () => new Map(initial.map((i) => [normTitle(i.title), i.comment])),
@@ -178,11 +177,13 @@ export function ChecklistEditor({
   const rowCommentDirty = (it: Item) =>
     (savedCommentByTitle.get(normTitle(it.title)) ?? "") !== it.comment;
 
-  const dirty = structuralDirty || commentDirty;
+  const dirty = structEdited || commentDirty;
 
   const syncedRef = useRef(initial);
   useEffect(() => {
     const userEdited =
+      structEdited ||
+      commentDirty ||
       JSON.stringify(items.map(strip)) !==
         JSON.stringify(syncedRef.current.map(strip)) ||
       removedTitles.length > 0;
@@ -203,18 +204,24 @@ export function ChecklistEditor({
     }
     setItems(initial);
     setRemovedTitles([]);
+    setStructEdited(false);
     setSaved(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
-  // 文言・追加・削除・チェックは「保存する」を押さずに自動保存する（入力が 1.8 秒止まったら）。
+  // 自動保存は「ユーザーが実際にいじった（structEdited）」ときだけ。
+  // 何も書いていない状態では一切走らせない。編集が続く間は 1.8 秒ごとに
+  // タイマーが張り直され、止まったら 1 回だけ保存する。
   // メモ（comment）は自動保存しない ＝ 書き終わったら「メモを保存」を押す。
   useEffect(() => {
-    if (!structuralDirty || pending) return;
-    const t = window.setTimeout(() => persist(items, false), 1800);
+    if (!structEdited || pending) return;
+    const t = window.setTimeout(() => {
+      setStructEdited(false);
+      persist(items, false);
+    }, 1800);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, removedTitles, structuralDirty, pending]);
+  }, [items, structEdited, pending]);
 
   // includeMemo=false のとき（＝自動保存）は、メモは保存済みの値のまま送る。
   // メモは「メモを保存」を押したときだけ（includeMemo=true）反映する。
@@ -253,6 +260,8 @@ export function ChecklistEditor({
       prev.map((it) => (it.key === key ? { ...it, ...patch } : it)),
     );
     setSaved(false);
+    // メモ（comment）だけの変更では自動保存しない。文言・通知の変更だけが対象。
+    if ("title" in patch || "notifyLeadMinutes" in patch) setStructEdited(true);
   }
 
   // 保存済み項目は通知の変更をその場で保存＋学習（チェックと同じ扱い）
@@ -300,10 +309,14 @@ export function ChecklistEditor({
     if (!window.confirm("削除しますか？")) return;
     setItems((prev) => {
       const target = prev.find((it) => it.key === key);
-      if (target && originalTitles.has(target.title)) {
-        setRemovedTitles((r) =>
-          r.includes(target.title) ? r : [...r, target.title],
-        );
+      // 保存済みの項目を消したときだけ、保存が必要（空の未保存行はそのまま消すだけ）
+      if (target && (target.id || originalTitles.has(target.title))) {
+        setStructEdited(true);
+        if (originalTitles.has(target.title)) {
+          setRemovedTitles((r) =>
+            r.includes(target.title) ? r : [...r, target.title],
+          );
+        }
       }
       return prev.filter((it) => it.key !== key);
     });
@@ -455,7 +468,7 @@ export function ChecklistEditor({
               : String(it.notifyLeadMinutes);
           const open = openKeys.has(it.key);
           return (
-            <li key={it.key} className="py-1">
+            <li key={it.key} data-coach="item-row" className="py-1">
               {/* 1 行に集約：チェック / 文言 / 通知チップ */}
               <div className="flex items-center gap-2">
                 <input
@@ -624,9 +637,10 @@ export function ChecklistEditor({
       </ul>
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1.5">
+        <div data-coach="templates" className="flex flex-wrap gap-1.5">
           <button
             type="button"
+            data-coach="add-item"
             onClick={add}
             className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
           >
@@ -671,7 +685,7 @@ export function ChecklistEditor({
               ? "保存中…"
               : commentDirty
                 ? "メモが未保存"
-                : structuralDirty
+                : structEdited
                   ? "変更あり（自動保存）"
                   : saved
                     ? "保存しました"
@@ -887,14 +901,6 @@ function strip(it: Item) {
   return {
     title: it.title.trim(),
     comment: it.comment.trim(),
-    notifyLeadMinutes: it.notifyLeadMinutes,
-  };
-}
-
-/** メモ（comment）を除いた、自動保存の対象になる部分だけ。 */
-function stripStructural(it: Item) {
-  return {
-    title: it.title.trim(),
     notifyLeadMinutes: it.notifyLeadMinutes,
   };
 }

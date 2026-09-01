@@ -25,7 +25,10 @@ export async function GettingStarted({ userId }: { userId: string }) {
   const doneCount = [step1, step2, step3].filter(Boolean).length;
 
   return (
-    <section className="rounded-2xl border border-teal/30 bg-teal-soft p-5">
+    <section
+      data-coach="getting-started"
+      className="rounded-2xl border border-teal/30 bg-teal-soft p-5"
+    >
       <div className="flex items-baseline justify-between">
         <h2 className="text-base font-semibold text-teal-dark">
           はじめかた（あと{3 - doneCount}つ）

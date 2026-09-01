@@ -153,7 +153,7 @@ export default async function HomePage({
         <SavingsDashboard userId={user.id} />
       </div>
 
-      <section>
+      <section data-coach="upcoming">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold tracking-tight">
             これからの予定

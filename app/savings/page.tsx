@@ -209,7 +209,7 @@ export default async function LearningTreePage() {
   ];
 
   const tree = (
-    <div className="space-y-3">
+    <div data-coach="learning-tree" className="space-y-3">
       {categories.map((cat) => (
         <details
           key={cat.categoryId}

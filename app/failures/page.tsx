@@ -189,7 +189,7 @@ export default async function FailuresPage() {
         </p>
       </div>
 
-      <section className="rounded-2xl bg-surface p-5">
+      <section data-coach="fail-new" className="rounded-2xl bg-surface p-5">
         <h2 className="text-sm font-semibold text-muted">記録する</h2>
         <form action={createFailureLog} className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="text-sm sm:col-span-2">
@@ -260,7 +260,7 @@ export default async function FailuresPage() {
         </form>
       </section>
 
-      <section className="space-y-3">
+      <section data-coach="fail-list" className="space-y-3">
         <div className="flex items-baseline justify-between">
           <h2 className="text-lg font-semibold">これまでの記録</h2>
           {logs.length > 0 && (

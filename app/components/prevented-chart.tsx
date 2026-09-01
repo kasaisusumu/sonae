@@ -56,7 +56,7 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
   const totalCount = data.reduce((a, d) => a + d.count, 0);
 
   return (
-    <div className="rounded-2xl bg-surface p-4">
+    <div data-coach="prevented-chart" className="rounded-2xl bg-surface p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-foreground">防げた失敗</h3>
         <div className="inline-flex rounded-lg bg-surface-muted p-0.5">

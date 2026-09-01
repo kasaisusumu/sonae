@@ -45,7 +45,10 @@ export default async function SettingsPage() {
         </p>
       </section>
 
-      <section className="rounded-2xl bg-surface p-5">
+      <section
+        data-coach="settings-google"
+        className="rounded-2xl bg-surface p-5"
+      >
         <h2 className="text-sm font-semibold text-muted">Google カレンダー連携</h2>
         {account ? (
           <div className="mt-3 space-y-3 text-sm">
@@ -100,7 +103,10 @@ export default async function SettingsPage() {
             </div>
 
             {/* 説明欄への書き込み（オプトイン） */}
-            <div className="rounded-lg bg-surface-muted p-3">
+            <div
+              data-coach="settings-desc"
+              className="rounded-lg bg-surface-muted p-3"
+            >
               <p className="text-xs font-semibold">
                 予定の説明欄に準備リストを書き込む
               </p>
@@ -143,7 +149,10 @@ export default async function SettingsPage() {
         )}
       </section>
 
-      <section className="rounded-2xl bg-surface p-5">
+      <section
+        data-coach="settings-notify"
+        className="rounded-2xl bg-surface p-5"
+      >
         <h2 className="text-sm font-semibold text-muted">通知</h2>
         <p className="mt-2 text-sm text-muted">
           Google カレンダーに新しい予定が追加されると、準備リストを確認するよう通知します（数分おきに確認）。

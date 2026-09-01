@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
-const KEY = "mm_tutorial_v1";
+const KEY = "mm_tutorial_v2";
 const EVENT = "mm:open-tutorial";
 
 type Slide = { id: string; title: string; body: string };
@@ -11,42 +11,57 @@ const SLIDES: Slide[] = [
   {
     id: "welcome",
     title: "ようこそ",
-    body: "「私のマネージャー」は、予定を入れるだけで“準備すること”と“持ち物”を自動で用意します。使うほどあなた専用の手順書に育ちます。7 ステップだけ見ていきましょう。",
+    body: "「私のマネージャー」は、予定を入れるだけで“準備すること”と“持ち物”を自動で用意します。使うほど、あなた専用の手順書に育ちます。おもな画面をさっと見ていきましょう。",
   },
   {
     id: "connect",
     title: "① Google カレンダーとつなぐ",
-    body: "設定、またはホームの「はじめかた」から連携します。以後、カレンダーに予定を入れるだけで自動で取り込まれます（アプリ内での手動追加はありません）。",
+    body: "設定、またはホームの「はじめかた」から連携します。以後、カレンダーに予定を入れるだけで自動で取り込まれます（アプリ内での手動追加はありません）。読み取りのみで、書き込みは設定でオンにしたときだけです。",
   },
   {
     id: "desc",
     title: "② カレンダーの説明欄にも自動で書く",
-    body: "連携をオンにすると、予定の説明欄に準備リスト（チェック状態つき）を自動で書き込みます。カレンダー側で説明欄をチェック／編集しても、アプリに取り込まれます（双方向）。元の説明文は残し、「--- 私のマネージャー ---」の部分だけ差し替えます。",
+    body: "書き込みをオンにすると、予定の説明欄に準備リスト（チェック状態つき）を自動で書き込みます。そこにある「準備リスト: …」のリンクをタップすれば、その予定のページが直接ひらきます。カレンダー側で説明欄を編集してもアプリに取り込まれます（双方向）。元の説明文は残し、「--- 私のマネージャー ---」の部分だけ差し替えます。",
   },
   {
     id: "open",
     title: "③ 予定を開いて準備リストを見る",
-    body: "予定をタップすると「準備すること」と「持ち物」が出ます。用意できたらチェック。チェック済みは（次にページを開いたとき）下へ移動します。予定の“準備リストのリマインド”（初期は1日前）で、当日までにまとめて通知が届きます。",
+    body: "予定をタップすると「準備すること」と「持ち物」が出ます。用意できたらチェック（チェック済みは次に開いたとき下へ）。各項目の ∨ を開くと、その項目だけの通知タイミング・メモ・リンク・写真を設定できます（写真は自動で圧縮）。",
+  },
+  {
+    id: "section",
+    title: "④ リストの枠は自由に増やせる",
+    body: "「準備すること」「持ち物」に加えて、「買うもの」など自分の枠を追加・改名・削除できます。増やした枠は、カレンダーの説明欄と「学習」ページにもそのまま反映されます。",
   },
   {
     id: "learn",
-    title: "④ 直すと賢くなる",
-    body: "いる／いらないを直す、項目を足す、🔔で通知タイミングを決める——どれも自動保存され、次の似た予定から反映されます。一度決めた通知は、以後その学習どおりが初期値になります。",
+    title: "⑤ 直すと賢くなる",
+    body: "いる／いらないを直す、項目を足す、通知タイミングを決める——どれも自動保存され（メモだけは「メモを保存」ボタン）、次の似た予定から反映されます。学習は“精度を上げる”ためのもので、リストが際限なく増えることはありません。一度決めた通知は、以後その学習どおりが初期値になります。",
   },
   {
     id: "template",
-    title: "⑤ よく使うセットはテンプレに",
-    body: "リスト下の「⭐ 名前をつけて保存」でテンプレ化。別の予定では「📋 テンプレから」「📆 他の予定から」で呼び出せます。作成・編集は「学習」タブでも行えます。",
+    title: "⑥ よく使うセットはテンプレに",
+    body: "リスト下の「⭐ 名前をつけて保存」でテンプレ化。別の予定では「📋 テンプレから」「📆 他の予定から」で呼び出せます。作成・編集は「学習」タブでもできます。",
   },
   {
     id: "failure",
-    title: "⑥ うっかりは失敗ログに",
-    body: "予定ページ上部の「こんな失敗もあり得ます」から、似た予定の失敗を記録できます。防げた分は節約額ダッシュボード（ホーム）に積み上がります。関係なければ「今回は関係ない」で消せます。",
+    title: "⑦ うっかりは失敗ログに",
+    body: "予定ページの「似た予定でよくある失敗」か、「失敗ログ」ページから記録します。責めるためではなく、次に似た予定が来たときに先回りするためです。各記録に「防げた／防げなかった」を選べます。",
+  },
+  {
+    id: "chart",
+    title: "⑧ 防げた失敗はグラフで見える",
+    body: "ホームに「防げた失敗」のグラフが常に出ます。ティール＝金額、オレンジ＝件数の二軸で、「月／週／日」を切り替えられます（選んだ表示は次回も保持）。「防げた」と選んだ推定損失額の合計が、今月の推定節約額です（参考値・自動判定なし）。",
+  },
+  {
+    id: "menu",
+    title: "⑨ 困ったら左上の ☰",
+    body: "どのページでも、左上の ☰ から「このページの使い方をみる」「アプリのチュートリアル」「このアプリについて・注意」を開けます。ページの移動やログアウトもここから。",
   },
   {
     id: "done",
     title: "準備OK",
-    body: "困ったら 設定 →「チュートリアルをもう一度見る」でいつでも読み返せます。それでは、はじめましょう。",
+    body: "この説明は、左上の ☰ →「アプリのチュートリアル」でいつでも読み返せます。各ページの ☰ →「このページの使い方をみる」を押すと、実際のボタンを1つずつ指しながら説明します。それでは、はじめましょう。",
   },
 ];
 
@@ -84,16 +99,74 @@ function Visual({ id }: { id: string }): ReactNode {
         <div className={`${box} space-y-1 text-xs`}>
           <div className="flex items-center gap-2">
             <span className="flex-1">☐ モバイルバッテリー</span>
-            <span className="rounded-full border border-teal/40 px-2 text-[10px] text-teal-dark">
-              🔔なし
+            <span className="rounded-md border border-border px-1.5 text-[10px] text-muted">
+              ∨
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="flex-1">☐ 常備薬</span>
+            <span className="text-[10px] text-teal-dark">🔔1日前</span>
+            <span className="rounded-md border border-teal/40 bg-teal-soft px-1.5 text-[10px] text-teal-dark">
+              ∧
+            </span>
+          </div>
+          <div className="ml-3 rounded-md bg-surface-muted p-1.5 text-[10px] text-muted">
+            通知 / メモ・リンク / ＋写真
           </div>
           <div className="flex items-center gap-2 text-muted line-through">
             <span className="flex-1">☑ 充電器</span>
           </div>
+        </div>
+      );
+    case "section":
+      return (
+        <div className={`${box} space-y-1 text-xs`}>
+          <p className="font-medium">【準備すること】</p>
+          <p className="font-medium">【持ち物】</p>
+          <p className="font-medium text-teal-dark">【買うもの】 ＋</p>
+        </div>
+      );
+    case "chart":
+      return (
+        <div className={`${box}`}>
+          <div className="mb-1 flex justify-end gap-1 text-[9px]">
+            <span className="rounded bg-surface px-1 text-teal-dark">月</span>
+            <span className="rounded px-1 text-muted">週</span>
+            <span className="rounded px-1 text-muted">日</span>
+          </div>
+          <div className="flex items-end gap-1" style={{ height: 44 }}>
+            {[
+              [10, 30],
+              [24, 60],
+              [8, 20],
+              [40, 90],
+              [16, 45],
+              [28, 70],
+            ].map(([a, b], i) => (
+              <div key={i} className="flex flex-1 items-end justify-center gap-0.5">
+                <span
+                  className="w-1 rounded-t bg-teal"
+                  style={{ height: `${b}%` }}
+                />
+                <span
+                  className="w-1 rounded-t bg-warn"
+                  style={{ height: `${a}%` }}
+                />
+              </div>
+            ))}
+          </div>
+          <p className="mt-1 text-[9px] text-muted">■金額 ■件数</p>
+        </div>
+      );
+    case "menu":
+      return (
+        <div className={`${box} text-xs`}>
+          <p className="font-semibold">☰ メニュー</p>
+          <ul className="mt-1 space-y-0.5 text-[11px] text-muted">
+            <li>・このページの使い方をみる</li>
+            <li>・アプリのチュートリアル</li>
+            <li>・このアプリについて・注意</li>
+          </ul>
         </div>
       );
     case "learn":

@@ -258,7 +258,11 @@ export async function getWarningForEvent(
   const feature = featureOf(event);
 
   const logs: LogRow[] = await prisma.failureLog.findMany({
-    where: { userId: event.userId, categoryId: event.categoryId },
+    where: {
+      userId: event.userId,
+      categoryId: event.categoryId,
+      outcome: { not: "irrelevant" }, // 「今回は関係ない」は先回り警告に使わない
+    },
     orderBy: { occurredAt: "desc" },
     select: LOG_SELECT,
   });
@@ -360,7 +364,11 @@ export async function getUpcomingWarnings(userId: string): Promise<EventWarning[
   const catIds = [...new Set(risky.map((e) => e.categoryId!))];
 
   const logs: LogRow[] = await prisma.failureLog.findMany({
-    where: { userId, categoryId: { in: catIds } },
+    where: {
+      userId,
+      categoryId: { in: catIds },
+      outcome: { not: "irrelevant" },
+    },
     orderBy: { occurredAt: "desc" },
     select: LOG_SELECT,
   });
@@ -448,7 +456,11 @@ export async function notifyPostEventFailureChecks(
 
   const catIds = [...new Set(events.map((e) => e.categoryId!))];
   const logs: LogRow[] = await prisma.failureLog.findMany({
-    where: { userId, categoryId: { in: catIds } },
+    where: {
+      userId,
+      categoryId: { in: catIds },
+      outcome: { not: "irrelevant" },
+    },
     orderBy: { occurredAt: "desc" },
     select: LOG_SELECT,
   });
@@ -542,7 +554,11 @@ export async function suggestFailureLogsForEvent(
   const dismissedKeys = new Set(dismissed.map((d) => d.descKey));
 
   const logs: LogRow[] = await prisma.failureLog.findMany({
-    where: { userId: event.userId, NOT: { eventId } },
+    where: {
+      userId: event.userId,
+      NOT: { eventId },
+      outcome: { not: "irrelevant" },
+    },
     orderBy: { occurredAt: "desc" },
     take: 200,
     select: LOG_SELECT,

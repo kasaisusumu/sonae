@@ -28,7 +28,11 @@ type LogRow = {
   estimatedLossYen: number;
   outcome: string | null;
   category: { name: string } | null;
-  event: { title: string } | null;
+  event: {
+    title: string;
+    eventDatetime: Date;
+    endDatetime: Date | null;
+  } | null;
 };
 
 function OutcomeButton({
@@ -39,16 +43,18 @@ function OutcomeButton({
   tone,
 }: {
   logId: string;
-  target: "prevented" | "not_prevented";
+  target: "prevented" | "not_prevented" | "irrelevant";
   active: boolean;
   label: string;
-  tone: "teal" | "warn";
+  tone: "teal" | "warn" | "muted";
 }) {
   const base = "rounded-full px-3 py-1 text-xs transition-colors";
   const cls = active
     ? tone === "teal"
       ? "bg-teal text-white"
-      : "bg-warn text-white"
+      : tone === "warn"
+        ? "bg-warn text-white"
+        : "bg-foreground/70 text-white"
     : "border border-border text-muted hover:border-foreground/40";
   return (
     <form action={setFailureOutcome}>
@@ -65,7 +71,13 @@ function OutcomeButton({
   );
 }
 
-function FailureRow({ log: l }: { log: LogRow }) {
+function FailureRow({
+  log: l,
+  reviewable = true,
+}: {
+  log: LogRow;
+  reviewable?: boolean;
+}) {
   return (
     <li className="rounded-xl bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
@@ -90,22 +102,35 @@ function FailureRow({ log: l }: { log: LogRow }) {
           </ConfirmButton>
         </form>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <OutcomeButton
-          logId={l.id}
-          target="prevented"
-          active={l.outcome === "prevented"}
-          label="防げた"
-          tone="teal"
-        />
-        <OutcomeButton
-          logId={l.id}
-          target="not_prevented"
-          active={l.outcome === "not_prevented"}
-          label="防げなかった"
-          tone="warn"
-        />
-      </div>
+      {reviewable ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <OutcomeButton
+            logId={l.id}
+            target="prevented"
+            active={l.outcome === "prevented"}
+            label="防げた"
+            tone="teal"
+          />
+          <OutcomeButton
+            logId={l.id}
+            target="not_prevented"
+            active={l.outcome === "not_prevented"}
+            label="防げなかった"
+            tone="warn"
+          />
+          <OutcomeButton
+            logId={l.id}
+            target="irrelevant"
+            active={l.outcome === "irrelevant"}
+            label="今回は関係ない"
+            tone="muted"
+          />
+        </div>
+      ) : (
+        <p className="mt-2 text-[11px] text-muted">
+          この予定が終わってから振り返れます。
+        </p>
+      )}
 
       <details className="mt-2 [&_summary::-webkit-details-marker]:hidden">
         <summary className="cursor-pointer list-none text-[11px] text-teal-dark">
@@ -162,7 +187,12 @@ export default async function FailuresPage() {
     prisma.failureLog.findMany({
       where: { userId: user.id },
       orderBy: { occurredAt: "desc" },
-      include: { category: true, event: { select: { title: true } } },
+      include: {
+        category: true,
+        event: {
+          select: { title: true, eventDatetime: true, endDatetime: true },
+        },
+      },
     }),
     prisma.event.findMany({
       // 失敗 log は「もう起きたこと」なので、選べるのは過去の予定だけ
@@ -177,7 +207,12 @@ export default async function FailuresPage() {
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
   );
   const total = logs.reduce((s, l) => s + l.estimatedLossYen, 0);
-  const unreviewed = logs.filter((l) => !l.outcome);
+  // 予定に紐づく記録は、その予定が終わってから振り返る。
+  const now = new Date();
+  const reviewable = (l: (typeof logs)[number]) =>
+    !l.event || (l.event.endDatetime ?? l.event.eventDatetime) <= now;
+  const unreviewed = logs.filter((l) => !l.outcome && reviewable(l));
+  const pendingFuture = logs.filter((l) => !l.outcome && !reviewable(l));
   const reviewed = logs.filter((l) => l.outcome);
 
   return (
@@ -277,7 +312,7 @@ export default async function FailuresPage() {
         ) : (
           <>
             <p className="text-xs text-muted">
-              各記録について「防げた／防げなかった」を選べます。「防げた」にしたものだけが
+              各記録について「防げた／防げなかった／今回は関係ない」を選べます。「防げた」にしたものだけが
               <a href="/savings" className="underline">
                 節約額ダッシュボード
               </a>
@@ -295,6 +330,19 @@ export default async function FailuresPage() {
                   ))}
                 </ul>
               </div>
+            )}
+
+            {pendingFuture.length > 0 && (
+              <details className="[&_summary::-webkit-details-marker]:hidden">
+                <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
+                  まだ先の予定の記録（{pendingFuture.length}件）— 予定が終わってから振り返り
+                </summary>
+                <ul className="mt-2 space-y-2">
+                  {pendingFuture.map((l) => (
+                    <FailureRow key={l.id} log={l} reviewable={false} />
+                  ))}
+                </ul>
+              </details>
             )}
 
             {reviewed.length > 0 && (

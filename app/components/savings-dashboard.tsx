@@ -221,6 +221,24 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
                                 防げなかったに変更
                               </button>
                             </form>
+                            <form action={setFailureOutcome}>
+                              <input
+                                type="hidden"
+                                name="failureLogId"
+                                value={it.id}
+                              />
+                              <input
+                                type="hidden"
+                                name="outcome"
+                                value="irrelevant"
+                              />
+                              <button
+                                type="submit"
+                                className="text-muted underline hover:text-foreground"
+                              >
+                                今回は関係ない
+                              </button>
+                            </form>
                           </div>
                         </li>
                       ))}

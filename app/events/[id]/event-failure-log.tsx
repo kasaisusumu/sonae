@@ -80,6 +80,7 @@ export async function EventFailureLog({
                       <option value="">未選択</option>
                       <option value="prevented">防げた</option>
                       <option value="not_prevented">防げなかった</option>
+                      <option value="irrelevant">今回は関係ない</option>
                     </select>
                   </label>
                   <label className="text-xs text-muted">
@@ -117,7 +118,9 @@ export async function EventFailureLog({
                     ? "防げた"
                     : l.outcome === "not_prevented"
                       ? "防げなかった"
-                      : "未選択"}
+                      : l.outcome === "irrelevant"
+                        ? "今回は関係ない"
+                        : "未選択"}
                 </span>
                 <form action={deleteFailureLog}>
                   <input type="hidden" name="id" value={l.id} />

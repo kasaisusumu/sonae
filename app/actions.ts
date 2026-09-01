@@ -1077,6 +1077,7 @@ export async function deleteFailureLog(formData: FormData): Promise<void> {
  * 失敗ログ 1 件の振り返り結果を切り替える。
  *   "prevented"     … 防げた → 推定損失額を 1 回だけ節約に計上。ダッシュボードに残る。
  *   "not_prevented" … 防げなかった → 計上は取り消し。ダッシュボードには出さない。
+ *   "irrelevant"    … 今回は関係ない → 計上は取り消し。振り返り済み扱いにして一覧から下げる。
  *   "unset"         … 未選択に戻す → 計上取り消し。失敗ログ一覧で選び直す。
  * 同じボタンをもう一度押したら "unset"（トグル）。
  */
@@ -1085,7 +1086,9 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
   const failureLogId = String(formData.get("failureLogId") ?? "");
   const raw = String(formData.get("outcome") ?? "");
   const outcome =
-    raw === "prevented" || raw === "not_prevented" ? raw : "unset";
+    raw === "prevented" || raw === "not_prevented" || raw === "irrelevant"
+      ? raw
+      : "unset";
   if (!failureLogId) return;
 
   // 振り返り時に金額を改めて入力・修正できる（空欄なら既存のまま）。
@@ -1142,7 +1145,7 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
     await prisma.savingsEntry.deleteMany({ where: { userId, failureLogId } });
     await prisma.failureLog.update({
       where: { id: failureLogId },
-      data: { outcome: outcome === "not_prevented" ? "not_prevented" : null },
+      data: { outcome: outcome === "unset" ? null : outcome },
     });
   }
 
@@ -1204,7 +1207,9 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
   const hasOutcome = rawOutcome !== null;
   const outcomeStr = String(rawOutcome ?? "");
   const outcome: string | null =
-    outcomeStr === "prevented" || outcomeStr === "not_prevented"
+    outcomeStr === "prevented" ||
+    outcomeStr === "not_prevented" ||
+    outcomeStr === "irrelevant"
       ? outcomeStr
       : null;
 

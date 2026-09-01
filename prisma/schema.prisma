@@ -122,6 +122,8 @@ model Event {
   // null = 送らない。既定は 1 日前(1440)。
   listReminderLeadMinutes Int? @default(1440)
   listReminderNotifiedAt  DateTime?
+  // ユーザーが明示的にリマインドを変えた日時。null = まだ既定のまま（学習で上書きしてよい）。
+  listReminderTouchedAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

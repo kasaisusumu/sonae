@@ -302,7 +302,12 @@ export async function setListReminder(
   const lead = cleanLead(leadMinutes);
   const res = await prisma.event.updateMany({
     where: { id: eventId, userId },
-    data: { listReminderLeadMinutes: lead, listReminderNotifiedAt: null },
+    data: {
+      listReminderLeadMinutes: lead,
+      listReminderNotifiedAt: null,
+      // ユーザーが決めたので、以後この予定は学習で上書きしない。次の似た予定はこの値を初期値にする。
+      listReminderTouchedAt: new Date(),
+    },
   });
   if (res.count === 0) return;
   revalidateAppViews(eventId);

@@ -81,7 +81,9 @@ function composeKind(
   // notify_override / timing_override の上書きも仮提案もしない。編集されて初めて枝分かれ。
   const notifyLearned = new Set<string>();
   if (!opts.verbatim) {
-    for (const r of byType(forced, "notify_override")) {
+    // 通知は「一度でも設定して学習されたら、その値をそのまま初期値にする」（ユーザー指示）。
+    // なので forced/tentative を問わず notify_override が有れば適用する。
+    for (const r of byType(rules, "notify_override")) {
       const hit = items.find((it) => norm(it.title) === norm(r.target));
       if (hit) {
         hit.notifyLeadMinutes = parseNotifyValue(r.value);

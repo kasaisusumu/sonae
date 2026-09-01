@@ -60,6 +60,8 @@ export async function generateAndSaveChecklist(
   eventId: string,
   opts: { force?: boolean } = {},
 ): Promise<void> {
+  await applyLearnedListReminder(eventId);
+
   if (!opts.force) {
     const twinId = await findNameGroupTwinWithList(eventId);
     if (twinId) {
@@ -95,6 +97,42 @@ export async function generateAndSaveChecklist(
 export async function ensureChecklistForEvent(eventId: string): Promise<void> {
   const count = await prisma.checklistItem.count({ where: { eventId } });
   if (count === 0) await generateAndSaveChecklist(eventId);
+  else await applyLearnedListReminder(eventId);
+}
+
+/**
+ * この予定の「準備リストのリマインド」がまだ既定のまま（ユーザー未設定）なら、
+ * 同カテゴリで直近にユーザーが設定した値を初期値として採用する。
+ * 「一度学習したら学習どおり」（ユーザー指示）を通知にも適用するための処理。
+ */
+export async function applyLearnedListReminder(eventId: string): Promise<void> {
+  const ev = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: {
+      id: true,
+      userId: true,
+      categoryId: true,
+      listReminderTouchedAt: true,
+    },
+  });
+  if (!ev || !ev.categoryId || ev.listReminderTouchedAt) return;
+
+  const learned = await prisma.event.findFirst({
+    where: {
+      userId: ev.userId,
+      categoryId: ev.categoryId,
+      id: { not: eventId },
+      listReminderTouchedAt: { not: null },
+    },
+    orderBy: { listReminderTouchedAt: "desc" },
+    select: { listReminderLeadMinutes: true },
+  });
+  if (!learned) return;
+
+  await prisma.event.update({
+    where: { id: eventId },
+    data: { listReminderLeadMinutes: learned.listReminderLeadMinutes },
+  });
 }
 
 export const normTitle = (s: string) =>

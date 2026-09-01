@@ -123,6 +123,7 @@ export async function ChecklistSection({
       select: {
         listReviewedAt: true,
         listCustomized: true,
+        listReminderLeadMinutes: true,
         _count: { select: { editRecords: true } },
       },
     }),
@@ -164,7 +165,10 @@ export async function ChecklistSection({
 
         <ListReminderControl
           eventId={event.id}
-          current={event.listReminderLeadMinutes}
+          current={
+            reviewState?.listReminderLeadMinutes ??
+            event.listReminderLeadMinutes
+          }
         />
 
         {unreviewed && (

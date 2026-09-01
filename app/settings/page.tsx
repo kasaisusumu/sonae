@@ -14,6 +14,7 @@ import { getUserTemplates } from "@/lib/templates";
 import { formatDateOnly, formatDateTime, formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { PushControls } from "@/app/components/push-controls";
+import { ReplayTutorialButton } from "@/app/components/tutorial";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -47,6 +48,8 @@ export default async function SettingsPage() {
           {user.name ? `${user.name}（${user.email}）` : user.email}
         </p>
       </section>
+
+      <ReplayTutorialButton />
 
       <Link
         href="/savings"

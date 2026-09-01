@@ -91,6 +91,10 @@ export async function generateAndSaveChecklist(
     prisma.checklistItem.deleteMany({
       where: { eventId, kind: { in: ["task", "belonging"] } },
     }),
+    // 作り直す枠の項目メモ画像も後始末（作り直しは内容の上書き）。
+    prisma.checklistItemImage.deleteMany({
+      where: { eventId, kind: { in: ["task", "belonging"] } },
+    }),
     prisma.checklistItem.createMany({
       data: persistData(eventId, items, comments),
     }),

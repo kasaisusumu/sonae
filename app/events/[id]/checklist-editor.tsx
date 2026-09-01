@@ -11,6 +11,7 @@ import {
   toggleChecklistItemDone,
 } from "@/app/actions";
 import { LEAD_PRESETS, formatLead, isLeadPreset } from "@/lib/lead-time";
+import { ItemImages, Linkify, type ItemImage } from "./item-media";
 
 interface Item {
   key: string;
@@ -21,6 +22,7 @@ interface Item {
   isUserAdded: boolean;
   notifyLeadMinutes: number | null; // 予定開始の何分前に通知するか。null = 通知なし
   notifyCustom: boolean; // カスタム入力（日・時・分）を出しているか（UIのみ）
+  images: ItemImage[];
 }
 
 interface InitialItem {
@@ -30,6 +32,7 @@ interface InitialItem {
   isDone: boolean;
   isUserAdded: boolean;
   notifyLeadMinutes: number | null;
+  images?: ItemImage[];
 }
 
 const DEFAULT_LEAD = 180; // 3時間前
@@ -81,6 +84,7 @@ export function ChecklistEditor({
   initialItems,
   templates = [],
   pastEvents = [],
+  allowImages = true,
 }: {
   eventId: string;
   kind?: string;
@@ -89,6 +93,8 @@ export function ChecklistEditor({
   initialItems: InitialItem[];
   templates?: { id: string; name: string }[];
   pastEvents?: { id: string; label: string; count: number }[];
+  /** 項目メモへの写真添付を出すか（予定ページでは true、学習ページでは false）。 */
+  allowImages?: boolean;
 }) {
   const isBelonging = kind === "belonging";
   const kindLabel = label ?? (isBelonging ? "持ち物" : "準備すること");
@@ -105,6 +111,7 @@ export function ChecklistEditor({
         notifyLeadMinutes: it.notifyLeadMinutes ?? null,
         notifyCustom:
           it.notifyLeadMinutes != null && !isLeadPreset(it.notifyLeadMinutes),
+        images: it.images ?? [],
       })),
     [initialItems],
   );
@@ -164,7 +171,20 @@ export function ChecklistEditor({
         JSON.stringify(syncedRef.current.map(strip)) ||
       removedTitles.length > 0;
     syncedRef.current = initial;
-    if (userEdited) return;
+    if (userEdited) {
+      // 本文編集中でも、写真の増減（別経路で保存＋router.refresh）は反映する。
+      setItems((cur) =>
+        cur.map((it) => {
+          const fresh = it.id
+            ? initial.find((x) => x.id === it.id)
+            : undefined;
+          return fresh && fresh.images !== it.images
+            ? { ...it, images: fresh.images }
+            : it;
+        }),
+      );
+      return;
+    }
     setItems(initial);
     setRemovedTitles([]);
     setSaved(false);
@@ -273,6 +293,7 @@ export function ChecklistEditor({
         isUserAdded: true,
         notifyLeadMinutes: null,
         notifyCustom: false,
+        images: [],
       },
     ]);
     setSaved(false);
@@ -302,6 +323,7 @@ export function ChecklistEditor({
         isUserAdded: true,
         notifyLeadMinutes: null,
         notifyCustom: false,
+        images: [],
       })),
     ];
     setItems(merged);
@@ -432,6 +454,11 @@ export function ChecklistEditor({
                     🔔{formatLead(it.notifyLeadMinutes)}
                   </span>
                 )}
+                {it.images.length > 0 && (
+                  <span className="shrink-0 text-[11px] tabular-nums text-muted">
+                    🖼️{it.images.length}
+                  </span>
+                )}
                 <button
                   type="button"
                   data-coach="item-expand"
@@ -516,16 +543,32 @@ export function ChecklistEditor({
                   <input
                     value={it.comment}
                     onChange={(e) => update(it.key, { comment: e.target.value })}
-                    placeholder="メモ（任意・学習しません）"
+                    placeholder="メモ・リンク（任意・学習しません）"
                     className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-muted"
                   />
+                  {it.comment.trim() && (
+                    <p className="whitespace-pre-wrap break-words text-[11px] text-muted">
+                      <Linkify text={it.comment} />
+                    </p>
+                  )}
+
+                  {/* 写真（項目ごとのメモに添付。Google カレンダーには出ない） */}
+                  {allowImages && (
+                    <ItemImages
+                      eventId={eventId}
+                      kind={kind}
+                      title={it.title}
+                      canAttach={!!it.id && it.title.trim().length > 0}
+                      images={it.images}
+                    />
+                  )}
                 </div>
               )}
 
               {/* 閉じているときはメモを 1 行プレビュー */}
               {!open && it.comment.trim() && (
                 <p className="ml-6 truncate text-[11px] text-muted">
-                  {it.comment}
+                  <Linkify text={it.comment} />
                 </p>
               )}
             </li>
@@ -638,7 +681,7 @@ export function ChecklistEditor({
       {bulkNote && <p className="mt-2 text-xs text-teal-dark">{bulkNote}</p>}
 
       <p className="mt-1.5 text-[11px] text-muted">
-        すべて自動保存（入力を止めると保存）。∨で通知・メモ、✕で削除。
+        すべて自動保存（入力を止めると保存）。∨で通知・メモ・リンク・写真、✕で削除。
       </p>
 
       {modal && (

@@ -136,25 +136,30 @@ model Event {
   feature        EventFeature?
   editRecords    EditRecord[]
   failureDismissals FailureDismissal[]
-  images         EventImage[]
+  checklistItemImages ChecklistItemImage[]
 
   @@index([userId, recurringEventId])
 }
 
-// メモ欄に貼り付けた画像。クライアントで長辺 1280px・品質 70% ほどに圧縮してから
-// データ URL（WebP/JPEG）で保存する。Google カレンダーには同期しない（アプリ内のみ）。
-// ストレージを圧迫しないよう 1 予定あたりの枚数と 1 枚のサイズに上限を設ける。
-model EventImage {
+// 準備リストの「各項目のメモ」に貼り付けた画像。
+// クライアントで長辺 1280px・品質 70% ほどに圧縮してからデータ URL（WebP/JPEG）で保存。
+// Google カレンダーには同期しない（アプリ内のみ。リンクは comment 経由で説明欄にも出る）。
+// saveChecklist は項目行を毎回作り直すため、画像は項目 id ではなく
+// (eventId, kind, slot=正規化タイトル) で紐づけ、タイトルが残る限り画像も追従する。
+// ストレージを圧迫しないよう 1 項目あたりの枚数と 1 枚のサイズに上限を設ける。
+model ChecklistItemImage {
   id        String   @id @default(cuid())
   eventId   String
   event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  kind      String   // "task" | "belonging" | ユーザー枠名
+  slot      String   // 正規化した項目タイトル（小文字・空白除去）
   data      String   // data:image/webp;base64,... （圧縮済み）
   width     Int
   height    Int
   bytes     Int      // デコード後のおおよそのバイト数（目安表示・集計用）
   createdAt DateTime @default(now())
 
-  @@index([eventId])
+  @@index([eventId, kind, slot])
 }
 
 model ChecklistItem {

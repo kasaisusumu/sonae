@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { ensureChecklistForEvent } from "@/lib/checklist";
+import { ensureChecklistForEvent, normTitle } from "@/lib/checklist";
 import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
@@ -24,6 +24,7 @@ import { SubmitButton } from "@/app/components/submit-button";
 
 type TplOpt = { id: string; name: string };
 type PastOpt = { id: string; label: string; count: number };
+type ItemImg = { id: string; data: string; width: number; height: number };
 
 type Row = {
   id: string;
@@ -45,6 +46,7 @@ function KindBlock({
   rows,
   templates,
   pastEvents,
+  imagesBySlot,
 }: {
   eventId: string;
   kind: string;
@@ -52,6 +54,7 @@ function KindBlock({
   rows: Row[];
   templates: TplOpt[];
   pastEvents: PastOpt[];
+  imagesBySlot: Map<string, ItemImg[]>;
 }) {
   const mine = rows.filter((r) => r.kind === kind);
   const suggestions = mine.filter((r) => r.isSuggested);
@@ -86,6 +89,7 @@ function KindBlock({
           isDone: c.isDone,
           isUserAdded: c.isUserAdded,
           notifyLeadMinutes: c.notifyLeadMinutes,
+          images: imagesBySlot.get(normTitle(c.title)) ?? [],
         }))}
       />
     </div>
@@ -139,6 +143,7 @@ export async function ChecklistSection({
     reviewState,
     allTemplates,
     pastEventsRaw,
+    itemImages,
   ] = await Promise.all([
     getWarningForEvent(event),
     getApplicableRules(event.categoryId, feature, "task"),
@@ -155,9 +160,33 @@ export async function ChecklistSection({
     }),
     getUserTemplates(event.userId),
     getEventsWithLists(event.userId, event.id),
+    prisma.checklistItemImage.findMany({
+      where: { eventId: event.id },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, kind: true, slot: true, data: true, width: true, height: true },
+    }),
   ]);
   const forced = [...taskRules, ...belongingRules].filter((r) => r.forced);
   const rows = items as unknown as Row[];
+
+  // kind ごとに slot(正規化タイトル) → 画像配列
+  const imagesByKind = new Map<string, Map<string, ItemImg[]>>();
+  for (const img of itemImages) {
+    let m = imagesByKind.get(img.kind);
+    if (!m) {
+      m = new Map();
+      imagesByKind.set(img.kind, m);
+    }
+    const arr = m.get(img.slot) ?? [];
+    arr.push({
+      id: img.id,
+      data: img.data,
+      width: img.width,
+      height: img.height,
+    });
+    m.set(img.slot, arr);
+  }
+  const EMPTY_IMG_MAP: Map<string, ItemImg[]> = new Map();
   const sections = resolveSections(
     reviewState?.sectionOrder ?? null,
     items.map((i) => i.kind),
@@ -248,6 +277,7 @@ export async function ChecklistSection({
                 pastEvents={
                   builtin ? pastByKind(key as "task" | "belonging") : []
                 }
+                imagesBySlot={imagesByKind.get(key) ?? EMPTY_IMG_MAP}
               />
             </div>
           );

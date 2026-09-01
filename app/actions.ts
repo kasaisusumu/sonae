@@ -229,37 +229,20 @@ export async function updateEventCategory(formData: FormData): Promise<void> {
   revalidateAppViews(eventId);
 }
 
-// ── メモ欄（本文＋画像）─────────────────────────────────────
-//   本文は Google カレンダーの説明欄にも同期（従来どおり）。
-//   画像はアプリ内のみ。圧縮済みデータ URL を EventImage に保存し、
-//   ストレージを圧迫しないよう枚数・サイズに上限を設ける。
+// ── 準備リスト各項目のメモに貼る画像 ───────────────────────
+//   メモ本文（リンクを含む）は comment としてこれまで通り説明欄にも出る。
+//   画像はアプリ内のみ。圧縮済みデータ URL を、項目 id ではなく
+//   (eventId, kind, slot=正規化タイトル) で保存する（saveChecklist が
+//   項目行を毎回作り直すため）。ストレージを圧迫しないよう上限を設ける。
 
-const MAX_MEMO_LEN = 4000;
-const MAX_EVENT_IMAGE_BYTES = 500 * 1024; // 圧縮後 1 枚あたり
-const MAX_EVENT_IMAGES = 6; // 1 予定あたり
+const MAX_ITEM_IMAGE_BYTES = 500 * 1024; // 圧縮後 1 枚あたり
+const MAX_IMAGES_PER_ITEM = 4; // 1 項目あたり
 
-/** メモ本文を保存する。変更があれば説明欄にも書き戻す。 */
-export async function setEventMemo(formData: FormData): Promise<void> {
-  const userId = await requireUserId();
-  const eventId = String(formData.get("eventId") ?? "");
-  const raw = String(formData.get("memo") ?? "").replace(/\r\n/g, "\n");
-  const memo = raw.trim().slice(0, MAX_MEMO_LEN) || null;
-
-  const event = await prisma.event.findFirst({
-    where: { id: eventId, userId },
-    select: { id: true, memo: true },
-  });
-  if (!event || event.memo === memo) return;
-
-  await prisma.event.update({ where: { id: eventId }, data: { memo } });
-  await markAutoManaged(eventId);
-  after(() => void syncEventDescription(eventId));
-  revalidateAppViews(eventId);
-}
-
-/** メモ欄に圧縮済み画像を 1 枚追加する（クライアントで縮小・再エンコード済み）。 */
-export async function addEventImage(input: {
+/** 準備リスト項目のメモに圧縮済み画像を 1 枚追加する。 */
+export async function addChecklistItemImage(input: {
   eventId: string;
+  kind: string;
+  title: string;
   data: string;
   width: number;
   height: number;
@@ -271,28 +254,38 @@ export async function addEventImage(input: {
   }
   const b64 = data.slice(data.indexOf(",") + 1);
   const bytes = Math.floor((b64.length * 3) / 4);
-  if (bytes > MAX_EVENT_IMAGE_BYTES) {
+  if (bytes > MAX_ITEM_IMAGE_BYTES) {
     return {
       ok: false,
       error: "画像が大きすぎます。もう少し小さいものを選んでください。",
     };
   }
 
+  const kind = (input.kind || "task").trim() || "task";
+  const slot = normTitle(input.title || "");
+  if (!slot) return { ok: false, error: "先に項目名を入力してください。" };
+
   const event = await prisma.event.findFirst({
     where: { id: input.eventId, userId },
-    select: { id: true, _count: { select: { images: true } } },
+    select: { id: true },
   });
   if (!event) return { ok: false, error: "予定が見つかりません。" };
-  if (event._count.images >= MAX_EVENT_IMAGES) {
+
+  const count = await prisma.checklistItemImage.count({
+    where: { eventId: input.eventId, kind, slot },
+  });
+  if (count >= MAX_IMAGES_PER_ITEM) {
     return {
       ok: false,
-      error: `画像は 1 つの予定につき ${MAX_EVENT_IMAGES} 枚までです。`,
+      error: `画像は 1 項目につき ${MAX_IMAGES_PER_ITEM} 枚までです。`,
     };
   }
 
-  await prisma.eventImage.create({
+  await prisma.checklistItemImage.create({
     data: {
       eventId: input.eventId,
+      kind,
+      slot,
       data,
       width: Math.max(1, Math.round(input.width) || 1),
       height: Math.max(1, Math.round(input.height) || 1),
@@ -303,16 +296,18 @@ export async function addEventImage(input: {
   return { ok: true };
 }
 
-/** メモ欄の画像を 1 枚削除する。 */
-export async function deleteEventImage(formData: FormData): Promise<void> {
+/** 準備リスト項目のメモ画像を 1 枚削除する。 */
+export async function deleteChecklistItemImage(
+  formData: FormData,
+): Promise<void> {
   const userId = await requireUserId();
   const id = String(formData.get("id") ?? "");
-  const img = await prisma.eventImage.findFirst({
+  const img = await prisma.checklistItemImage.findFirst({
     where: { id, event: { userId } },
     select: { id: true, eventId: true },
   });
   if (!img) return;
-  await prisma.eventImage.delete({ where: { id } });
+  await prisma.checklistItemImage.delete({ where: { id } });
   revalidateAppViews(img.eventId);
 }
 
@@ -569,6 +564,19 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
             data: { sectionOrder: stringifySectionOrder(nextOrder) },
           }),
         ]),
+    // 消えた項目（削除・改名）のメモ画像を後始末する。残った項目のスロットは追従。
+    prisma.checklistItemImage.deleteMany({
+      where: {
+        eventId: input.eventId,
+        kind,
+        slot: {
+          notIn:
+            cleanItems.length > 0
+              ? cleanItems.map((it) => normTitle(it.title))
+              : [" "],
+        },
+      },
+    }),
   ]);
 
   if (
@@ -683,6 +691,10 @@ export async function renameChecklistSection(
       where: { eventId, kind: from },
       data: { kind: to },
     }),
+    prisma.checklistItemImage.updateMany({
+      where: { eventId, kind: from },
+      data: { kind: to },
+    }),
     prisma.event.update({
       where: { id: eventId },
       data: {
@@ -711,6 +723,7 @@ export async function removeChecklistSection(
 
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({ where: { eventId, kind: key } }),
+    prisma.checklistItemImage.deleteMany({ where: { eventId, kind: key } }),
     prisma.event.update({
       where: { id: eventId },
       data: {

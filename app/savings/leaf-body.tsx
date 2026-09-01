@@ -75,6 +75,7 @@ export function LeafBody({
             kind={s.key}
             label={s.label}
             initialItems={s.items}
+            allowImages={false}
           />
         </Fragment>
       ))}

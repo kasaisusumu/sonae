@@ -12,7 +12,6 @@ import {
 } from "./checklist-section";
 import { EventFailureLog } from "./event-failure-log";
 import { FailureSuggestions } from "./failure-suggestions";
-import { MemoPanel } from "./memo-panel";
 import { ScrollToHash } from "./scroll-to-hash";
 
 // 初回表示時に準備リストを OpenAI で生成することがあるため長めに
@@ -27,7 +26,7 @@ export default async function EventDetailPage({
   const user = await getCurrentUser();
   if (!user) redirect("/");
 
-  const [event, categories, images] = await Promise.all([
+  const [event, categories] = await Promise.all([
     prisma.event.findFirst({
       where: { id, userId: user.id },
       include: { category: true },
@@ -35,11 +34,6 @@ export default async function EventDetailPage({
     prisma.category.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "asc" },
-    }),
-    prisma.eventImage.findMany({
-      where: { eventId: id, event: { userId: user.id } },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, data: true, width: true, height: true },
     }),
   ]);
   if (!event) notFound();
@@ -73,13 +67,12 @@ export default async function EventDetailPage({
             options={categoryNames}
           />
         </div>
+        {event.memo && (
+          <p className="mt-3 whitespace-pre-wrap rounded-lg bg-surface-muted p-3 text-sm text-muted">
+            {event.memo}
+          </p>
+        )}
       </header>
-
-      <MemoPanel
-        eventId={event.id}
-        initialMemo={event.memo}
-        images={images}
-      />
 
       <Suspense fallback={null}>
         <FailureSuggestions eventId={event.id} />

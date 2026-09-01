@@ -84,10 +84,15 @@ export function LearningExplorer({
 
   return (
     <div className="space-y-3">
-      <LearningSearch entries={entries} onPick={handlePick} />
+      <div data-coach="learning-search">
+        <LearningSearch entries={entries} onPick={handlePick} />
+      </div>
 
       {/* 学習内容 / 名前付きテンプレート */}
-      <div className="inline-flex rounded-xl bg-surface p-1">
+      <div
+        data-coach="learning-tabs"
+        className="inline-flex rounded-xl bg-surface p-1"
+      >
         <Seg active={view === "tree"} onClick={() => setView("tree")}>
           学習内容
         </Seg>

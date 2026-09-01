@@ -21,6 +21,7 @@ function HowTo({ open = false }: { open?: boolean }) {
   return (
     <details
       open={open}
+      data-coach="how-to"
       className="rounded-2xl bg-surface p-5 [&_summary::-webkit-details-marker]:hidden"
     >
       <summary className="cursor-pointer list-none text-sm font-semibold text-teal-dark">
@@ -148,7 +149,9 @@ export default async function HomePage({
 
       <HowTo open={upcoming.length === 0} />
 
-      <SavingsDashboard userId={user.id} />
+      <div data-coach="savings">
+        <SavingsDashboard userId={user.id} />
+      </div>
 
       {warnings.length > 0 && (
         <section className="rounded-2xl border border-warn/30 bg-warn-soft p-5">

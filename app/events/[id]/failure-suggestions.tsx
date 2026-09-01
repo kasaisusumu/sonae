@@ -12,7 +12,10 @@ export async function FailureSuggestions({ eventId }: { eventId: string }) {
   if (suggestions.length === 0) return null;
 
   return (
-    <section className="rounded-2xl border border-warn/30 bg-warn-soft p-4">
+    <section
+      data-coach="failure-suggest"
+      className="rounded-2xl border border-warn/30 bg-warn-soft p-4"
+    >
       <h2 className="text-sm font-semibold text-warn">
         こんな失敗もあり得ます（似た予定から）
       </h2>

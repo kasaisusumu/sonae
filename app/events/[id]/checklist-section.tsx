@@ -192,12 +192,12 @@ export async function ChecklistSection({
         </div>
       )}
 
-      <section className="space-y-4">
+      <section className="space-y-4" data-coach="checklist">
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-muted">
             追加・削除・タイミング変更は、この種類の予定の学習に使われます。
           </p>
-          <form action={regenerateChecklist}>
+          <form action={regenerateChecklist} data-coach="regen">
             <input type="hidden" name="eventId" value={event.id} />
             <SubmitButton
               variant="ghost"
@@ -253,7 +253,7 @@ export async function ChecklistSection({
           );
         })}
 
-        <div className="pt-0.5">
+        <div className="pt-0.5" data-coach="add-section">
           <AddSectionButton eventId={event.id} />
         </div>
       </section>

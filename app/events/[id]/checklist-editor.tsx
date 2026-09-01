@@ -434,6 +434,7 @@ export function ChecklistEditor({
                 )}
                 <button
                   type="button"
+                  data-coach="item-expand"
                   onClick={() => toggleOpen(it.key)}
                   aria-expanded={open}
                   aria-label={open ? "詳細を閉じる" : "詳細を開く"}

@@ -143,10 +143,23 @@ function Visual({ id }: { id: string }): ReactNode {
 
 /** 設定ページの「チュートリアルをもう一度見る」ボタン。 */
 export function ReplayTutorialButton() {
+  const replay = () => {
+    // ページ内コーチマークも「初回」に戻して、各ページで出直すようにする
+    try {
+      for (let n = localStorage.length - 1; n >= 0; n--) {
+        const k = localStorage.key(n);
+        if (k && k.startsWith("mm_coach_")) localStorage.removeItem(k);
+      }
+    } catch {
+      /* ignore */
+    }
+    window.dispatchEvent(new Event(EVENT));
+  };
   return (
     <button
       type="button"
-      onClick={() => window.dispatchEvent(new Event(EVENT))}
+      data-coach="replay-tutorial"
+      onClick={replay}
       className="block w-full rounded-2xl bg-surface p-5 text-left transition-colors hover:bg-surface-muted"
     >
       <span className="text-sm font-semibold text-muted">使い方</span>
@@ -187,7 +200,10 @@ export function Tutorial() {
   const last = i === SLIDES.length - 1;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+    <div
+      data-mm-tutorial
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
+    >
       <div className="flex max-h-[85vh] w-full max-w-sm flex-col overflow-y-auto rounded-2xl bg-surface p-6 shadow-2xl">
         <h2 className="text-lg font-semibold text-foreground">{s.title}</h2>
 

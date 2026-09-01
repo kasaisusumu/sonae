@@ -11,6 +11,7 @@ import {
 import { listCalendars, type CalendarChoice } from "@/lib/google";
 import { formatDateOnly, formatDateTime, formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
+import { ConfirmLink } from "@/app/components/confirm-link";
 import { PushControls } from "@/app/components/push-controls";
 
 export default async function SettingsPage() {
@@ -80,18 +81,24 @@ export default async function SettingsPage() {
                         </option>
                       ))}
                     </select>
-                    <SubmitButton variant="ghost">変更</SubmitButton>
+                    <SubmitButton
+                      variant="ghost"
+                      confirm="同期するカレンダーを変更します。よろしいですか？"
+                    >
+                      変更
+                    </SubmitButton>
                   </div>
                 </label>
               </form>
             )}
             <div className="flex flex-wrap gap-3 pt-1">
-              <a
+              <ConfirmLink
                 href="/api/auth/google"
+                message="Google カレンダーに接続し直します（別の Google アカウントにも切り替えられます）。よろしいですか？"
                 className="rounded-lg bg-surface-muted px-4 py-2 text-sm font-medium no-underline hover:bg-border"
               >
                 再接続する
-              </a>
+              </ConfirmLink>
               <form action={disconnectGoogle}>
                 <SubmitButton
                   variant="ghost"
@@ -117,7 +124,12 @@ export default async function SettingsPage() {
                     元の説明文は残し、「--- 私のマネージャー ---」ブロックだけ差し替えます。
                   </p>
                   <form action={disableDescriptionWrite}>
-                    <SubmitButton variant="ghost">無効にする</SubmitButton>
+                    <SubmitButton
+                      variant="ghost"
+                      confirm="説明欄への書き込みを無効にします。すでに書き込んだ予定の説明欄はそのまま残ります。よろしいですか？"
+                    >
+                      無効にする
+                    </SubmitButton>
                   </form>
                 </div>
               ) : (
@@ -126,12 +138,13 @@ export default async function SettingsPage() {
                     デフォルトは OFF（読み取りのみ）。オンにすると予定の説明欄に準備リストを追記します。
                     有効化には Google で「予定の編集」権限の追加許可（再認証1回）が必要です。
                   </p>
-                  <a
+                  <ConfirmLink
                     href="/api/auth/google?write=1"
+                    message="予定の説明欄への書き込みを有効にします。Google で「予定の編集」権限の追加許可（再認証1回）が必要です。進めますか？"
                     className="inline-block rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white no-underline hover:bg-teal-dark"
                   >
                     有効にする
-                  </a>
+                  </ConfirmLink>
                 </div>
               )}
             </div>
@@ -139,12 +152,13 @@ export default async function SettingsPage() {
         ) : (
           <div className="mt-3">
             <p className="text-sm text-muted">未接続です。</p>
-            <a
+            <ConfirmLink
               href="/api/auth/google"
+              message="Google カレンダーと接続します。よろしいですか？"
               className="mt-3 inline-block rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white no-underline hover:bg-teal-dark"
             >
               Google カレンダーと接続
-            </a>
+            </ConfirmLink>
           </div>
         )}
       </section>

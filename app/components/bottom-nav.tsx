@@ -17,11 +17,11 @@ export function BottomNav() {
   return (
     <nav
       data-coach="bottom-nav"
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-border-subtle bg-surface-translucent backdrop-blur-md sm:hidden"
     >
       <ul
-        className="mx-auto flex max-w-3xl"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="mx-auto flex max-w-3xl px-2 pt-1.5"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.375rem)" }}
       >
         {TABS.map((tab) => {
           const active =
@@ -32,15 +32,13 @@ export function BottomNav() {
             <li key={tab.href} className="flex-1">
               <Link
                 href={tab.href}
-                className={`flex flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] no-underline ${
-                  active ? "font-semibold text-teal-dark" : "text-muted"
+                aria-current={active ? "page" : undefined}
+                className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[11px] no-underline transition-colors ${
+                  active
+                    ? "bg-accent-soft font-semibold text-teal-dark"
+                    : "text-muted hover:text-foreground"
                 }`}
               >
-                <span
-                  className={`h-1 w-1 rounded-full ${
-                    active ? "bg-teal" : "bg-transparent"
-                  }`}
-                />
                 {tab.label}
               </Link>
             </li>

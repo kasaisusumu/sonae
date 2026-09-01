@@ -55,30 +55,37 @@ export default async function RootLayout({
         {isLoggedIn ? <Tutorial /> : null}
         {isLoggedIn ? <PageCoach /> : null}
 
-        <header className="border-b bg-surface">
+        <header className="sticky top-0 z-30 border-b border-border-subtle bg-surface-translucent backdrop-blur-md">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-3">
             <Link href="/" className="flex items-baseline gap-2 no-underline">
-              <span className="text-lg font-semibold text-teal-dark">私のマネージャー</span>
+              <span className="text-[15px] font-semibold tracking-tight text-foreground">
+                私のマネージャー
+              </span>
               <span className="hidden text-xs text-muted sm:inline">
                 予定の準備、わすれない
               </span>
             </Link>
             {isLoggedIn ? (
-              <nav className="hidden items-center gap-4 text-sm sm:flex">
-                <Link href="/events" className="text-foreground no-underline hover:text-teal-dark">
-                  予定
-                </Link>
-                <Link href="/failures" className="text-foreground no-underline hover:text-teal-dark">
-                  失敗ログ
-                </Link>
-                <Link href="/savings" className="text-foreground no-underline hover:text-teal-dark">
-                  学習
-                </Link>
-                <Link href="/settings" className="text-foreground no-underline hover:text-teal-dark">
-                  設定
-                </Link>
-                <form action={logout}>
-                  <button className="text-muted hover:text-foreground" type="submit">
+              <nav className="hidden items-center gap-1 text-sm sm:flex">
+                {[
+                  ["/events", "予定"],
+                  ["/failures", "失敗ログ"],
+                  ["/savings", "学習"],
+                  ["/settings", "設定"],
+                ].map(([href, label]) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="rounded-lg px-2.5 py-1.5 text-muted no-underline transition-colors hover:bg-surface-muted hover:text-foreground"
+                  >
+                    {label}
+                  </Link>
+                ))}
+                <form action={logout} className="ml-1">
+                  <button
+                    className="rounded-lg px-2.5 py-1.5 text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+                    type="submit"
+                  >
                     ログアウト
                   </button>
                 </form>
@@ -87,7 +94,7 @@ export default async function RootLayout({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-8 pb-28 sm:pb-8">
+        <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-8 pb-28 sm:pb-10">
           {children}
         </main>
 

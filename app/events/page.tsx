@@ -168,12 +168,13 @@ function EventRow({
         past ? "opacity-80" : ""
       }`}
     >
-      {/* カード全体を準備詳細へのタップ領域にする（カテゴリ選択より下のレイヤー） */}
+      {/* カード全体を準備詳細へのタップ領域にする（ストレッチリンク）。
+          カテゴリ選択だけはこのリンクより手前（z-20）に置いて操作可能にする。 */}
       <CardLink
         href={`/events/${ev.id}`}
         ariaLabel={`${ev.title} の準備を開く`}
       />
-      <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="font-medium text-foreground">
             {ev.title}

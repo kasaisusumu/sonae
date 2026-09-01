@@ -55,7 +55,7 @@ export default async function RootLayout({
         {isLoggedIn ? <Tutorial /> : null}
         {isLoggedIn ? <PageCoach /> : null}
 
-        <header className="sticky top-0 z-30 border-b border-border-subtle bg-surface-translucent backdrop-blur-md">
+        <header className="sticky top-0 z-30 border-b border-border bg-surface">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-5 py-3">
             <Link href="/" className="flex items-baseline gap-2 no-underline">
               <span className="text-[15px] font-semibold tracking-tight text-foreground">

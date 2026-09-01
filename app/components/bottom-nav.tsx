@@ -17,7 +17,7 @@ export function BottomNav() {
   return (
     <nav
       data-coach="bottom-nav"
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-border-subtle bg-surface-translucent backdrop-blur-md sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface sm:hidden"
     >
       <ul
         className="mx-auto flex max-w-3xl px-2 pt-1.5"

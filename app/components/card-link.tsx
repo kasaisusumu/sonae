@@ -32,14 +32,12 @@ export function CardLink({
   className?: string;
 }) {
   return (
-    <>
-      <Link
-        href={href}
-        aria-label={ariaLabel}
-        className={`absolute inset-0 z-0 rounded-xl ${className}`}
-      >
-        <Pending label={pendingLabel} />
-      </Link>
-    </>
+    <Link
+      href={href}
+      aria-label={ariaLabel}
+      className={`absolute inset-0 z-10 rounded-xl ${className}`}
+    >
+      <Pending label={pendingLabel} />
+    </Link>
   );
 }

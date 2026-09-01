@@ -28,14 +28,21 @@ export async function ListToolbox({
   ]);
 
   return (
-    <details className="rounded-2xl bg-surface p-4 [&_summary::-webkit-details-marker]:hidden">
+    <details
+      id="list-toolbox"
+      className="scroll-mt-24 rounded-2xl bg-surface p-4 [&_summary::-webkit-details-marker]:hidden"
+    >
       <summary className="cursor-pointer list-none text-sm font-medium text-teal-dark">
         📋 テンプレート・他の予定から
       </summary>
 
       <div className="mt-4 space-y-5">
         {/* いまのリストを種類ごとに保存 */}
-        <form action={saveListAsTemplate} className="space-y-1.5">
+        <form
+          id="tpl-save"
+          action={saveListAsTemplate}
+          className="scroll-mt-24 space-y-1.5 rounded-lg"
+        >
           <input type="hidden" name="eventId" value={eventId} />
           <p className="text-xs font-semibold text-muted">
             いまのリストに名前を付けて保存
@@ -65,7 +72,11 @@ export async function ListToolbox({
         </form>
 
         {/* テンプレートを使う */}
-        <form action={applyTemplateToEvent} className="space-y-1.5">
+        <form
+          id="tpl-apply"
+          action={applyTemplateToEvent}
+          className="scroll-mt-24 space-y-1.5 rounded-lg"
+        >
           <input type="hidden" name="eventId" value={eventId} />
           <p className="text-xs font-semibold text-muted">
             保存したテンプレートを追加

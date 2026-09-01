@@ -306,6 +306,25 @@ export function ChecklistEditor({
 
   const doneCount = items.filter((it) => it.isDone).length;
 
+  // 別セクションの「📋 テンプレート・他の予定から」を開いて、該当フォームへ誘導する。
+  function jumpToToolbox(which: "save" | "apply") {
+    const box = document.getElementById("list-toolbox");
+    if (box instanceof HTMLDetailsElement) box.open = true;
+    if (which === "save") {
+      const sel = document.querySelector<HTMLSelectElement>(
+        '#tpl-save select[name="kind"]',
+      );
+      if (sel) sel.value = kind;
+    }
+    const el = document.getElementById(
+      which === "save" ? "tpl-save" : "tpl-apply",
+    );
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-teal", "rounded-lg");
+    window.setTimeout(() => el.classList.remove("ring-2", "ring-teal"), 2000);
+  }
+
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="mb-1.5 flex items-baseline gap-2">
@@ -475,6 +494,20 @@ export function ChecklistEditor({
             className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
           >
             メモから一括
+          </button>
+          <button
+            type="button"
+            onClick={() => jumpToToolbox("apply")}
+            className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
+          >
+            📋 テンプレから
+          </button>
+          <button
+            type="button"
+            onClick={() => jumpToToolbox("save")}
+            className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
+          >
+            ⭐ 名前をつけて保存
           </button>
         </div>
 

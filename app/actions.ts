@@ -777,6 +777,33 @@ export async function removeChecklistSection(
   await propagateSectionChange(eventId);
 }
 
+/** 枠（セクション）の並び順を入れ替える（ドラッグ&ドロップ / ▲▼）。 */
+export async function reorderChecklistSections(input: {
+  eventId: string;
+  order: string[];
+}): Promise<void> {
+  const eventId = String(input.eventId ?? "");
+  const event = await loadEventForSection(eventId);
+  if (!event) return;
+
+  const cur = parseSectionOrder(event.sectionOrder);
+  const wanted = input.order
+    .map((k) => String(k))
+    .filter((k, i, a) => a.indexOf(k) === i);
+  // 要求された順に、実在するキーだけを並べる。要求に無い既存キーは末尾へ。
+  const next = [
+    ...wanted.filter((k) => cur.includes(k)),
+    ...cur.filter((k) => !wanted.includes(k)),
+  ];
+  if (stringifySectionOrder(next) === stringifySectionOrder(cur)) return;
+
+  await prisma.event.update({
+    where: { id: eventId },
+    data: { sectionOrder: stringifySectionOrder(next) },
+  });
+  await propagateSectionChange(eventId);
+}
+
 /** 提案項目を「適用」する（1タップ）。ルールの確信度を上げる。 */
 export async function acceptSuggestion(itemId: string): Promise<void> {
   const userId = await requireUserId();

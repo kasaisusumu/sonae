@@ -20,11 +20,18 @@ export interface SavedItem {
 }
 
 /** 防げた失敗の時系列（金額＋件数）。月・週・日で切り替えて見せる用。 */
+export interface SeriesItem {
+  description: string;
+  eventTitle: string | null;
+  amountYen: number;
+  occurredAt: Date;
+}
 export interface SeriesPoint {
   key: string;
   label: string;
   amountYen: number;
   count: number;
+  items: SeriesItem[]; // この区間に「防げた」失敗の具体的な中身
 }
 export interface SavingsSeries {
   month: SeriesPoint[]; // 直近 6 ヶ月
@@ -175,19 +182,27 @@ function mdLabel(dayNum: number): string {
  * 防げた（＝節約に計上された）失敗の、金額と件数の時系列を月/週/日で用意する。
  * createdAt（「防げた」と選んだ日時）でバケットする。
  */
-function buildSeries(
-  rows: { createdAt: Date; amountYen: number }[],
-): SavingsSeries {
+type SeriesRow = SeriesItem & { createdAt: Date };
+
+function buildSeries(rows: SeriesRow[]): SavingsSeries {
   const now = new Date();
   const today = jstDayNum(now);
   const { y: ny, m: nm } = jstYmd(now);
+
+  const blank = (key: string, label: string): SeriesPoint => ({
+    key,
+    label,
+    amountYen: 0,
+    count: 0,
+    items: [],
+  });
 
   // 月: 直近 6 ヶ月
   const month: SeriesPoint[] = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(Date.UTC(ny, nm - 1 - i, 1));
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    month.push({ key, label: `${d.getUTCMonth() + 1}月`, amountYen: 0, count: 0 });
+    month.push(blank(key, `${d.getUTCMonth() + 1}月`));
   }
   const monthIdx = new Map(month.map((p, i) => [p.key, i]));
 
@@ -196,12 +211,7 @@ function buildSeries(
   const week: SeriesPoint[] = [];
   for (let i = 7; i >= 0; i--) {
     const start = thisWeekStart - i * 7;
-    week.push({
-      key: String(start),
-      label: mdLabel(start),
-      amountYen: 0,
-      count: 0,
-    });
+    week.push(blank(String(start), mdLabel(start)));
   }
   const weekIdx = new Map(week.map((p, i) => [p.key, i]));
 
@@ -209,33 +219,28 @@ function buildSeries(
   const day: SeriesPoint[] = [];
   for (let i = 13; i >= 0; i--) {
     const n = today - i;
-    day.push({ key: String(n), label: mdLabel(n), amountYen: 0, count: 0 });
+    day.push(blank(String(n), mdLabel(n)));
   }
   const dayIdx = new Map(day.map((p, i) => [p.key, i]));
+
+  const add = (p: SeriesPoint | undefined, r: SeriesRow) => {
+    if (!p) return;
+    p.amountYen += r.amountYen;
+    p.count += 1;
+    p.items.push({
+      description: r.description,
+      eventTitle: r.eventTitle,
+      amountYen: r.amountYen,
+      occurredAt: r.occurredAt,
+    });
+  };
 
   for (const r of rows) {
     const n = jstDayNum(r.createdAt);
     const { y, m } = jstYmd(r.createdAt);
-
-    const mk = `${y}-${String(m).padStart(2, "0")}`;
-    const mi = monthIdx.get(mk);
-    if (mi !== undefined) {
-      month[mi].amountYen += r.amountYen;
-      month[mi].count += 1;
-    }
-
-    const wk = String(n - weekdayMon0(n));
-    const wi = weekIdx.get(wk);
-    if (wi !== undefined) {
-      week[wi].amountYen += r.amountYen;
-      week[wi].count += 1;
-    }
-
-    const di = dayIdx.get(String(n));
-    if (di !== undefined) {
-      day[di].amountYen += r.amountYen;
-      day[di].count += 1;
-    }
+    add(month[monthIdx.get(`${y}-${String(m).padStart(2, "0")}`) ?? -1], r);
+    add(week[weekIdx.get(String(n - weekdayMon0(n))) ?? -1], r);
+    add(day[dayIdx.get(String(n)) ?? -1], r);
   }
 
   return { month, week, day };
@@ -304,7 +309,13 @@ export async function getSavingsSummary(userId: string): Promise<SavingsSummary>
     entryCount: entries.length,
     monthly,
     series: buildSeries(
-      entries.map((e) => ({ createdAt: e.createdAt, amountYen: e.amountYen })),
+      entries.map((e) => ({
+        createdAt: e.createdAt,
+        amountYen: e.amountYen,
+        description: e.failureLog?.description ?? "（失敗ログ削除済み）",
+        eventTitle: e.event?.title ?? null,
+        occurredAt: e.failureLog?.occurredAt ?? e.createdAt,
+      })),
     ),
     byCategory,
     thisMonthItems,

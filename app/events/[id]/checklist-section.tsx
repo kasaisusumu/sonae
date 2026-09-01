@@ -20,7 +20,8 @@ import { ChecklistEditor } from "./checklist-editor";
 import { SuggestionList } from "./suggestion-list";
 import { WarningPanel } from "./warning-panel";
 import { ListReminderControl } from "./list-reminder-control";
-import { AddSectionButton, SectionControls } from "./section-manager";
+import { AddSectionButton } from "./section-manager";
+import { SectionList, type SectionEntry } from "./section-list";
 import { SubmitButton } from "@/app/components/submit-button";
 
 type TplOpt = { id: string; name: string };
@@ -273,31 +274,32 @@ export async function ChecklistSection({
           </div>
         )}
 
-        {sections.map((key) => {
-          const builtin = isBuiltinSection(key);
-          return (
-            <div key={key} className="space-y-1.5">
-              {!builtin && (
-                <div className="flex items-center justify-end">
-                  <SectionControls eventId={event.id} sectionKey={key} />
-                </div>
-              )}
-              <KindBlock
-                eventId={event.id}
-                kind={key}
-                label={sectionLabel(key)}
-                rows={rows}
-                templates={
-                  builtin ? tplByKind(key as "task" | "belonging") : []
-                }
-                pastEvents={
-                  builtin ? pastByKind(key as "task" | "belonging") : []
-                }
-                imagesBySlot={imagesByKind.get(key) ?? EMPTY_IMG_MAP}
-              />
-            </div>
-          );
-        })}
+        <SectionList
+          eventId={event.id}
+          entries={sections.map((key): SectionEntry => {
+            const builtin = isBuiltinSection(key);
+            return {
+              key,
+              label: sectionLabel(key),
+              builtin,
+              node: (
+                <KindBlock
+                  eventId={event.id}
+                  kind={key}
+                  label={sectionLabel(key)}
+                  rows={rows}
+                  templates={
+                    builtin ? tplByKind(key as "task" | "belonging") : []
+                  }
+                  pastEvents={
+                    builtin ? pastByKind(key as "task" | "belonging") : []
+                  }
+                  imagesBySlot={imagesByKind.get(key) ?? EMPTY_IMG_MAP}
+                />
+              ),
+            };
+          })}
+        />
 
         <div className="pt-0.5" data-coach="add-section">
           <AddSectionButton eventId={event.id} />

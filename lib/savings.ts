@@ -19,11 +19,25 @@ export interface SavedItem {
   eventTitle: string | null;
 }
 
+/** 防げた失敗の時系列（金額＋件数）。月・週・日で切り替えて見せる用。 */
+export interface SeriesPoint {
+  key: string;
+  label: string;
+  amountYen: number;
+  count: number;
+}
+export interface SavingsSeries {
+  month: SeriesPoint[]; // 直近 6 ヶ月
+  week: SeriesPoint[]; // 直近 8 週（週はじまり＝月曜・JST）
+  day: SeriesPoint[]; // 直近 14 日
+}
+
 export interface SavingsSummary {
   totalYen: number;
   thisMonthYen: number;
   entryCount: number;
   monthly: MonthlyPoint[]; // 直近 6 ヶ月（古い→新しい）
+  series: SavingsSeries; // 月/週/日 切り替え用（金額＋件数）
   byCategory: CategoryBreakdown[]; // 金額の多い順
   thisMonthItems: SavedItem[]; // 今月「防げた」失敗の内訳
   recent: {
@@ -127,6 +141,106 @@ function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+// ── JST（Asia/Tokyo）でのカレンダー日付として集計するためのヘルパー ──
+// サーバー実行時刻は UTC のため、暦日でのバケット分けは必ず JST に寄せる。
+const JST_TZ = "Asia/Tokyo";
+function jstYmd(d: Date): { y: number; m: number; day: number } {
+  const s = new Intl.DateTimeFormat("en-CA", {
+    timeZone: JST_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d); // "2026-08-30"
+  const [y, m, day] = s.split("-").map(Number);
+  return { y, m, day };
+}
+/** JST 暦日を「エポックからの日数」に。日付の前後・週区切りの計算に使う。 */
+function jstDayNum(d: Date): number {
+  const { y, m, day } = jstYmd(d);
+  return Math.floor(Date.UTC(y, m - 1, day) / 86_400_000);
+}
+function fromDayNum(n: number): Date {
+  return new Date(n * 86_400_000);
+}
+/** 月曜=0 の曜日（エポック日 0 = 木曜）。 */
+function weekdayMon0(dayNum: number): number {
+  return ((dayNum % 7) + 3) % 7;
+}
+function mdLabel(dayNum: number): string {
+  const d = fromDayNum(dayNum);
+  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+}
+
+/**
+ * 防げた（＝節約に計上された）失敗の、金額と件数の時系列を月/週/日で用意する。
+ * createdAt（「防げた」と選んだ日時）でバケットする。
+ */
+function buildSeries(
+  rows: { createdAt: Date; amountYen: number }[],
+): SavingsSeries {
+  const now = new Date();
+  const today = jstDayNum(now);
+  const { y: ny, m: nm } = jstYmd(now);
+
+  // 月: 直近 6 ヶ月
+  const month: SeriesPoint[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(Date.UTC(ny, nm - 1 - i, 1));
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    month.push({ key, label: `${d.getUTCMonth() + 1}月`, amountYen: 0, count: 0 });
+  }
+  const monthIdx = new Map(month.map((p, i) => [p.key, i]));
+
+  // 週: 直近 8 週（週はじまり＝月曜）
+  const thisWeekStart = today - weekdayMon0(today);
+  const week: SeriesPoint[] = [];
+  for (let i = 7; i >= 0; i--) {
+    const start = thisWeekStart - i * 7;
+    week.push({
+      key: String(start),
+      label: mdLabel(start),
+      amountYen: 0,
+      count: 0,
+    });
+  }
+  const weekIdx = new Map(week.map((p, i) => [p.key, i]));
+
+  // 日: 直近 14 日
+  const day: SeriesPoint[] = [];
+  for (let i = 13; i >= 0; i--) {
+    const n = today - i;
+    day.push({ key: String(n), label: mdLabel(n), amountYen: 0, count: 0 });
+  }
+  const dayIdx = new Map(day.map((p, i) => [p.key, i]));
+
+  for (const r of rows) {
+    const n = jstDayNum(r.createdAt);
+    const { y, m } = jstYmd(r.createdAt);
+
+    const mk = `${y}-${String(m).padStart(2, "0")}`;
+    const mi = monthIdx.get(mk);
+    if (mi !== undefined) {
+      month[mi].amountYen += r.amountYen;
+      month[mi].count += 1;
+    }
+
+    const wk = String(n - weekdayMon0(n));
+    const wi = weekIdx.get(wk);
+    if (wi !== undefined) {
+      week[wi].amountYen += r.amountYen;
+      week[wi].count += 1;
+    }
+
+    const di = dayIdx.get(String(n));
+    if (di !== undefined) {
+      day[di].amountYen += r.amountYen;
+      day[di].count += 1;
+    }
+  }
+
+  return { month, week, day };
+}
+
 export async function getSavingsSummary(userId: string): Promise<SavingsSummary> {
   const entries = await prisma.savingsEntry.findMany({
     where: { userId, confirmedByUser: true },
@@ -189,6 +303,9 @@ export async function getSavingsSummary(userId: string): Promise<SavingsSummary>
     thisMonthYen,
     entryCount: entries.length,
     monthly,
+    series: buildSeries(
+      entries.map((e) => ({ createdAt: e.createdAt, amountYen: e.amountYen })),
+    ),
     byCategory,
     thisMonthItems,
     recent: entries.slice(0, 8).map((e) => ({

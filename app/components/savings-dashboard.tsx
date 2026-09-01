@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSavingsSummary, getFailureRetrospective } from "@/lib/savings";
 import { formatDateOnly, formatYen } from "@/lib/format";
 import { setFailureOutcome, updateFailureAmount } from "@/app/actions";
+import { PreventedChart } from "@/app/components/prevented-chart";
 
 /** ホームに表示する節約額ダッシュボード。防げたことも並べる。 */
 export async function SavingsDashboard({ userId }: { userId: string }) {
@@ -9,7 +10,6 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
     getSavingsSummary(userId),
     getFailureRetrospective(userId),
   ]);
-  const maxMonthly = Math.max(1, ...s.monthly.map((m) => m.amountYen));
   const maxCategory = Math.max(1, ...s.byCategory.map((c) => c.amountYen));
 
   return (
@@ -66,42 +66,18 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
         </p>
       </div>
 
+      {/* 防げた失敗の推移（金額＋件数の二軸）。常に表示。 */}
+      <PreventedChart series={s.series} />
+
       {(s.entryCount > 0 || retro.totalCount > 0) && (
         <details className="rounded-2xl bg-surface p-4 [&_summary::-webkit-details-marker]:hidden">
           <summary className="cursor-pointer list-none text-sm font-semibold text-teal-dark">
-            もっと見る（月ごとの推移・カテゴリ別・防げた失敗）
+            もっと見る（カテゴリ別・防げた失敗の一覧）
           </summary>
 
           {s.entryCount > 0 && (
             <>
               <div className="mt-4">
-                <h3 className="text-xs font-semibold text-muted">
-                  月ごとの推移（直近6ヶ月・参考値）
-                </h3>
-                <div className="mt-3 flex items-end gap-2" style={{ height: 120 }}>
-                  {s.monthly.map((m) => (
-                    <div
-                      key={m.key}
-                      className="flex flex-1 flex-col items-center gap-1"
-                    >
-                      <span className="text-[10px] text-muted">
-                        {m.amountYen > 0 ? formatYen(m.amountYen) : ""}
-                      </span>
-                      <div
-                        className="w-full rounded-t bg-teal"
-                        style={{
-                          height: `${Math.round((m.amountYen / maxMonthly) * 90)}px`,
-                          minHeight: m.amountYen > 0 ? 4 : 1,
-                          opacity: m.amountYen > 0 ? 1 : 0.25,
-                        }}
-                      />
-                      <span className="text-xs text-muted">{m.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-5">
                 <h3 className="text-xs font-semibold text-muted">
                   カテゴリ別の内訳（参考値）
                 </h3>

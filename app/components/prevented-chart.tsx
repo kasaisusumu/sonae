@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SavingsSeries } from "@/lib/savings";
 import { formatYen } from "@/lib/format";
 
@@ -20,6 +20,13 @@ const H = 128; // グラフの高さ(px)
  */
 export function PreventedChart({ series }: { series: SavingsSeries }) {
   const [grain, setGrain] = useState<Grain>("month");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // 「今日を含む区間」は配列の末尾＝一番右。狭い画面でも見えるよう右端に寄せる。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [grain]);
 
   useEffect(() => {
     let saved: Grain = "month";
@@ -92,16 +99,20 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
           <span>0</span>
         </div>
 
-        <div className="min-w-0 flex-1 overflow-x-auto">
+        <div ref={scrollRef} className="min-w-0 flex-1 overflow-x-auto">
           <div
             className="flex items-end gap-1.5"
-            style={{ height: H, minWidth: data.length * 22 }}
+            style={{ height: H, minWidth: data.length * 24 }}
           >
-            {data.map((d) => (
+            {data.map((d, i) => {
+              const isNow = i === data.length - 1;
+              return (
               <div
                 key={d.key}
                 className="flex flex-1 flex-col items-center justify-end gap-1"
-                title={`${d.label}: ${formatYen(d.amountYen)} / ${d.count}件`}
+                title={`${d.label}${isNow ? "（今）" : ""}: ${formatYen(
+                  d.amountYen,
+                )} / ${d.count}件`}
               >
                 <div className="flex w-full items-end justify-center gap-0.5">
                   <span
@@ -123,11 +134,17 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
                     }}
                   />
                 </div>
-                <span className="whitespace-nowrap text-[9px] text-muted">
+                <span
+                  className={`whitespace-nowrap text-[9px] ${
+                    isNow ? "font-semibold text-foreground" : "text-muted"
+                  }`}
+                >
                   {d.label}
+                  {isNow ? " ▾" : ""}
                 </span>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

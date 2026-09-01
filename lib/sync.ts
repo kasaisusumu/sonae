@@ -251,7 +251,9 @@ export async function syncUserCalendar(
  * 予定詳細を開いたときに after() から呼ぶ。webhook / cron の遅延を待たずに
  * 「開いた瞬間に最新」にするための補助。失敗しても無視する。
  */
-export async function refreshEventFromGoogle(eventId: string): Promise<void> {
+export async function refreshEventFromGoogle(
+  eventId: string,
+): Promise<boolean> {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     select: {
@@ -263,7 +265,7 @@ export async function refreshEventFromGoogle(eventId: string): Promise<void> {
       autoManaged: true,
     },
   });
-  if (!event || event.source !== "google" || !event.googleEventId) return;
+  if (!event || event.source !== "google" || !event.googleEventId) return false;
 
   try {
     const { calendar, account } = await getCalendarClient(event.userId);
@@ -273,7 +275,7 @@ export async function refreshEventFromGoogle(eventId: string): Promise<void> {
     });
     const item = res.data;
     const startRaw = item.start?.dateTime ?? item.start?.date;
-    if (item.status === "cancelled" || !startRaw) return;
+    if (item.status === "cancelled" || !startRaw) return false;
 
     const description = item.description?.trim() || "";
     const start = new Date(startRaw);
@@ -293,10 +295,14 @@ export async function refreshEventFromGoogle(eventId: string): Promise<void> {
       !!description &&
       !!event.lastWrittenHash &&
       hashDescription(description) === event.lastWrittenHash;
-    if (!echo) await applyInboundDescription(event.id, description);
+    if (!echo) {
+      await applyInboundDescription(event.id, description);
+      return true;
+    }
   } catch (e) {
     console.error("[refreshEventFromGoogle] eventId=%s", eventId, e);
   }
+  return false;
 }
 
 /**

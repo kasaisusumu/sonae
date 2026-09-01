@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -6,6 +5,7 @@ import { syncCalendar } from "@/app/actions";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
 import { formatDateShort, formatDateTime } from "@/lib/format";
 import { CategorySelect } from "./category-select";
+import { CardLink } from "@/app/components/card-link";
 import { SubmitButton } from "@/app/components/submit-button";
 
 export default async function EventsPage({
@@ -164,15 +164,14 @@ function EventRow({
 
   return (
     <li
-      className={`relative rounded-xl bg-surface p-4 transition-colors hover:bg-surface-muted ${
+      className={`relative rounded-xl bg-surface p-4 transition-colors hover:bg-surface-muted active:bg-accent-soft ${
         past ? "opacity-80" : ""
       }`}
     >
       {/* カード全体を準備詳細へのタップ領域にする（カテゴリ選択より下のレイヤー） */}
-      <Link
+      <CardLink
         href={`/events/${ev.id}`}
-        aria-label={`${ev.title} の準備を開く`}
-        className="absolute inset-0 z-0 rounded-xl"
+        ariaLabel={`${ev.title} の準備を開く`}
       />
       <div className="relative z-10 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">

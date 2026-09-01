@@ -161,7 +161,7 @@ export default async function HomePage({
               <li key={w.event.id}>
                 <Link
                   href={`/events/${w.event.id}`}
-                  className="block rounded-xl bg-surface px-4 py-3 no-underline hover:bg-surface-muted"
+                  className="block rounded-xl bg-surface px-4 py-3 no-underline transition-colors hover:bg-surface-muted active:bg-accent-soft"
                 >
                   <span className="block text-sm font-medium text-foreground">
                     {w.event.title}
@@ -203,7 +203,7 @@ export default async function HomePage({
                 <li key={ev.id}>
                   <Link
                     href={`/events/${ev.id}`}
-                    className="flex items-center justify-between gap-3 rounded-xl bg-surface px-4 py-3 no-underline transition-colors hover:bg-surface-muted"
+                    className="flex items-center justify-between gap-3 rounded-xl bg-surface px-4 py-3 no-underline transition-colors hover:bg-surface-muted active:bg-accent-soft"
                   >
                     <span className="min-w-0">
                       <span className="block truncate font-medium text-foreground">

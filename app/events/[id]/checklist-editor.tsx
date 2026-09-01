@@ -160,9 +160,25 @@ export function ChecklistEditor({
     [initialItems],
   );
 
-  const dirty =
-    JSON.stringify(items.map(strip)) !== JSON.stringify(initial.map(strip)) ||
-    removedTitles.length > 0;
+  // メモ（comment）以外の変更＝自動保存の対象。
+  const structuralDirty =
+    JSON.stringify(items.map(stripStructural)) !==
+      JSON.stringify(initial.map(stripStructural)) || removedTitles.length > 0;
+
+  // メモは自動保存しない。保存済みの値と違う項目があるか（キー：正規化タイトル）。
+  const savedCommentByTitle = useMemo(
+    () => new Map(initial.map((i) => [normTitle(i.title), i.comment])),
+    [initial],
+  );
+  const commentDirty = items.some(
+    (it) =>
+      it.title.trim().length > 0 &&
+      (savedCommentByTitle.get(normTitle(it.title)) ?? "") !== it.comment,
+  );
+  const rowCommentDirty = (it: Item) =>
+    (savedCommentByTitle.get(normTitle(it.title)) ?? "") !== it.comment;
+
+  const dirty = structuralDirty || commentDirty;
 
   const syncedRef = useRef(initial);
   useEffect(() => {
@@ -191,29 +207,42 @@ export function ChecklistEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
-  // 文言・メモ・追加・削除も「保存する」を押さずに自動保存する（入力が 1.8 秒止まったら）。
+  // 文言・追加・削除・チェックは「保存する」を押さずに自動保存する（入力が 1.8 秒止まったら）。
+  // メモ（comment）は自動保存しない ＝ 書き終わったら「メモを保存」を押す。
   useEffect(() => {
-    if (!dirty || pending) return;
-    const t = window.setTimeout(() => persist(items), 1800);
+    if (!structuralDirty || pending) return;
+    const t = window.setTimeout(() => persist(items, false), 1800);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, removedTitles, dirty, pending]);
+  }, [items, removedTitles, structuralDirty, pending]);
 
-  function toPayload(list: Item[]) {
+  // includeMemo=false のとき（＝自動保存）は、メモは保存済みの値のまま送る。
+  // メモは「メモを保存」を押したときだけ（includeMemo=true）反映する。
+  function toPayload(list: Item[], includeMemo: boolean) {
     return list
       .filter((it) => it.title.trim())
-      .map((it) => ({
-        title: it.title.trim(),
-        comment: it.comment.trim() || null,
-        isDone: it.isDone,
-        isUserAdded: it.isUserAdded,
-        notifyLeadMinutes: it.notifyLeadMinutes,
-      }));
+      .map((it) => {
+        const memo = includeMemo
+          ? it.comment
+          : (savedCommentByTitle.get(normTitle(it.title)) ?? "");
+        return {
+          title: it.title.trim(),
+          comment: memo.trim() || null,
+          isDone: it.isDone,
+          isUserAdded: it.isUserAdded,
+          notifyLeadMinutes: it.notifyLeadMinutes,
+        };
+      });
   }
 
-  function persist(list: Item[]) {
+  function persist(list: Item[], includeMemo = true) {
     startTransition(async () => {
-      await saveChecklist({ eventId, kind, items: toPayload(list), removedTitles });
+      await saveChecklist({
+        eventId,
+        kind,
+        items: toPayload(list, includeMemo),
+        removedTitles,
+      });
       setRemovedTitles([]);
       setSaved(true);
     });
@@ -352,7 +381,7 @@ export function ChecklistEditor({
       await saveChecklist({
         eventId,
         kind,
-        items: toPayload(items),
+        items: toPayload(items, true),
         removedTitles,
       });
       setRemovedTitles([]);
@@ -540,12 +569,30 @@ export function ChecklistEditor({
                     )}
                   </div>
 
-                  <input
+                  <textarea
                     value={it.comment}
                     onChange={(e) => update(it.key, { comment: e.target.value })}
-                    placeholder="メモ・リンク（任意・学習しません）"
-                    className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-muted"
+                    rows={3}
+                    placeholder="メモ・リンク（任意・学習しません）。改行できます。"
+                    className="w-full resize-y rounded-md border border-border bg-background px-2 py-1 text-xs text-muted"
                   />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => persist(items)}
+                      disabled={pending || !rowCommentDirty(it)}
+                      className="rounded-md border border-teal/40 px-2 py-0.5 text-[11px] text-teal-dark hover:border-teal disabled:opacity-40"
+                    >
+                      {pending ? "保存中…" : "メモを保存"}
+                    </button>
+                    <span className="text-[11px] text-muted">
+                      {rowCommentDirty(it)
+                        ? "未保存（自動保存されません）"
+                        : it.comment.trim()
+                          ? "保存済み"
+                          : ""}
+                    </span>
+                  </div>
                   {it.comment.trim() && (
                     <p className="whitespace-pre-wrap break-words text-[11px] text-muted">
                       <Linkify text={it.comment} />
@@ -622,11 +669,13 @@ export function ChecklistEditor({
           <span className={dirty ? "text-muted" : "text-teal-dark"}>
             {pending
               ? "保存中…"
-              : dirty
-                ? "変更あり（自動保存）"
-                : saved
-                  ? "保存しました"
-                  : ""}
+              : commentDirty
+                ? "メモが未保存"
+                : structuralDirty
+                  ? "変更あり（自動保存）"
+                  : saved
+                    ? "保存しました"
+                    : ""}
           </span>
           {dirty && !pending && (
             <button
@@ -634,7 +683,7 @@ export function ChecklistEditor({
               onClick={() => persist(items)}
               className="rounded-md border border-teal/40 px-2 py-0.5 text-teal-dark hover:border-teal"
             >
-              今すぐ保存
+              {commentDirty ? "メモも保存" : "今すぐ保存"}
             </button>
           )}
         </div>
@@ -681,7 +730,7 @@ export function ChecklistEditor({
       {bulkNote && <p className="mt-2 text-xs text-teal-dark">{bulkNote}</p>}
 
       <p className="mt-1.5 text-[11px] text-muted">
-        すべて自動保存（入力を止めると保存）。∨で通知・メモ・リンク・写真、✕で削除。
+        文言・追加・削除は自動保存。∨で通知・メモ・リンク・写真（メモは「メモを保存」で保存）、✕で削除。
       </p>
 
       {modal && (
@@ -838,6 +887,14 @@ function strip(it: Item) {
   return {
     title: it.title.trim(),
     comment: it.comment.trim(),
+    notifyLeadMinutes: it.notifyLeadMinutes,
+  };
+}
+
+/** メモ（comment）を除いた、自動保存の対象になる部分だけ。 */
+function stripStructural(it: Item) {
+  return {
+    title: it.title.trim(),
     notifyLeadMinutes: it.notifyLeadMinutes,
   };
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { after } from "next/server";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ensureChecklistForEvent, normTitle } from "@/lib/checklist";
 import { syncEventDescription } from "@/lib/description-sync";
@@ -113,9 +114,13 @@ export async function ChecklistSection({
     category: { name: string } | null;
   };
 }) {
-  // 開いた瞬間に、その予定だけ Google から取り直して説明欄の直接編集を取り込む
-  // （webhook / cron の遅延を待たない）。Suspense のフォールバック中に走る。
-  await refreshEventFromGoogle(event.id);
+  // Google からの取り直し（説明欄の直接編集の取り込み）は、描画をブロックしない。
+  // レスポンス後に走らせ、変化があれば次の読み込み・LiveSync の更新で反映する。
+  // 以前はここで await していて、開くたびに Google API 往復ぶん待たされていた。
+  after(async () => {
+    const changed = await refreshEventFromGoogle(event.id);
+    if (changed) revalidatePath(`/events/${event.id}`);
+  });
 
   let items = await prisma.checklistItem.findMany({
     where: { eventId: event.id },

@@ -12,6 +12,7 @@ import { ChecklistEditor } from "./checklist-editor";
 import { SuggestionList } from "./suggestion-list";
 import { WarningPanel } from "./warning-panel";
 import { ListToolbox } from "./list-toolbox";
+import { ListReminderControl } from "./list-reminder-control";
 import { SubmitButton } from "@/app/components/submit-button";
 
 type Row = {
@@ -86,6 +87,7 @@ export async function ChecklistSection({
     categoryId: string | null;
     recurringEventId: string | null;
     failureWarningAckAt: Date | null;
+    listReminderLeadMinutes: number | null;
     category: { name: string } | null;
   };
 }) {
@@ -151,9 +153,19 @@ export async function ChecklistSection({
           </p>
           <form action={regenerateChecklist}>
             <input type="hidden" name="eventId" value={event.id} />
-            <SubmitButton variant="ghost">作り直す</SubmitButton>
+            <SubmitButton
+              variant="ghost"
+              confirm="いまの準備すること・持ち物を作り直します（編集した内容は上書きされます）。よろしいですか？"
+            >
+              作り直す
+            </SubmitButton>
           </form>
         </div>
+
+        <ListReminderControl
+          eventId={event.id}
+          current={event.listReminderLeadMinutes}
+        />
 
         {unreviewed && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal/30 bg-teal-soft px-4 py-3">

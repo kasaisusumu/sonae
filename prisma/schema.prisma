@@ -118,6 +118,10 @@ model Event {
   lastInboundEditAt DateTime?
   // 事後の「今回は防げた？」通知を送った日時（再送防止）
   postFailureCheckNotifiedAt DateTime?
+  // 準備リスト全体のリマインド通知。予定開始の何分前に「準備リストを確認しましょう」を1回送るか。
+  // null = 送らない。既定は 1 日前(1440)。
+  listReminderLeadMinutes Int? @default(1440)
+  listReminderNotifiedAt  DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

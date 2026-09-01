@@ -1,4 +1,4 @@
-/* 私のマネージャー Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v4 */
+/* 私のマネージャー Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v5 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -7,7 +7,7 @@ self.addEventListener("activate", (event) => {
 
 function urlFromTag(tag) {
   if (!tag) return null;
-  let m = tag.match(/^(?:event|prep)-(.+)$/);
+  let m = tag.match(/^(?:event|prep|listreminder)-(.+)$/);
   if (m) return "/events/" + m[1];
   m = tag.match(/^failcheck-(.+)$/);
   if (m) return "/events/" + m[1] + "#failure-check";

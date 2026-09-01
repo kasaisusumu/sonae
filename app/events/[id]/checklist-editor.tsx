@@ -158,6 +158,14 @@ export function ChecklistEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
+  // 文言・メモ・追加・削除も「保存する」を押さずに自動保存する（入力が 1.8 秒止まったら）。
+  useEffect(() => {
+    if (!dirty || pending) return;
+    const t = window.setTimeout(() => persist(items), 1800);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, removedTitles, dirty, pending]);
+
   function toPayload(list: Item[]) {
     return list
       .filter((it) => it.title.trim())
@@ -362,6 +370,14 @@ export function ChecklistEditor({
                 >
                   {leadLabel}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => remove(it.key)}
+                  aria-label="削除"
+                  className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[11px] text-muted hover:border-warn hover:text-warn"
+                >
+                  ✕
+                </button>
               </div>
 
               {/* 詳細（チップを押したときだけ）：通知タイミング・メモ・削除 */}
@@ -427,14 +443,6 @@ export function ChecklistEditor({
                     placeholder="メモ（任意・学習しません）"
                     className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-muted"
                   />
-
-                  <button
-                    type="button"
-                    onClick={() => remove(it.key)}
-                    className="text-[11px] text-muted underline hover:text-warn"
-                  >
-                    この項目を削除
-                  </button>
                 </div>
               )}
 
@@ -470,18 +478,25 @@ export function ChecklistEditor({
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
-          {saved && !dirty && (
-            <span className="text-[11px] text-teal-dark">保存しました</span>
+        <div className="flex items-center gap-2 text-[11px]">
+          <span className={dirty ? "text-muted" : "text-teal-dark"}>
+            {pending
+              ? "保存中…"
+              : dirty
+                ? "変更あり（自動保存）"
+                : saved
+                  ? "保存しました"
+                  : ""}
+          </span>
+          {dirty && !pending && (
+            <button
+              type="button"
+              onClick={() => persist(items)}
+              className="rounded-md border border-teal/40 px-2 py-0.5 text-teal-dark hover:border-teal"
+            >
+              今すぐ保存
+            </button>
           )}
-          <button
-            type="button"
-            onClick={() => persist(items)}
-            disabled={pending || !dirty}
-            className="rounded-lg bg-teal px-3.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-teal-dark disabled:opacity-50"
-          >
-            {pending ? "保存中…" : "保存する"}
-          </button>
         </div>
       </div>
 
@@ -526,7 +541,7 @@ export function ChecklistEditor({
       {bulkNote && <p className="mt-2 text-xs text-teal-dark">{bulkNote}</p>}
 
       <p className="mt-1.5 text-[11px] text-muted">
-        🔔チップで通知・メモ・削除。チェックと通知は自動保存、文言・メモは「保存する」で反映。
+        すべて自動保存（入力を止めると保存）。🔔チップで通知・メモ、✕で削除。
       </p>
     </div>
   );

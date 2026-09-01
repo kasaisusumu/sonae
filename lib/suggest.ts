@@ -245,13 +245,16 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
     }),
   ]);
 
-  // recall 由来は前回のリストと通知設定（"なし" 含む）をそのまま出す。新規生成のみ自動提案。
-  const autofillNotify = !recalled;
+  // 項目ごとの通知は既定「なし」。生成時に時間を自動で埋めない（学習した notify_override があればそれは効く）。
+  // リマインドは予定単位の「準備リストのリマインド」（既定 1 日前）に一本化。
   const verbatim = !!recalled;
   return [
-    ...composeKind("task", gen.tasks, taskRules, { autofillNotify, verbatim }),
+    ...composeKind("task", gen.tasks, taskRules, {
+      autofillNotify: false,
+      verbatim,
+    }),
     ...composeKind("belonging", gen.belongings, belongingRules, {
-      autofillNotify,
+      autofillNotify: false,
       verbatim,
     }),
   ];

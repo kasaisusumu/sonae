@@ -108,3 +108,81 @@ export async function sendDueItemNotifications(
   }
   return sent;
 }
+
+/**
+ * 予定単位の「準備リストのリマインド」。予定開始の listReminderLeadMinutes 分前に
+ * 「準備リストを確認しましょう」を 1 回だけ push する。cron から呼ぶ。
+ */
+export async function sendDueListReminders(
+  userId: string,
+  limit = 12,
+): Promise<number> {
+  const now = new Date();
+  const earliestEvent = new Date(now.getTime() - 3 * 3_600_000);
+
+  const events = await prisma.event.findMany({
+    where: {
+      userId,
+      listReminderLeadMinutes: { not: null },
+      listReminderNotifiedAt: null,
+      eventDatetime: { gte: earliestEvent },
+      checklistItems: { some: { isSuggested: false } },
+    },
+    select: {
+      id: true,
+      title: true,
+      eventDatetime: true,
+      recurringEventId: true,
+      listReminderLeadMinutes: true,
+      checklistItems: {
+        where: { isSuggested: false },
+        select: { isDone: true },
+      },
+    },
+    orderBy: { eventDatetime: "asc" },
+    take: 100,
+  });
+
+  const ready = events.filter((e) => {
+    const lead = e.listReminderLeadMinutes ?? 0;
+    const fireAt = e.eventDatetime.getTime() - lead * 60_000;
+    return fireAt <= now.getTime();
+  });
+  if (ready.length === 0) return 0;
+
+  let sent = 0;
+  const seenSeries = new Set<string>();
+  for (const e of ready) {
+    const seriesKey = e.recurringEventId ?? "";
+    const seriesDup = seriesKey !== "" && seenSeries.has(seriesKey);
+
+    if (sent >= limit || seriesDup) {
+      await prisma.event.update({
+        where: { id: e.id },
+        data: { listReminderNotifiedAt: now },
+      });
+      continue;
+    }
+    if (seriesKey !== "") seenSeries.add(seriesKey);
+
+    const total = e.checklistItems.length;
+    const left = e.checklistItems.filter((i) => !i.isDone).length;
+    const body =
+      left > 0
+        ? `準備リストの確認を（未完 ${left}/${total}）`
+        : `準備リストの確認を（${total}件）`;
+
+    await sendPushToUser(userId, {
+      title: `「${e.title}」`,
+      body,
+      url: `/events/${e.id}`,
+      tag: `listreminder-${e.id}`,
+    });
+    await prisma.event.update({
+      where: { id: e.id },
+      data: { listReminderNotifiedAt: now },
+    });
+    sent++;
+  }
+  return sent;
+}

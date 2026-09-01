@@ -291,6 +291,24 @@ export async function markListReviewed(formData: FormData): Promise<void> {
 }
 
 /**
+ * 予定単位の「準備リストのリマインド」設定を変える（即時）。
+ * leadMinutes = null で送らない。既定は 1 日前(1440)。
+ */
+export async function setListReminder(
+  eventId: string,
+  leadMinutes: number | null,
+): Promise<void> {
+  const userId = await requireUserId();
+  const lead = cleanLead(leadMinutes);
+  const res = await prisma.event.updateMany({
+    where: { id: eventId, userId },
+    data: { listReminderLeadMinutes: lead, listReminderNotifiedAt: null },
+  });
+  if (res.count === 0) return;
+  revalidateAppViews(eventId);
+}
+
+/**
  * 通知リード時間の即時変更＋即時学習（「保存する」不要。チェックと同じ扱い）。
  * minutes = null で通知なし。
  */

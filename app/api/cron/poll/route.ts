@@ -3,7 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { syncAndNotify } from "@/lib/sync";
 import { ensureWatch } from "@/lib/google";
 import { notifyPostEventFailureChecks } from "@/lib/failures";
-import { sendDueItemNotifications } from "@/lib/notify-items";
+import {
+  sendDueItemNotifications,
+  sendDueListReminders,
+} from "@/lib/notify-items";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,11 +69,12 @@ async function handler(req: NextRequest) {
     }
   }
 
-  // 準備項目の「◯分前」通知は全ユーザー対象（手動予定のみのユーザーも含む）
+  // 準備項目の「◯分前」通知＋予定単位の「準備リストのリマインド」は全ユーザー対象
   const users = await prisma.user.findMany({ select: { id: true } });
   for (const { id } of users) {
     try {
       prepNotified += await sendDueItemNotifications(id);
+      prepNotified += await sendDueListReminders(id);
     } catch (e) {
       errors++;
       console.error("[cron/poll] 準備通知に失敗 userId=%s", id, e);

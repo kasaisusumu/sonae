@@ -5,6 +5,7 @@ import { syncCalendar } from "@/app/actions";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
 import { formatDateShort, formatDateTime } from "@/lib/format";
 import { CategorySelect } from "./category-select";
+import { CalendarLinkTip } from "./calendar-link-tip";
 import { CardLink } from "@/app/components/card-link";
 import { SubmitButton } from "@/app/components/submit-button";
 
@@ -84,6 +85,11 @@ export default async function EventsPage({
           Google カレンダーに接続しました。予定を取り込んでいます。
         </p>
       )}
+
+      {/* 目玉: カレンダーの説明欄のリンクから準備リストへ飛べる、の説明（大きく・閉じられる） */}
+      <CalendarLinkTip
+        writeEnabled={account.writeDescriptionEnabled ?? false}
+      />
 
       {/* ── このページの主役: これからの予定 ── */}
       <section className="space-y-3">

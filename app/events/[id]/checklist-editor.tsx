@@ -146,6 +146,20 @@ export function ChecklistEditor({
   // これが立ったときだけ自動保存する。保存したら false に戻す。
   // ＝ 何も書いていないのに保存が延々と走るのを防ぐ。
   const [structEdited, setStructEdited] = useState(false);
+  // ハイライトチュートリアル中で、かつ項目が空のときだけ「例」を仮表示する。
+  // この例は state（items）に入れず、保存も学習もしない。純粋に見せるだけ。
+  const [coachActive, setCoachActive] = useState(false);
+  const [exampleOpen, setExampleOpen] = useState(false);
+  useEffect(() => {
+    const on = (e: Event) => {
+      const active = !!(e as CustomEvent).detail?.active;
+      setCoachActive(active);
+      if (!active) setExampleOpen(false);
+    };
+    window.addEventListener("mm:coach", on);
+    return () => window.removeEventListener("mm:coach", on);
+  }, []);
+
   // 行ごとの詳細（通知タイミング・メモ・削除）を開いているか
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
   const toggleOpen = (key: string) =>
@@ -383,6 +397,15 @@ export function ChecklistEditor({
 
   const doneCount = items.filter((it) => it.isDone).length;
 
+  // チュートリアル中・項目ゼロ・「準備すること」枠 のときだけ「例」を見せる。
+  const realCount = items.filter((it) => it.title.trim()).length;
+  const showExamples = coachActive && kind === "task" && realCount === 0;
+  const EXAMPLES: { title: string; lead: string }[] = [
+    { title: "持ち物を確認する", lead: "1日前" },
+    { title: "何時に出るか決める", lead: "1日前" },
+    { title: "集合時間を確認する", lead: "" },
+  ];
+
   // ── テンプレート／他の予定 のポップアップ ──
   const [modal, setModal] = useState<null | "save" | "apply" | "copy">(null);
   const [tplName, setTplName] = useState("");
@@ -455,6 +478,69 @@ export function ChecklistEditor({
           {doneCount}/{items.length}
         </span>
       </div>
+
+      {showExamples && (
+        <div className="mb-2 rounded-lg border border-dashed border-teal/40 bg-teal-soft p-2">
+          <p className="mb-1 text-[11px] font-medium text-teal-dark">
+            例（説明用に置いています。保存も学習もされません）
+          </p>
+          <ul className="divide-y divide-border/50">
+            {EXAMPLES.map((ex, i) => {
+              const open = i === 0 && exampleOpen;
+              return (
+                <li
+                  key={i}
+                  data-coach={i === 0 ? "item-row" : undefined}
+                  className="py-1"
+                >
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      disabled
+                      aria-hidden
+                      className="h-4 w-4 shrink-0 accent-[var(--teal)]"
+                    />
+                    <span className="min-w-0 flex-1 px-1 py-1 text-sm text-muted">
+                      {ex.title}
+                    </span>
+                    {ex.lead && (
+                      <span className="shrink-0 text-[11px] tabular-nums text-teal-dark">
+                        🔔{ex.lead}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      data-coach={i === 0 ? "item-expand" : undefined}
+                      onClick={() => {
+                        if (i === 0) setExampleOpen((v) => !v);
+                      }}
+                      aria-label={open ? "詳細を閉じる" : "詳細を開く"}
+                      className={`shrink-0 rounded-md border px-1.5 py-0.5 text-xs leading-none ${
+                        open
+                          ? "border-teal bg-teal-soft text-teal-dark"
+                          : "border-border text-muted"
+                      }`}
+                    >
+                      {open ? "∧" : "∨"}
+                    </button>
+                    <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[11px] text-muted">
+                      ✕
+                    </span>
+                  </div>
+                  {open && (
+                    <div className="ml-6 mt-1.5 space-y-1 rounded-lg bg-background/60 p-2 text-[11px] text-muted">
+                      <p>通知タイミング（例: 1日前 / 3時間前 / なし）</p>
+                      <p>メモ・リンク（改行OK。「メモを保存」で保存）</p>
+                      <p>＋ 写真（自動で圧縮）</p>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       <ul className="divide-y divide-border/70">
         {displayItems.map((it) => {
           const c = splitLead(it.notifyLeadMinutes ?? DEFAULT_LEAD);

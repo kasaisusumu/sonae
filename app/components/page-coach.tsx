@@ -402,6 +402,14 @@ export function PageCoach() {
     return () => window.removeEventListener("keydown", onKey);
   }, [tour, finish]);
 
+  // ツアーの状態を全体に知らせる（各画面が「例」の仮表示を出し入れするため）。
+  // step が進むたびにも投げ直す＝Suspense で遅れて出てきた画面にも届く。
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("mm:coach", { detail: { active: !!tour } }),
+    );
+  }, [tour, idx]);
+
   if (!tour || !rect) return null;
 
   const step = tour.steps[idx];

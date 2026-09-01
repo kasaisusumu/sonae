@@ -589,6 +589,22 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   );
   await prisma.$transaction(ops);
 
+  // 全種別を通じて非提案項目が 0 になったか＝「リストを全部消した」状態。
+  const remaining = await prisma.checklistItem.count({
+    where: { eventId: input.eventId, isSuggested: false },
+  });
+  const listCleared = remaining === 0;
+  await prisma.event.update({
+    where: { id: input.eventId },
+    data: { listCleared },
+  });
+  if (listCleared) {
+    // 全部消したなら、残っている提案（isSuggested）も消す。ユーザーが自分で足す。
+    await prisma.checklistItem.deleteMany({
+      where: { eventId: input.eventId, isSuggested: true },
+    });
+  }
+
   // ここから先（学習・同名グループ・説明欄同期）は「おまけ」。
   // 失敗しても保存自体は済んでいるので、500 にはせずログだけ残す。
   try {

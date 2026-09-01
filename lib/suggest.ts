@@ -224,6 +224,9 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
     feature,
   );
 
+  // 似た予定で「準備リストを全部消した」と学習済み → 何も出さない（提案も無し）。
+  if (recalled?.cleared) return [];
+
   const [gen, taskRules, belongingRules] = await Promise.all([
     recalled
       ? Promise.resolve<GeneratedBase>({

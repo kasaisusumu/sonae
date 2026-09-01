@@ -122,11 +122,20 @@ export async function ChecklistSection({
     if (changed) revalidatePath(`/events/${event.id}`);
   });
 
-  let items = await prisma.checklistItem.findMany({
-    where: { eventId: event.id },
-    orderBy: { sortOrder: "asc" },
-  });
-  if (items.length === 0) {
+  const itemsAndFlag = await Promise.all([
+    prisma.checklistItem.findMany({
+      where: { eventId: event.id },
+      orderBy: { sortOrder: "asc" },
+    }),
+    prisma.event.findUnique({
+      where: { id: event.id },
+      select: { listCleared: true },
+    }),
+  ]);
+  let items = itemsAndFlag[0];
+  const listCleared = itemsAndFlag[1]?.listCleared ?? false;
+  // ユーザーが意図的に全部消した予定は、二度と自動生成・自動提案しない。
+  if (items.length === 0 && !listCleared) {
     await ensureChecklistForEvent(event.id);
     items = await prisma.checklistItem.findMany({
       where: { eventId: event.id },

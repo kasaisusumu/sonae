@@ -9,6 +9,8 @@ export interface RecalledBase {
   sourceEventId: string;
   /** タイトルがほぼ完全一致だったか（UI 表示や説明用）。 */
   exact: boolean;
+  /** 似た過去予定で「準備リストを全部消した」と学習済み → 何も出さない。 */
+  cleared?: boolean;
 }
 
 /** タイトルを比較用に正規化する（数字・記号・「第N回」などの連番を落とす）。 */
@@ -93,13 +95,23 @@ export async function recallBaseChecklist(
       userId: event.userId,
       categoryId: event.categoryId,
       id: { not: event.id },
-      checklistItems: { some: { isSuggested: false } },
-      // 「たたき台にしてよい」のは、ユーザーが確認 or 編集した予定だけ。
-      // 生成しただけで一度も見られていないリストは再利用のもとにしない。
-      OR: [
-        { editRecords: { some: {} } },
-        { listCustomized: true },
-        { listReviewedAt: { not: null } },
+      AND: [
+        // 中身がある予定、または「全部消した」と学習済みの予定。
+        {
+          OR: [
+            { checklistItems: { some: { isSuggested: false } } },
+            { listCleared: true },
+          ],
+        },
+        // 「たたき台にしてよい」のは、ユーザーが確認 or 編集した予定だけ。
+        // 生成しただけで一度も見られていないリストは再利用のもとにしない。
+        {
+          OR: [
+            { editRecords: { some: {} } },
+            { listCustomized: true },
+            { listReviewedAt: { not: null } },
+          ],
+        },
       ],
     },
     orderBy: { eventDatetime: "desc" },
@@ -107,6 +119,7 @@ export async function recallBaseChecklist(
     select: {
       id: true,
       title: true,
+      listCleared: true,
       feature: {
         select: {
           isOverseas: true,
@@ -139,11 +152,13 @@ export async function recallBaseChecklist(
     }[];
     rank: number;
     exact: boolean;
+    cleared: boolean;
   };
 
   let best: Scored | null = null;
   for (const p of past) {
-    if (p.checklistItems.length === 0) continue;
+    // 全消し学習済みの予定は、中身ゼロでも候補にする。
+    if (p.checklistItems.length === 0 && !p.listCleared) continue;
     const pKey = titleKey(p.title);
     if (pKey.length < 2) continue;
 
@@ -166,11 +181,28 @@ export async function recallBaseChecklist(
     // 名前の近さが主。シグネチャ一致は小さめの上乗せ。新しい順は for の走査順で担保。
     const rank = nameScore + (sigMatch ? 0.15 : 0);
     if (!best || rank > best.rank) {
-      best = { id: p.id, items: p.checklistItems, rank, exact };
+      best = {
+        id: p.id,
+        items: p.checklistItems,
+        rank,
+        exact,
+        cleared: p.listCleared,
+      };
     }
   }
 
   if (!best) return null;
+
+  // 似た予定で「準備リストを全部消した」と学習済み → 何も出さない。
+  if (best.cleared) {
+    return {
+      tasks: [],
+      belongings: [],
+      sourceEventId: best.id,
+      exact: best.exact,
+      cleared: true,
+    };
+  }
 
   // 組み込みの2枠だけをたたき台にする。ユーザーが足した枠（買うもの等）は
   // AI 生成のもとには使わない（同名グループのコピー経路で引き継がれる）。

@@ -66,6 +66,14 @@ export async function generateAndSaveChecklist(
 ): Promise<void> {
   await applyLearnedListReminder(eventId);
 
+  // 「作り直す」は意図的なので、全消し状態はいったん解除して生成し直す。
+  if (opts.force) {
+    await prisma.event.updateMany({
+      where: { id: eventId, listCleared: true },
+      data: { listCleared: false },
+    });
+  }
+
   if (!opts.force) {
     const twinId = await findNameGroupTwinWithList(eventId);
     if (twinId) {
@@ -104,10 +112,33 @@ export async function generateAndSaveChecklist(
       ? [prisma.checklistItem.createMany({ data: rows })]
       : []),
   ]);
+
+  // 生成しても中身が空（似た予定で「何も出さない」を学習済み 等）なら、
+  // 全消し扱いにして、次回以降ムダに再生成しない。
+  if (rows.filter((r) => !r.isSuggested).length === 0) {
+    const anyReal = await prisma.checklistItem.count({
+      where: { eventId, isSuggested: false },
+    });
+    if (anyReal === 0) {
+      await prisma.event.update({
+        where: { id: eventId },
+        data: { listCleared: true },
+      });
+    }
+  }
 }
 
 /** チェックリストが未生成なら生成する（予定詳細を開いたときの遅延生成）。 */
 export async function ensureChecklistForEvent(eventId: string): Promise<void> {
+  const ev = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { listCleared: true },
+  });
+  // ユーザーが意図的に全部消した予定は生成しない。
+  if (ev?.listCleared) {
+    await applyLearnedListReminder(eventId);
+    return;
+  }
   const count = await prisma.checklistItem.count({ where: { eventId } });
   if (count === 0) await generateAndSaveChecklist(eventId);
   else await applyLearnedListReminder(eventId);
@@ -163,17 +194,18 @@ async function copyChecklistItems(
     }),
     prisma.event.findUnique({
       where: { id: fromEventId },
-      select: { sectionOrder: true },
+      select: { sectionOrder: true, listCleared: true },
     }),
   ]);
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({ where: { eventId: toEventId } }),
-    // 枠（セクション）の構成もコピー元に合わせる（同名グループの整合）
+    // 枠（セクション）の構成と「全消し」状態もコピー元に合わせる（同名グループの整合）
     prisma.event.update({
       where: { id: toEventId },
       data: {
         sectionOrder:
           fromEvent?.sectionOrder ?? '["task","belonging"]',
+        listCleared: fromEvent?.listCleared ?? false,
       },
     }),
     ...(src.length > 0
@@ -315,6 +347,7 @@ export async function primeNotifiedChecklists(
       notifiedAt: { not: null },
       eventDatetime: { gte: new Date() },
       checklistItems: { none: {} },
+      listCleared: false, // ユーザーが全部消した予定は先行生成もしない
     },
     orderBy: { eventDatetime: "asc" },
     take: limit,

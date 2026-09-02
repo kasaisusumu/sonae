@@ -100,7 +100,7 @@ export async function EventFailureLog({
 
       <FailureListEditor
         eventId={eventId}
-        label="この予定の失敗ログ"
+        label="考えられる失敗"
         initial={linked as FLRow[]}
         others={otherCandidates}
       />

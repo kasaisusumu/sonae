@@ -283,7 +283,7 @@ export async function ChecklistSection({
             if (key === FAILURE_LOG_KEY) {
               return {
                 key,
-                label: "この予定の失敗ログ",
+                label: "考えられる失敗",
                 builtin: true, // 名前変更・削除はさせない
                 node: (
                   <Suspense fallback={null}>

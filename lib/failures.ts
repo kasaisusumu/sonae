@@ -499,8 +499,8 @@ export async function notifyPostEventFailureChecks(
         ? `${top.description.slice(0, 24)}…`
         : top.description;
     await sendPushToUser(userId, {
-      title: `「${e.title}」おつかれさまでした`,
-      body: `前に${e.category?.name ?? "この種類"}で「${short}」がありました。今回は防げましたか？`,
+      title: `${e.title}、おつかれさまでした 🍵`,
+      body: `前に「${short}」がありました。今回はどうでしたか？ タップして、防げた／防げなかったを選ぶだけでOKです。`,
       url: `/events/${e.id}#failure-check`,
       tag: `failcheck-${e.id}`,
     });

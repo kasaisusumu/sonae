@@ -46,10 +46,10 @@ export async function EventFailureLog({
       open={linked.length > 0}
     >
       <summary className="cursor-pointer list-none text-sm font-semibold text-muted">
-        この予定の失敗ログ（{linked.length}）
+        📓 この予定の失敗ログ（{linked.length}）
       </summary>
       <p className="mt-2 text-xs text-muted">
-        責めるためではなく、次に似た予定が来たときに先回りするためです。失敗内容・金額・日付・結果は、この予定のページからいつでも直せます。金額は分からなければ空でOK。
+        次に似た予定が来たときに先回りするためのメモです。内容・金額・日付・結果は、ここからいつでも直せます。金額は分からなければ空でOK。
       </p>
 
       {/* 紐づく失敗ログ：その場で編集（失敗内容・金額・日付・結果／状態）・削除 */}

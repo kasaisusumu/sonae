@@ -9,6 +9,7 @@ import {
 import { formatDateOnly, formatYen } from "@/lib/format";
 import { formatLead } from "@/lib/lead-time";
 import { getUserTemplates } from "@/lib/templates";
+import { InfoHint } from "@/app/components/info-hint";
 import { type SearchEntry } from "./learning-search";
 import { LearningExplorer } from "./learning-explorer";
 import { LazyLeaf } from "./lazy-leaf";
@@ -146,15 +147,20 @@ function EventLeaf({
       {/* 失敗ログは一番上に。 */}
       <FailureList failures={leaf.failures} />
       {leaf.mergedCount > 1 && !leaf.cleared && (
-        <p className="mb-2 mt-3 text-[11px] text-muted">
-          同じ名前の未編集の予定 {leaf.mergedCount} 件をまとめています。ここでの編集は
-          その全部に反映され、別の 1 件を違う内容に編集するとそこで分かれます。
+        <p className="mb-2 mt-3 flex items-center gap-1 text-[11px] text-muted">
+          同じ名前の未編集 {leaf.mergedCount} 件をまとめて編集
+          <InfoHint>
+            ここでの編集はその全部に反映されます。別の1件を違う内容に編集すると、
+            そこで分かれます。
+          </InfoHint>
         </p>
       )}
       {leaf.cleared ? (
-        <p className="mt-3 rounded-lg bg-surface-muted p-3 text-xs text-muted">
-          この予定は準備リストを空にしています（内容なしとして学習）。
-          似た予定でも何も出しません。同じ名前でも、中身のある予定とは分けて覚えています。
+        <p className="mt-3 flex items-center gap-1 rounded-lg bg-surface-muted p-3 text-xs text-muted">
+          準備リストは空（内容なしとして学習）
+          <InfoHint>
+            似た予定でも何も出しません。同じ名前でも、中身のある予定とは分けて覚えています。
+          </InfoHint>
         </p>
       ) : (
         <div className="mt-3">
@@ -266,13 +272,13 @@ export default async function LearningTreePage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">学習内容</h1>
-        <p className="mt-1 text-sm text-muted">
-          自動で覚えた「どの予定でどんな準備リストになるか」と、名前を付けて保存したテンプレートを確認・編集できます。
-          上の検索は両方をまとめて探します。
-        </p>
-      </div>
+      <h1 className="flex items-center gap-1.5 text-xl font-semibold">
+        学習内容
+        <InfoHint>
+          自動で覚えた「どの予定でどんな準備リストになるか」と、名前を付けて保存した
+          テンプレートを確認・編集できます。上の検索は両方をまとめて探します。
+        </InfoHint>
+      </h1>
 
       <LearningExplorer
         entries={searchEntries}

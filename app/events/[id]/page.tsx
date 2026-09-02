@@ -12,6 +12,7 @@ import {
 } from "./checklist-section";
 import { FailureSuggestions } from "./failure-suggestions";
 import { ScrollToHash } from "./scroll-to-hash";
+import { InfoHint } from "@/app/components/info-hint";
 
 // 初回表示時に準備リストを OpenAI で生成することがあるため長めに
 export const maxDuration = 60;
@@ -78,7 +79,12 @@ export default async function EventDetailPage({
         <FailureSuggestions eventId={event.id} />
       </Suspense>
 
-      <h2 className="pt-1 text-lg font-semibold tracking-tight">準備リスト</h2>
+      <h2 className="flex items-center gap-1.5 pt-1 text-lg font-semibold tracking-tight">
+        準備リスト
+        <InfoHint>
+          追加・削除・通知タイミングの変更は、この種類の予定の学習に使われます。
+        </InfoHint>
+      </h2>
 
       <Suspense fallback={<ChecklistSectionSkeleton />}>
         <ChecklistSection

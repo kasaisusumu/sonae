@@ -249,7 +249,6 @@ function EventRow({
               </span>
             </div>
           )}
-          <p className="mt-1 text-[11px] text-teal-dark">準備を開く →</p>
         </div>
         {/* z-20 でリンクより手前。タップしても遷移しない */}
         <div className="relative z-20">

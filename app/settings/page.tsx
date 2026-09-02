@@ -13,6 +13,7 @@ import { formatDateOnly, formatDateTime, formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmLink } from "@/app/components/confirm-link";
 import { PushControls } from "@/app/components/push-controls";
+import { InfoHint } from "@/app/components/info-hint";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -46,30 +47,23 @@ export default async function SettingsPage() {
         </p>
       </section>
 
-      <section
-        data-coach="settings-google"
-        className="rounded-2xl bg-surface p-5"
-      >
+      <section data-coach="settings-google" className="rounded-2xl bg-surface p-5">
         <h2 className="text-sm font-semibold text-muted">Google カレンダー連携</h2>
         {account ? (
           <div className="mt-3 space-y-3 text-sm">
             <p>
-              接続中: <span className="font-medium">{account.googleAccountEmail}</span>
+              接続中:{" "}
+              <span className="font-medium">{account.googleAccountEmail}</span>
             </p>
             <p className="text-xs text-muted">
               {account.lastSyncedAt
-                ? `最終取り込み: ${formatDateTime(account.lastSyncedAt)}`
-                : "まだ取り込んでいません"}
-              {account.writeDescriptionEnabled
-                ? " ・ 読み取り＋説明欄書き込み"
-                : " ・ 読み取りのみ"}
+                ? `最終取り込み ${formatDateTime(account.lastSyncedAt)}`
+                : "未取り込み"}
             </p>
             {calendars.length > 0 && (
               <form action={setCalendarId} className="pt-1">
                 <label className="block text-xs text-muted">
                   同期するカレンダー
-                  {/* カレンダー名がどれだけ長くても、min-w-0 で select 側を縮め、
-                      入りきらなければ「変更」ボタンを下段へ折り返す（はみ出し防止）。 */}
                   <div className="mt-1 flex flex-wrap items-stretch gap-2">
                     <select
                       name="calendarId"
@@ -96,64 +90,56 @@ export default async function SettingsPage() {
             <div className="flex flex-wrap gap-3 pt-1">
               <ConfirmLink
                 href="/api/auth/google"
-                message="Google カレンダーに接続し直します（別の Google アカウントにも切り替えられます）。よろしいですか？"
+                message="Google カレンダーに接続し直します（別アカウントにも切り替え可）。よろしいですか？"
                 className="rounded-lg bg-surface-muted px-4 py-2 text-sm font-medium no-underline hover:bg-border"
               >
-                再接続する
+                再接続
               </ConfirmLink>
               <form action={disconnectGoogle}>
                 <SubmitButton
                   variant="ghost"
-                  confirm="Google カレンダーの連携を解除しますか？（取り込んだ予定と学習内容は残ります）"
+                  confirm="連携を解除しますか？（取り込んだ予定と学習内容は残ります）"
                 >
-                  連携を解除する
+                  連携を解除
                 </SubmitButton>
               </form>
             </div>
 
-            {/* 説明欄への書き込み（オプトイン） */}
             <div
               data-coach="settings-desc"
-              className="rounded-lg bg-surface-muted p-3"
+              className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-surface-muted p-3"
             >
-              <p className="text-xs font-semibold">
-                予定の説明欄に準備リストを書き込む
-              </p>
-              <p className="mt-1 text-[11px] text-muted">
-                既定でオンです。連携より前からあった予定は、アプリで準備リストを
-                1回編集するか「確認しました」を押してから書き込まれます。
-                予定の日時・タイトルは変更しません。
-              </p>
-              {account.writeDescriptionEnabled ? (
-                <div className="mt-1 space-y-2">
-                  <p className="text-xs text-muted">
-                    オンです。準備リスト（リンク＋箇条書き）を予定の説明欄に自動で追記・更新します。
-                    元の説明文は残し、「--- 私のマネージャー ---」ブロックだけ差し替えます。
-                  </p>
+              <span className="text-xs font-semibold">
+                説明欄に準備リストを書き込む
+              </span>
+              <InfoHint>
+                予定の説明欄の末尾に「準備リストのリンク＋箇条書き」を追記・更新します。
+                日時・タイトル・元の説明文は変更しません。連携より前の予定は、
+                アプリで1回編集するか「確認しました」を押してから書き込まれます。
+              </InfoHint>
+              <span className="text-xs text-muted">
+                {account.writeDescriptionEnabled ? "オン" : "オフ"}
+              </span>
+              <span className="ml-auto">
+                {account.writeDescriptionEnabled ? (
                   <form action={disableDescriptionWrite}>
                     <SubmitButton
                       variant="ghost"
-                      confirm="説明欄への書き込みをオフにします。すでに書き込んだ予定の説明欄はそのまま残ります。よろしいですか？"
+                      confirm="オフにします。書き込み済みの説明欄はそのまま残ります。よろしいですか？"
                     >
                       オフにする
                     </SubmitButton>
                   </form>
-                </div>
-              ) : (
-                <div className="mt-1 space-y-2">
-                  <p className="text-xs text-muted">
-                    いまオフです。オンにすると予定の説明欄に準備リストを追記します。
-                    Google で「予定の編集」権限が未許可の場合は、追加許可（再認証1回）が必要です。
-                  </p>
+                ) : (
                   <ConfirmLink
                     href="/api/auth/google?write=1"
-                    message="予定の説明欄への書き込みをオンにします。必要なら Google で「予定の編集」権限の追加許可（再認証1回）を行います。進めますか？"
+                    message="オンにします。必要なら Google で「予定の編集」権限の追加許可（再認証1回）を行います。進めますか？"
                     className="inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface no-underline hover:opacity-90"
                   >
                     オンにする
                   </ConfirmLink>
-                </div>
-              )}
+                )}
+              </span>
             </div>
           </div>
         ) : (
@@ -170,32 +156,31 @@ export default async function SettingsPage() {
         )}
       </section>
 
-      <section
-        data-coach="settings-notify"
-        className="rounded-2xl bg-surface p-5"
-      >
-        <h2 className="text-sm font-semibold text-muted">通知</h2>
-        <p className="mt-2 text-sm text-muted">
-          Google カレンダーに新しい予定が追加されると、準備リストを確認するよう通知します（数分おきに確認）。
-        </p>
+      <section data-coach="settings-notify" className="rounded-2xl bg-surface p-5">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-muted">
+          通知
+          <InfoHint>
+            新しい予定の取り込み、準備リストのリマインド、予定のあとの
+            「失敗はあった？」を、必要なときだけ送ります（数分おきに確認）。
+          </InfoHint>
+        </h2>
         {vapidPublicKey ? (
           <PushControls publicKey={vapidPublicKey} />
         ) : (
           <p className="mt-2 text-sm text-muted">
-            この環境では通知が未設定です（VAPID 鍵が未登録）。
+            この環境では通知が未設定です。
           </p>
         )}
       </section>
 
       <section className="rounded-2xl bg-surface p-5">
-        <h2 className="text-sm font-semibold text-muted">フィードバック（WTP アンケート）</h2>
-        <p className="mt-2 text-sm text-muted">
-          このアプリが「自分に合ってきた」と感じますか？ 月いくらなら払ってもよいと思うか教えてください。
-        </p>
-        <form action={submitFeedback} className="mt-4 grid gap-3 sm:grid-cols-2">
+        <h2 className="text-sm font-semibold text-muted">
+          フィードバック（WTP アンケート）
+        </h2>
+        <form action={submitFeedback} className="mt-3 grid gap-3 sm:grid-cols-2">
           <input type="hidden" name="screen" value="/settings" />
           <label className="text-sm">
-            <span className="text-muted">月いくらなら払いたい？（円）</span>
+            <span className="text-muted">月いくらなら払ってもよい？（円）</span>
             <input
               type="number"
               name="wtpYen"
@@ -209,7 +194,7 @@ export default async function SettingsPage() {
             <span className="text-muted">ひとこと（任意）</span>
             <input
               name="comment"
-              placeholder="ここが良かった / ここが惜しい"
+              placeholder="良かった点 / 惜しい点"
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
             />
           </label>
@@ -235,7 +220,7 @@ export default async function SettingsPage() {
         <form action={logout}>
           <SubmitButton
             variant="ghost"
-            confirm="ログアウトします。データは保存され、同じ Google アカウントで入り直せば元に戻ります。よろしいですか？"
+            confirm="ログアウトします。同じ Google アカウントで入り直せば元に戻ります。よろしいですか？"
           >
             ログアウト
           </SubmitButton>

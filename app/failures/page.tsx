@@ -16,6 +16,7 @@ import {
 } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
+import { InfoHint } from "@/app/components/info-hint";
 import { FailureQuickInput } from "./failure-quick-input";
 
 function todayValue(): string {
@@ -210,13 +211,13 @@ export default async function FailuresPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">失敗ログ</h1>
-        <p className="mt-1.5 text-sm text-muted">
-          うっかりは誰にでもあります。責めるための記録ではありません。
-          残しておくと、似た予定が発生した時に私が思い出させます。
-        </p>
-      </div>
+      <h1 className="flex items-center gap-1.5 text-xl font-semibold tracking-tight">
+        失敗ログ
+        <InfoHint>
+          うっかりを残しておくと、似た予定が発生した時に私が思い出させます。
+          責めるための記録ではありません。
+        </InfoHint>
+      </h1>
 
       {/* ── 記入：まずは「ひとこと」だけでOK ── */}
       <section
@@ -225,10 +226,10 @@ export default async function FailuresPage() {
       >
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           ✍️ ひとこと記録する
+          <InfoHint>
+            よくあるものはボタンで一発。内容・金額・日付は必須（概算でOK、あとから直せます）。
+          </InfoHint>
         </h2>
-        <p className="mt-1 text-xs text-muted">
-          よくあるものはボタンで一発。内容・金額・日付は必須です（あとから直せます）。
-        </p>
         <form action={createFailureLog} className="mt-3 space-y-3">
           <FailureQuickInput />
 
@@ -269,18 +270,13 @@ export default async function FailuresPage() {
                   defaultValue=""
                   className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
                 >
-                  <option value="">
-                    — 予定に紐づけない（カテゴリ全体の記録）—
-                  </option>
+                  <option value="">— 紐づけない（カテゴリ全体の記録）—</option>
                   {events.map((e) => (
                     <option key={e.id} value={e.id}>
                       {formatDateOnly(e.eventDatetime)} {e.title}
                     </option>
                   ))}
                 </select>
-                <span className="mt-1 block text-[11px]">
-                  紐づけると、その予定に似た予定でだけ先回りします。
-                </span>
               </label>
               <label className="text-xs text-muted">
                 関連カテゴリ
@@ -314,18 +310,16 @@ export default async function FailuresPage() {
           <>
             {unreviewed.length > 0 && (
               <div className="space-y-2 rounded-2xl border border-border bg-surface p-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-foreground">
-                    🤔 ふりかえり（{unreviewed.length}件）
-                  </h3>
-                  <p className="mt-0.5 text-[11px] text-muted">
-                    終わった予定、どうでしたか？ ワンタップで大丈夫です。「防げた」にしたものだけが
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  🤔 ふりかえり（{unreviewed.length}件）
+                  <InfoHint>
+                    終わった予定、どうでしたか？ ワンタップでOK。「防げた」にしたものだけが
                     <a href="/savings" className="underline">
                       節約額
                     </a>
                     に積み上がります。
-                  </p>
-                </div>
+                  </InfoHint>
+                </h3>
                 <ul className="space-y-2">
                   {unreviewed.map((l) => (
                     <FailureRow key={l.id} log={l} />

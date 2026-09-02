@@ -11,6 +11,7 @@ import {
   toggleChecklistItemDone,
 } from "@/app/actions";
 import { LEAD_PRESETS, formatLead, isLeadPreset } from "@/lib/lead-time";
+import { InfoHint } from "@/app/components/info-hint";
 import { ItemImages, Linkify, type ItemImage } from "./item-media";
 
 interface Item {
@@ -869,8 +870,12 @@ export function ChecklistEditor({
       )}
       {bulkNote && <p className="mt-2 text-xs text-teal-dark">{bulkNote}</p>}
 
-      <p className="mt-1.5 text-[11px] text-muted">
-        文言・追加・削除は自動保存。∨で通知・メモ・リンク・写真（メモは「メモを保存」で保存）、✕で削除。
+      <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted">
+        文言・追加・削除は自動保存
+        <InfoHint>
+          ∨ で通知タイミング・メモ・リンク・写真。メモは「メモを保存」で保存。
+          ✕ で削除。
+        </InfoHint>
       </p>
 
       {modal && (

@@ -18,6 +18,7 @@ import {
   resolveSections,
   sectionLabel,
 } from "@/lib/sections";
+import { InfoHint } from "@/app/components/info-hint";
 import { ChecklistEditor } from "./checklist-editor";
 import { EventFailureLog } from "./event-failure-log";
 import { SuggestionList } from "./suggestion-list";
@@ -246,10 +247,6 @@ export async function ChecklistSection({
       )}
 
       <section className="space-y-4" data-coach="checklist">
-        <p className="text-xs text-muted">
-          追加・削除・タイミング変更は、この種類の予定の学習に使われます。
-        </p>
-
         {/* 小さめのボタン2つを横並び。押すとポップアップで開く。 */}
         <div
           data-coach="list-reminder"
@@ -267,8 +264,11 @@ export async function ChecklistSection({
 
         {unreviewed && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-muted px-4 py-3">
-            <p className="text-xs text-foreground">
-              このリストはまだ確認されていません。中身を見て問題なければ「確認しました」を押してください（編集しても消えます）。
+            <p className="flex items-center gap-1.5 text-xs text-foreground">
+              このリストは未確認です
+              <InfoHint>
+                中身を見て問題なければ「確認しました」を押してください。編集しても消えます。
+              </InfoHint>
             </p>
             <form action={markListReviewed}>
               <input type="hidden" name="eventId" value={event.id} />

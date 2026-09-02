@@ -82,14 +82,10 @@ export async function EventFailureLog({
           閉じる
         </span>
       </summary>
-      <p className="mt-2 px-1 text-xs text-muted">
-        似た予定が発生した時に私が思い出させます。内容・金額・日付・結果は、ここからいつでも直せます。
-      </p>
-
       {askOutcome &&
         (ev?.noFailureAt ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-surface-muted p-3 text-xs text-muted">
-            <span>この予定は「失敗はなかった」で記録済みです。</span>
+            <span>「失敗はなかった」で記録済み。</span>
             <form action={markNoFailure}>
               <input type="hidden" name="eventId" value={eventId} />
               <input type="hidden" name="undo" value="1" />
@@ -104,7 +100,7 @@ export async function EventFailureLog({
               この予定、うっかりはありましたか？
             </p>
             <p className="mt-0.5 text-[11px] text-muted">
-              あったら下の欄に一言。なければワンタップでどうぞ。
+              あったら下の欄に一言。なければワンタップで。
             </p>
             <form action={markNoFailure} className="mt-2">
               <input type="hidden" name="eventId" value={eventId} />

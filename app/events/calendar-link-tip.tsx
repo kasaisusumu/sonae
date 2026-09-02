@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { InfoHint } from "@/app/components/info-hint";
 
 const KEY = "mm_caltip_dismissed_v1";
 
@@ -55,17 +56,15 @@ export function CalendarLinkTip({ writeEnabled }: { writeEnabled: boolean }) {
           🔗
         </span>
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
+          <h2 className="flex items-center gap-1.5 text-[15px] font-semibold tracking-tight text-foreground">
             カレンダーの説明欄から、そのまま準備リストへ
+            <InfoHint>
+              各予定の説明欄に「準備リスト」のリンクを自動で書き込みます。カレンダーで
+              そのリンクをタップすると、その予定の準備リストがそのまま開きます。
+              連携より前の予定は、アプリで1回編集するか「確認しました」を押すまで
+              書き込まれません（勝手に書き換えないため）。
+            </InfoHint>
           </h2>
-          <p className="mt-1.5 text-sm text-muted">
-            各予定の説明欄に「準備リスト」のリンクを自動で書き込みます。
-            スマホやパソコンのカレンダーでそのリンクをタップすると、
-            <strong className="text-foreground">
-              その予定の準備リストのページがそのまま開きます
-            </strong>
-            。アプリを探して開き直す必要はありません。
-          </p>
 
           <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-surface p-3 text-[11px] leading-relaxed text-muted">
             <p>（予定のメモ）</p>
@@ -80,19 +79,13 @@ export function CalendarLinkTip({ writeEnabled }: { writeEnabled: boolean }) {
             <p>☐ 集合時間を確認</p>
           </div>
 
-          <p className="mt-2.5 text-xs text-muted">
-            ※ 連携より前からあった予定は、アプリで準備リストを1回編集するか
-            「確認しました」を押すまで、説明欄には書き込まれません
-            （勝手に書き換えないための仕様です）。
-          </p>
-
           {!writeEnabled && (
             <p className="mt-2.5 text-xs text-warn">
               いまは説明欄への書き込みがオフです。
               <Link href="/settings" className="underline">
                 設定
               </Link>
-              でオンにすると使えます。
+              でオンに。
             </p>
           )}
         </div>

@@ -49,10 +49,7 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
             </div>
             <p className="mt-1 text-4xl font-bold">{formatYen(EXAMPLE_YEN)}</p>
             <p className="mt-1.5 text-xs text-surface/65">
-              これは<strong className="text-surface">例</strong>です。
-              「傘を忘れてコンビニで買った」→ 予定のあとに「防げた」を選ぶと、
-              避けられた {formatYen(EXAMPLE_YEN)} がこの数字になります。
-              最初の1件を記録すると、例は消えて本物の数字に変わります。
+              これは<strong className="text-surface">例</strong>。1件記録すると本物の数字に変わります。
             </p>
           </>
         )}
@@ -129,7 +126,7 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
         </Link>
 
         <p className="mt-3 text-[11px] text-surface/55">
-          ※ 金額はすべて<strong>推定値</strong>です（あなたが書いた損失額のうち「防げた」の合計。自動判定はしていません）。
+          ※ すべて<strong>推定値</strong>（「防げた」と選んだ損失額の合計・自動判定なし）
         </p>
       </div>
 

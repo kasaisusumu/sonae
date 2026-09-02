@@ -4,7 +4,6 @@ import { useState, type ReactNode } from "react";
 import { LearningSearch, type SearchEntry } from "./learning-search";
 
 type View = "tree" | "templates";
-type TplKind = "task" | "belonging";
 
 function scrollToAnchor(anchor: string) {
   const el = document.getElementById(anchor);
@@ -32,7 +31,7 @@ function Seg({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+      className={`flex-1 rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors ${
         active
           ? "bg-foreground text-surface shadow-sm"
           : "text-muted hover:text-foreground"
@@ -52,30 +51,20 @@ function Seg({
 export function LearningExplorer({
   entries,
   tree,
-  templatesTask,
-  templatesBelonging,
+  templates,
   hasTree,
-  taskCount,
-  belongingCount,
+  templateCount,
 }: {
   entries: SearchEntry[];
   tree: ReactNode;
-  templatesTask: ReactNode;
-  templatesBelonging: ReactNode;
+  templates: ReactNode;
   hasTree: boolean;
-  taskCount: number;
-  belongingCount: number;
+  templateCount: number;
 }) {
   const [view, setView] = useState<View>(hasTree ? "tree" : "templates");
-  const [tplKind, setTplKind] = useState<TplKind>("task");
 
   function handlePick(e: SearchEntry) {
-    if (e.kind === "template") {
-      setView("templates");
-      if (e.tplKind) setTplKind(e.tplKind);
-    } else {
-      setView("tree");
-    }
+    setView(e.kind === "template" ? "templates" : "tree");
     // タブが切り替わって対象が表示されてからスクロールする
     requestAnimationFrame(() =>
       requestAnimationFrame(() => scrollToAnchor(e.anchor)),
@@ -88,16 +77,16 @@ export function LearningExplorer({
         <LearningSearch entries={entries} onPick={handlePick} />
       </div>
 
-      {/* 学習内容 / 名前付きテンプレート */}
+      {/* 学習内容 / 名前付きテンプレート（画面幅を半分ずつ） */}
       <div
         data-coach="learning-tabs"
-        className="inline-flex rounded-xl bg-surface p-1"
+        className="flex w-full gap-1 rounded-xl bg-surface p-1"
       >
         <Seg active={view === "tree"} onClick={() => setView("tree")}>
           学習内容
         </Seg>
         <Seg active={view === "templates"} onClick={() => setView("templates")}>
-          名前付きテンプレート
+          名前付きテンプレート（{templateCount}）
         </Seg>
       </div>
 
@@ -115,24 +104,7 @@ export function LearningExplorer({
       </div>
 
       {/* 名前付きテンプレート */}
-      <div hidden={view !== "templates"} className="space-y-3">
-        <div className="inline-flex rounded-xl bg-surface p-1">
-          <Seg
-            active={tplKind === "task"}
-            onClick={() => setTplKind("task")}
-          >
-            準備すること（{taskCount}）
-          </Seg>
-          <Seg
-            active={tplKind === "belonging"}
-            onClick={() => setTplKind("belonging")}
-          >
-            持ち物（{belongingCount}）
-          </Seg>
-        </div>
-        <div hidden={tplKind !== "task"}>{templatesTask}</div>
-        <div hidden={tplKind !== "belonging"}>{templatesBelonging}</div>
-      </div>
+      <div hidden={view !== "templates"}>{templates}</div>
     </div>
   );
 }

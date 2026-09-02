@@ -12,7 +12,7 @@ import { type SearchEntry } from "./learning-search";
 import { LearningExplorer } from "./learning-explorer";
 import { LazyLeaf } from "./lazy-leaf";
 import { LeafBody, type LeafItem, type LeafSectionData } from "./leaf-body";
-import { KindGroup } from "./templates-panel";
+import { TemplatesGroup } from "./templates-panel";
 import {
   FailureListEditor,
   type FLRow,
@@ -259,13 +259,9 @@ export default async function LearningTreePage() {
       <LearningExplorer
         entries={searchEntries}
         hasTree={categories.length > 0}
-        taskCount={templates.filter((t) => t.kind === "task").length}
-        belongingCount={templates.filter((t) => t.kind === "belonging").length}
+        templateCount={templates.length}
         tree={tree}
-        templatesTask={<KindGroup kind="task" templates={templates} />}
-        templatesBelonging={
-          <KindGroup kind="belonging" templates={templates} />
-        }
+        templates={<TemplatesGroup templates={templates} />}
       />
     </div>
   );

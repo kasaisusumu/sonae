@@ -16,16 +16,22 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
   return (
     <details
       id={`tpl-${t.id}`}
-      className="scroll-mt-24 rounded-xl bg-background p-3 [&_summary::-webkit-details-marker]:hidden"
+      className="group scroll-mt-24 rounded-xl bg-background p-3 [&_summary::-webkit-details-marker]:hidden"
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium">
-        <span>
+        <span className="min-w-0">
           {t.name}
+          <span className="ml-1 font-normal text-muted">
+            （{KIND_LABEL[t.kind]}）
+          </span>
           <span className="ml-1.5 text-xs font-normal text-muted">
             {t.items.length}項目
           </span>
         </span>
-        <span className="text-xs text-teal-dark">開いて編集</span>
+        <span className="shrink-0 text-xs text-teal-dark">
+          <span className="group-open:hidden">開いて編集</span>
+          <span className="hidden group-open:inline">閉じる</span>
+        </span>
       </summary>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -76,30 +82,25 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
   );
 }
 
-export function KindGroup({
-  kind,
-  templates,
-}: {
-  kind: "task" | "belonging";
-  templates: TemplateDetail[];
-}) {
-  const list = templates.filter((t) => t.kind === kind);
+/** 名前付きテンプレート。準備すること／持ち物をまとめて 1 リストで表示する。 */
+export function TemplatesGroup({ templates }: { templates: TemplateDetail[] }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted">
-        よく使う{KIND_LABEL[kind]}に名前を付けて保存。予定ページの「📋 テンプレート・他の予定から」で
-        どの予定にも追加できます。
+        よく使う準備すること・持ち物に名前を付けて保存。予定ページの
+        「📋 テンプレート・他の予定から」でどの予定にも追加できます。名前の横の
+        （　）は、その予定でどの枠に入るかです。
       </p>
 
-      {list.length === 0 && (
+      {templates.length === 0 && (
         <p className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">
           まだありません。下の「＋ 新しいリストを作る」から作成できます。
         </p>
       )}
 
-      {list.length > 0 && (
+      {templates.length > 0 && (
         <div className="space-y-1.5">
-          {list.map((t) => (
+          {templates.map((t) => (
             <TemplateCard key={t.id} t={t} />
           ))}
         </div>
@@ -108,10 +109,31 @@ export function KindGroup({
       {/* 新規作成（一括貼り付け対応） */}
       <details className="rounded-xl bg-background p-3 [&_summary::-webkit-details-marker]:hidden">
         <summary className="cursor-pointer list-none text-xs font-medium text-teal-dark">
-          ＋ {KIND_LABEL[kind]}の新しいリストを作る
+          ＋ 新しいリストを作る
         </summary>
         <form action={createListTemplate} className="mt-2 space-y-2">
-          <input type="hidden" name="kind" value={kind} />
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-muted">どの枠：</span>
+            <label className="flex items-center gap-1">
+              <input
+                type="radio"
+                name="kind"
+                value="task"
+                defaultChecked
+                className="accent-[var(--foreground)]"
+              />
+              準備すること
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="radio"
+                name="kind"
+                value="belonging"
+                className="accent-[var(--foreground)]"
+              />
+              持ち物
+            </label>
+          </div>
           <input
             name="name"
             required
@@ -131,4 +153,3 @@ export function KindGroup({
     </div>
   );
 }
-

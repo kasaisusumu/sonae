@@ -120,10 +120,28 @@ export function FailureListEditor({
   const [adding, setAdding] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [pickOpen, setPickOpen] = useState(false);
+  // 学習内容ページ：一度でも「編集」を押したら編集モード（追加ボタンも出す）。
+  const [editMode, setEditMode] = useState(false);
 
-  // ── 学習内容ページ用：昔どおり「ただ赤いだけ」の一覧。追加ボタンは出さない。 ──
+  // ── 学習内容ページ用：昔どおり「ただ赤いだけ」の一覧。 ──
+  //   「編集」を押すとその行が編集でき、以降「＋ 追加」も出る。
   if (variant === "warn") {
-    if (initial.length === 0) return null;
+    if (initial.length === 0 && !editMode) {
+      return (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => {
+              setEditMode(true);
+              setAdding(true);
+            }}
+            className="rounded-md border border-dashed border-border px-2.5 py-1 text-[11px] text-muted hover:border-foreground/40 hover:text-foreground"
+          >
+            ＋ 失敗ログを追加
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="mt-3">
         <p className="text-[11px] font-semibold text-warn">
@@ -149,7 +167,10 @@ export function FailureListEditor({
                   <span>・ {m.label}</span>
                   <button
                     type="button"
-                    onClick={() => setOpenId(open ? null : r.id)}
+                    onClick={() => {
+                      setEditMode(true);
+                      setOpenId(open ? null : r.id);
+                    }}
                     className="ml-auto rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] text-muted hover:text-foreground"
                   >
                     {open ? "閉じる" : "編集"}
@@ -164,6 +185,50 @@ export function FailureListEditor({
             );
           })}
         </ul>
+
+        {editMode &&
+          (adding ? (
+            <form
+              action={createFailureLog}
+              className="mt-2 space-y-2 rounded-lg border border-border bg-surface p-2"
+            >
+              <input type="hidden" name="eventId" value={eventId} />
+              <textarea
+                name="description"
+                required
+                rows={2}
+                placeholder="何が起きた？（例: 集合時間に遅刻した）"
+                className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="number"
+                  name="estimatedLossYen"
+                  min={0}
+                  step={100}
+                  placeholder="金額（円・任意）"
+                  className="w-36 rounded-md border bg-background px-2 py-1 text-xs"
+                  aria-label="金額"
+                />
+                <SubmitButton>記録する</SubmitButton>
+                <button
+                  type="button"
+                  onClick={() => setAdding(false)}
+                  className="text-[11px] text-muted underline hover:text-foreground"
+                >
+                  取消
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="mt-2 rounded-md border border-foreground bg-foreground px-3 py-1 text-[11px] font-medium text-surface hover:opacity-90"
+            >
+              ＋ 追加
+            </button>
+          ))}
       </div>
     );
   }

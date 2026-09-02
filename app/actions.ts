@@ -913,12 +913,16 @@ export async function deleteLearnedRule(ruleId: string): Promise<void> {
 export async function createFailureLog(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const description = String(formData.get("description") ?? "").trim();
-  const estimatedLossYen = parseYen(formData.get("estimatedLossYen"));
+  const rawAmount = formData.get("estimatedLossYen");
   const categoryName = String(formData.get("categoryName") ?? "").trim();
   const occurredAtRaw = String(formData.get("occurredAt") ?? "").trim();
   const eventId = String(formData.get("eventId") ?? "").trim() || null;
 
+  // 内容・金額・日付は必須（フォーム側でも required。ここは最後の砦）。
   if (!description) return;
+  if (rawAmount === null || String(rawAmount).trim() === "") return;
+  if (!occurredAtRaw) return;
+  const estimatedLossYen = parseYen(rawAmount);
 
   const linkedEvent = eventId
     ? await prisma.event.findFirst({
@@ -966,6 +970,10 @@ export async function createFailureLog(formData: FormData): Promise<void> {
   });
 
   revalidateAppViews(linkedEvent?.id);
+  if (linkedEvent) {
+    const eid = linkedEvent.id;
+    after(() => void syncEventDescription(eid));
+  }
 }
 
 /** 事後の警告で「今回もやってしまった」を1タップ記録（同じ内容で、この予定に紐づけて追記）。 */
@@ -1008,6 +1016,7 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
   }
 
   revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
 }
 
 /**
@@ -1112,8 +1121,16 @@ export async function attachFailureToEvent(formData: FormData): Promise<void> {
 export async function deleteFailureLog(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const id = String(formData.get("id") ?? "");
+  const log = await prisma.failureLog.findFirst({
+    where: { id, userId },
+    select: { eventId: true },
+  });
   await prisma.failureLog.deleteMany({ where: { id, userId } });
-  revalidateAppViews();
+  revalidateAppViews(log?.eventId ?? undefined);
+  if (log?.eventId) {
+    const eid = log.eventId;
+    after(() => void syncEventDescription(eid));
+  }
 }
 
 /**
@@ -1193,6 +1210,10 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
   }
 
   revalidateAppViews(log.eventId ?? undefined);
+  if (log.eventId) {
+    const eid = log.eventId;
+    after(() => void syncEventDescription(eid));
+  }
 }
 
 /**
@@ -1272,6 +1293,11 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
       where: { userId, failureLogId: id },
       data: { amountYen: effectiveAmount },
     });
+  }
+
+  if (log.eventId) {
+    const eid = log.eventId;
+    after(() => void syncEventDescription(eid));
   }
 
   // 結果を変えたら節約計上も合わせる（setFailureOutcome と同じ扱い）。
@@ -1393,6 +1419,7 @@ export async function markPrevented(formData: FormData): Promise<void> {
   });
 
   revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
 }
 
 /** 「防げた」の計上を取り消す。他に計上が残っていなければ振り返り結果も未選択に戻す。 */
@@ -1413,6 +1440,7 @@ export async function undoPrevented(formData: FormData): Promise<void> {
     });
   }
   revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
 }
 
 // ─────────────────────────────────────────────

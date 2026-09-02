@@ -8,6 +8,8 @@ import { CategorySelect } from "./category-select";
 import { CalendarLinkTip } from "./calendar-link-tip";
 import { CardLink } from "@/app/components/card-link";
 import { SubmitButton } from "@/app/components/submit-button";
+import { EventSearch, type SearchRow } from "./event-search";
+import { eventDateKey, eventDateLabel, eventHaystack } from "./haystack";
 
 export default async function EventsPage({
   searchParams,
@@ -33,8 +35,9 @@ export default async function EventsPage({
         source: true,
         categoryId: true,
         failureWarningAckAt: true,
+        memo: true,
         category: { select: { name: true } },
-        checklistItems: { select: { isDone: true } },
+        checklistItems: { select: { isDone: true, title: true } },
       },
     }),
     prisma.failureLog.findMany({
@@ -109,20 +112,27 @@ export default async function EventsPage({
             Google カレンダーに予定を入れると、ここに並びます。
           </div>
         ) : (
-          <ul className="space-y-2.5">
-            {upcoming.map((ev) => (
-              <EventRow
-                key={ev.id}
-                ev={ev}
-                categoryNames={categoryNames}
-                warn={
-                  !ev.failureWarningAckAt &&
-                  ev.categoryId !== null &&
-                  riskyCategoryIds.has(ev.categoryId)
-                }
-              />
-            ))}
-          </ul>
+          <EventSearch
+            rows={upcoming.map(
+              (ev): SearchRow => ({
+                id: ev.id,
+                haystack: eventHaystack(ev, now),
+                dateKey: eventDateKey(ev.eventDatetime),
+                dateLabel: eventDateLabel(ev.eventDatetime, now),
+                node: (
+                  <EventRow
+                    ev={ev}
+                    categoryNames={categoryNames}
+                    warn={
+                      !ev.failureWarningAckAt &&
+                      ev.categoryId !== null &&
+                      riskyCategoryIds.has(ev.categoryId)
+                    }
+                  />
+                ),
+              }),
+            )}
+          />
         )}
       </section>
 
@@ -167,7 +177,7 @@ function EventRow({
     eventDatetime: Date;
     source: string;
     category: { name: string } | null;
-    checklistItems: { isDone: boolean }[];
+    checklistItems: { isDone: boolean; title?: string | null }[];
   };
   categoryNames: string[];
   past?: boolean;

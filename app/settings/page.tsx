@@ -119,6 +119,10 @@ export default async function SettingsPage() {
               <p className="text-xs font-semibold">
                 予定の説明欄に準備リストを書き込む
               </p>
+              <p className="mt-1 text-[11px] text-muted">
+                連携より前からあった予定は、アプリで準備リストを1回編集するか
+                「確認しました」を押してからでないと、説明欄には書き込まれません。
+              </p>
               {account.writeDescriptionEnabled ? (
                 <div className="mt-1 space-y-2">
                   <p className="text-xs text-muted">

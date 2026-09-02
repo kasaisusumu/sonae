@@ -6,7 +6,12 @@ import {
   markNoFailure,
   updateFailureLog,
 } from "@/app/actions";
-import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
+import {
+  formatDateOnly,
+  formatYen,
+  jstToday,
+  toDateInputValue,
+} from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 
@@ -174,11 +179,11 @@ export async function EventFailureLog({
         </ul>
       )}
 
-      {/* 新しく記録する */}
+      {/* 新しく記録する（内容・金額・日付は必須） */}
       <form action={createFailureLog} className="mt-4 space-y-3">
         <input type="hidden" name="eventId" value={eventId} />
         <label className="block text-sm">
-          <span className="text-muted">新しく記録する — 何が起きた？</span>
+          <span className="text-muted">新しく記録する — 何が起きた？ ※必須</span>
           <textarea
             name="description"
             required
@@ -187,17 +192,30 @@ export async function EventFailureLog({
             className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
           />
         </label>
-        <label className="block text-sm sm:max-w-xs">
-          <span className="text-muted">推定損失額（円・任意）</span>
-          <input
-            type="number"
-            name="estimatedLossYen"
-            min={0}
-            step={100}
-            placeholder="なくてもOK"
-            className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
-          />
-        </label>
+        <div className="flex flex-wrap gap-3">
+          <label className="block text-sm">
+            <span className="text-muted">推定損失額（円）※必須</span>
+            <input
+              type="number"
+              name="estimatedLossYen"
+              required
+              min={0}
+              step={100}
+              placeholder="概算・0でも可"
+              className="mt-1 w-40 rounded-lg border bg-background px-3 py-2"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-muted">いつ？ ※必須</span>
+            <input
+              type="date"
+              name="occurredAt"
+              required
+              defaultValue={jstToday()}
+              className="mt-1 w-44 rounded-lg border bg-background px-3 py-2"
+            />
+          </label>
+        </div>
         <SubmitButton>記録する</SubmitButton>
       </form>
 

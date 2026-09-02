@@ -1,7 +1,16 @@
 import Link from "next/link";
 
+// 白黒ベース。色が出なくても「押せるボタン」と分かるよう、面＋枠線＋下線なしを明示。
 const CTA_CLASS =
-  "inline-flex w-full items-center justify-center rounded-xl bg-foreground px-6 py-3.5 text-[15px] font-semibold text-surface no-underline shadow-sm transition-opacity hover:opacity-90";
+  "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-foreground bg-foreground px-6 py-3.5 text-[15px] font-semibold !text-surface !no-underline shadow-sm transition-opacity hover:opacity-90";
+
+function CtaButton({ loggedout }: { loggedout: boolean }) {
+  return (
+    <a href="/api/auth/google" className={CTA_CLASS}>
+      {loggedout ? "Google で入り直す" : "Googleではじめる / ログイン"}
+    </a>
+  );
+}
 
 /** カレンダーの予定 → 準備リスト の小さな見本。 */
 function HeroMock() {
@@ -12,15 +21,15 @@ function HeroMock() {
         <p className="mt-1 text-sm font-medium text-foreground">大阪へ日帰り出張</p>
         <p className="text-[11px] text-muted">木 9:00〜</p>
       </div>
-      <div aria-hidden className="mx-auto text-lg text-teal-dark">
+      <div aria-hidden className="mx-auto text-lg text-muted">
         <span className="sm:hidden">↓</span>
         <span className="hidden sm:inline">→</span>
       </div>
-      <div className="rounded-xl border border-teal/25 bg-teal-soft p-3">
-        <p className="text-[10px] font-semibold text-teal-dark">
-          準備すること・持ち物
+      <div className="rounded-xl border border-foreground/15 bg-surface-muted p-3">
+        <p className="text-[10px] font-semibold text-foreground">
+          自動でできる準備リスト
         </p>
-        <ul className="mt-1 space-y-0.5 text-[11px] text-teal-dark/90">
+        <ul className="mt-1 space-y-0.5 text-[11px] text-muted">
           <li>☐ 交通チケットを確認する（前日）</li>
           <li>☐ 経費精算のメモを用意（当日朝）</li>
           <li>☐ モバイルバッテリー</li>
@@ -62,18 +71,18 @@ export function Landing({
     <div className="mx-auto max-w-xl">
       {/* ── ヒーロー ── */}
       <section className="text-center">
-        <span className="inline-block rounded-full bg-teal-soft px-3 py-1 text-[11px] font-medium text-teal-dark">
+        <span className="inline-block rounded-full border border-border bg-surface-muted px-3 py-1 text-[11px] font-medium text-muted">
           予定の“準備”を、あなた仕様で
         </span>
         <h1 className="mt-4 text-3xl font-semibold leading-tight tracking-tight text-foreground">
-          「準備すること」も「持ち物」も、
+          予定を書けば、
           <br className="hidden sm:block" />
-          予定から自動で。
+          準備リストができている。
         </h1>
         <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-muted">
-          カレンダーに予定を入れるだけ。あとは AI が下準備。
-          <br />
-          使うほど、<strong className="text-foreground">あなた専用の“準備マニュアル”</strong>
+          カレンダーに予定を入れるだけ。「準備すること」と「持ち物」を AI が用意します。
+          直すたびに学習して、
+          <strong className="text-foreground">あなた専用の準備マニュアル</strong>
           に育ちます。
         </p>
 
@@ -92,10 +101,12 @@ export function Landing({
         )}
 
         <div className="mx-auto mt-7 max-w-sm">
-          <a href="/api/auth/google" className={CTA_CLASS}>
-            {loggedout ? "Google で入り直す" : "Google ではじめる（約30秒）"}
-          </a>
+          <CtaButton loggedout={loggedout} />
           <p className="mt-2 text-xs text-muted">
+            はじめての方はこのままアカウントができます。使ったことがある方は、
+            同じ Google アカウントで入るだけ。どちらも同じボタンです。
+          </p>
+          <p className="mt-1 text-xs text-muted">
             カレンダーは読み取りのみ。書き込みは設定で ON にしたときだけ。
           </p>
           <p className="mt-2 text-[11px] leading-relaxed text-muted">
@@ -167,12 +178,12 @@ export function Landing({
       </section>
 
       {/* ── 音声入力 ── */}
-      <section className="mt-14 rounded-2xl border border-teal/20 bg-teal-soft p-5 text-center">
+      <section className="mt-14 rounded-2xl border border-border bg-surface-muted p-5 text-center">
         <div className="text-2xl">🎤</div>
-        <h2 className="mt-1 text-base font-semibold text-teal-dark">
+        <h2 className="mt-1 text-base font-semibold text-foreground">
           話すだけでも作れます
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-teal-dark/90">
+        <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-muted">
           スマホのキーボードのマイクで「着替えと充電器、宿の予約を確認して、
           駅で弁当を買う」と話すと、AI が
           <strong>準備すること・持ち物・その他の枠</strong>に振り分けて追加します。
@@ -192,9 +203,7 @@ export function Landing({
 
       {/* ── 最後の CTA ── */}
       <section className="mx-auto mt-12 max-w-sm text-center">
-        <a href="/api/auth/google" className={CTA_CLASS}>
-          {loggedout ? "Google で入り直す" : "Google ではじめる（約30秒）"}
-        </a>
+        <CtaButton loggedout={loggedout} />
         <p className="mt-3 text-[11px] leading-relaxed text-muted">
           カレンダーは読み取りのみ。予定の説明欄への書き込みは、設定で明示的に ON
           にしたときだけ行います。これは検証版です。

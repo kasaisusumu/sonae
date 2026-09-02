@@ -638,3 +638,120 @@ export async function suggestFailureLogsForEvent(
       score: s.score,
     }));
 }
+
+// ── Google カレンダー説明欄に書く「失敗まわり」の情報 ──────────────
+
+export interface EventDescriptionFailures {
+  isPast: boolean;
+  /** 終了前だけ: 予想される失敗の内容（過去に似た予定であったもの）。 */
+  anticipated: string[];
+  /** 終了後だけ: 今回は回避できた失敗（内容＋推定額）。 */
+  avoided: { text: string; yen: number }[];
+  /** 終了後だけ: 今回起きてしまった失敗の内容。 */
+  occurred: string[];
+}
+
+const EMPTY_DESC_FAILURES: EventDescriptionFailures = {
+  isPast: false,
+  anticipated: [],
+  avoided: [],
+  occurred: [],
+};
+
+/**
+ * 予定の説明欄に載せる失敗情報を集める。
+ * - 終了前: この予定に紐づく／予想される失敗を「予想される失敗」に。
+ * - 終了後: 結果が決まったものを「回避した失敗」「今回の失敗」に振り分ける。
+ *   どちらも中身が無ければ空配列（呼び出し側で見出しごと省く）。
+ */
+export async function getEventDescriptionFailures(
+  eventId: string,
+): Promise<EventDescriptionFailures> {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: { category: true },
+  });
+  if (!event) return EMPTY_DESC_FAILURES;
+
+  const past = isPastEvent(event);
+  const norm = (s: string) =>
+    s.trim().toLowerCase().replace(/\s+/g, "");
+
+  const [linked, savingsHere, warning] = await Promise.all([
+    prisma.failureLog.findMany({
+      where: { userId: event.userId, eventId },
+      orderBy: { occurredAt: "desc" },
+      select: {
+        description: true,
+        estimatedLossYen: true,
+        outcome: true,
+      },
+    }),
+    prisma.savingsEntry.findMany({
+      where: { userId: event.userId, eventId, confirmedByUser: true },
+      select: {
+        amountYen: true,
+        failureLog: { select: { description: true } },
+      },
+    }),
+    getWarningForEvent(event).catch(() => null),
+  ]);
+
+  if (!past) {
+    const seen = new Set<string>();
+    const anticipated: string[] = [];
+    const add = (raw: string) => {
+      const t = raw.trim();
+      const k = norm(t);
+      if (!t || seen.has(k)) return;
+      seen.add(k);
+      anticipated.push(t);
+    };
+    for (const c of warning?.logs ?? []) add(c.description);
+    for (const l of linked) {
+      if (l.outcome !== "irrelevant" && l.outcome !== "prevented") {
+        add(l.description);
+      }
+    }
+    return {
+      isPast: false,
+      anticipated: anticipated.slice(0, 5),
+      avoided: [],
+      occurred: [],
+    };
+  }
+
+  // 終了後: 回避した失敗（この予定で「防げた」と計上されたもの＋紐づけ済みで prevented）
+  const avoided = new Map<string, { text: string; yen: number }>();
+  for (const s of savingsHere) {
+    const text = s.failureLog?.description?.trim();
+    if (!text) continue;
+    avoided.set(norm(text), { text, yen: Math.max(0, s.amountYen) });
+  }
+  for (const l of linked) {
+    if (l.outcome !== "prevented") continue;
+    const k = norm(l.description);
+    if (!avoided.has(k)) {
+      avoided.set(k, {
+        text: l.description.trim(),
+        yen: Math.max(0, l.estimatedLossYen),
+      });
+    }
+  }
+
+  // 今回の失敗（この予定に紐づく記録のうち、prevented / irrelevant 以外）
+  const occurred = new Map<string, string>();
+  for (const l of linked) {
+    if (l.outcome === "prevented" || l.outcome === "irrelevant") continue;
+    const k = norm(l.description);
+    if (avoided.has(k) || occurred.has(k)) continue;
+    occurred.set(k, l.description.trim());
+  }
+
+  return {
+    isPast: true,
+    anticipated: [],
+    avoided: [...avoided.values()].slice(0, 5),
+    occurred: [...occurred.values()].slice(0, 5),
+  };
+}

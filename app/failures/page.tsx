@@ -227,14 +227,39 @@ export default async function FailuresPage() {
           ✍️ ひとこと記録する
         </h2>
         <p className="mt-1 text-xs text-muted">
-          よくあるものはボタンで一発。金額や予定は「くわしく」で（すべて任意）。
+          よくあるものはボタンで一発。内容・金額・日付は必須です（あとから直せます）。
         </p>
         <form action={createFailureLog} className="mt-3 space-y-3">
           <FailureQuickInput />
 
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs text-muted">
+              損失額（円）※必須
+              <input
+                type="number"
+                name="estimatedLossYen"
+                required
+                min={0}
+                step={100}
+                placeholder="分からなければ概算・0でも可"
+                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-xs text-muted">
+              いつ？ ※必須
+              <input
+                type="date"
+                name="occurredAt"
+                required
+                defaultValue={todayValue()}
+                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
+              />
+            </label>
+          </div>
+
           <details className="[&_summary::-webkit-details-marker]:hidden">
             <summary className="cursor-pointer list-none text-xs text-teal-dark">
-              くわしく（予定・金額・日付など・すべて任意）▾
+              くわしく（予定・カテゴリ・任意）▾
             </summary>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
               <label className="text-xs text-muted sm:col-span-2">
@@ -258,17 +283,6 @@ export default async function FailuresPage() {
                 </span>
               </label>
               <label className="text-xs text-muted">
-                だいたいの損失額（円）
-                <input
-                  type="number"
-                  name="estimatedLossYen"
-                  min={0}
-                  step={100}
-                  placeholder="なくてもOK"
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="text-xs text-muted">
                 関連カテゴリ
                 <input
                   name="categoryName"
@@ -282,22 +296,10 @@ export default async function FailuresPage() {
                   ))}
                 </datalist>
               </label>
-              <label className="text-xs text-muted sm:col-span-2">
-                いつ？
-                <input
-                  type="date"
-                  name="occurredAt"
-                  defaultValue={todayValue()}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm sm:w-56"
-                />
-              </label>
             </div>
           </details>
 
           <SubmitButton>記録する</SubmitButton>
-          <p className="text-[11px] text-muted">
-            くわしく開かなければ、日付は今日・予定なしで記録します（あとから直せます）。
-          </p>
         </form>
       </section>
 

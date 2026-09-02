@@ -65,6 +65,46 @@ export function GettingStartedClient({ step1, step2, step3, step5 }: Props) {
       ),
     },
     {
+      done: step4,
+      title: "ホーム画面に追加する",
+      detail: (
+        <>
+          <p>
+            ブラウザの共有・メニューから「ホーム画面に追加」。
+            アプリのように1タップでひらけて、通知も受け取りやすくなります。
+            iPhone は Safari の共有ボタン、Android は Chrome のメニュー（︙）からどうぞ。
+          </p>
+          {!step4 && (
+            <button
+              type="button"
+              onClick={markHome}
+              className="mt-2 inline-block rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted"
+            >
+              追加した
+            </button>
+          )}
+        </>
+      ),
+    },
+    {
+      done: step5,
+      title: "通知をオンにする",
+      detail: (
+        <>
+          <p>
+            新しい予定が入ったとき、準備のタイミング、予定のあとの「失敗はあった？」など、
+            必要なときだけお知らせします。設定ページの「通知」からオンにできます。
+          </p>
+          <Link
+            href="/settings"
+            className="mt-2 inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface no-underline hover:opacity-90"
+          >
+            設定をひらく
+          </Link>
+        </>
+      ),
+    },
+    {
       done: step2,
       title: "予定を用意する",
       detail: (
@@ -102,46 +142,6 @@ export function GettingStartedClient({ step1, step2, step3, step5 }: Props) {
               予定を開く
             </Link>
           )}
-        </>
-      ),
-    },
-    {
-      done: step4,
-      title: "ホーム画面に追加する",
-      detail: (
-        <>
-          <p>
-            ブラウザの共有・メニューから「ホーム画面に追加」。
-            アプリのように1タップでひらけて、通知も受け取りやすくなります。
-            iPhone は Safari の共有ボタン、Android は Chrome のメニュー（︙）からどうぞ。
-          </p>
-          {!step4 && (
-            <button
-              type="button"
-              onClick={markHome}
-              className="mt-2 inline-block rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted"
-            >
-              追加した
-            </button>
-          )}
-        </>
-      ),
-    },
-    {
-      done: step5,
-      title: "通知をオンにする",
-      detail: (
-        <>
-          <p>
-            新しい予定が入ったとき、準備のタイミング、予定のあとの「失敗はあった？」など、
-            必要なときだけお知らせします。設定ページの「通知」からオンにできます。
-          </p>
-          <Link
-            href="/settings"
-            className="mt-2 inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface no-underline hover:opacity-90"
-          >
-            設定をひらく
-          </Link>
         </>
       ),
     },

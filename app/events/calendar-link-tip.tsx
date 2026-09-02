@@ -73,10 +73,18 @@ export function CalendarLinkTip({ writeEnabled }: { writeEnabled: boolean }) {
             <p className="font-medium text-teal-dark underline">
               準備リスト: https://…/events/xxxx ← ここをタップ
             </p>
+            <p className="mt-1">【予想される失敗】</p>
+            <p>⚠ 集合時間に遅刻した</p>
             <p className="mt-1">【準備すること】 1/3</p>
             <p>☑ お茶を買う（1時間前）</p>
             <p>☐ 集合時間を確認</p>
           </div>
+
+          <p className="mt-2.5 text-xs text-muted">
+            ※ 連携より前からあった予定は、アプリで準備リストを1回編集するか
+            「確認しました」を押すまで、説明欄には書き込まれません
+            （勝手に書き換えないための仕様です）。
+          </p>
 
           {!writeEnabled && (
             <p className="mt-2.5 text-xs text-warn">

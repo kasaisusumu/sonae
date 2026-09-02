@@ -6,6 +6,7 @@ import {
   stripSonaeBlock,
 } from "@/lib/description";
 import { resolveSections } from "@/lib/sections";
+import { getEventDescriptionFailures } from "@/lib/failures";
 
 /**
  * 予定の説明欄に、そなえの準備リスト（リンク＋箇条書き）を書き込む。
@@ -58,6 +59,8 @@ export async function syncEventDescription(eventId: string): Promise<void> {
     event.checklistItems.map((c) => c.kind),
   );
 
+  const failures = await getEventDescriptionFailures(eventId);
+
   const url = `${appBaseUrl()}/events/${eventId}`;
   const description = composeDescription(
     event.memo,
@@ -69,7 +72,15 @@ export async function syncEventDescription(eventId: string): Promise<void> {
       isDone: c.isDone,
       comment: c.comment,
     })),
-    { unreviewed, sections },
+    {
+      unreviewed,
+      sections,
+      failures: {
+        anticipated: failures.anticipated,
+        avoided: failures.avoided,
+        occurred: failures.occurred,
+      },
+    },
   );
   const hash = hashDescription(description);
   if (hash === event.lastWrittenHash) return;

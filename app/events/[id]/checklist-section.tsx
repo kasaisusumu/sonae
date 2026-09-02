@@ -231,7 +231,7 @@ export async function ChecklistSection({
       {/* 「過去に失敗の記録があります」の警告はやめて、ページ上部の失敗ログ提案に一本化。
           終わった予定の振り返り（今回はどうでしたか？）だけ残す。 */}
       {warning && warning.isPast && (
-        <div id="failure-check" className="scroll-mt-4">
+        <div id="failure-review" className="scroll-mt-4">
           <WarningPanel warning={warning} />
         </div>
       )}

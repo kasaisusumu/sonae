@@ -115,6 +115,9 @@ model Event {
   source        String    @default("manual") // "google" | "manual"
   // 再発防止の警告をユーザーが確認・了承した日時（設定されると警告は畳まれる）
   failureWarningAckAt DateTime?
+  // 予定終了後の「失敗あった？」に対して「なかった」を押した日時。
+  // 事後通知の対象外にし、予定ページの確認プロンプトも畳む。
+  noFailureAt   DateTime?
   // 新規追加の通知を送った日時（アプリを開いたときの準備リスト先行生成にも使う）
   notifiedAt    DateTime?
   // そなえが最後に説明欄へ書き込んだ内容のハッシュ（無限ループ／再書き込み防止）

@@ -1311,6 +1311,18 @@ export async function ackEventWarning(formData: FormData): Promise<void> {
   revalidateAppViews(eventId);
 }
 
+/** 終了後の「失敗あった？」に「なかった」と答える（undo=1 で取り消し）。 */
+export async function markNoFailure(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  const undo = String(formData.get("undo") ?? "") === "1";
+  await prisma.event.updateMany({
+    where: { id: eventId, userId },
+    data: { noFailureAt: undo ? null : new Date() },
+  });
+  revalidateAppViews(eventId);
+}
+
 /** 警告の失敗内容を、この予定の準備リストに「再発防止」項目として追加する。 */
 export async function addPreventionItem(formData: FormData): Promise<void> {
   const userId = await requireUserId();

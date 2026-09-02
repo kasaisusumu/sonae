@@ -431,8 +431,11 @@ export async function getUpcomingWarnings(userId: string): Promise<EventWarning[
 }
 
 /**
- * 終わった予定について「今回は防げましたか？」の通知を送る（1 予定 1 回）。
- * cron から呼ぶ。カテゴリ・シグネチャが当てはまる失敗ログがある予定だけが対象。
+ * 終わった予定について「失敗はあった？あったら書こう」の通知を送る（1 予定 1 回）。
+ * cron から呼ぶ。失敗ログの有無に関わらず、終わった予定すべてが対象
+ *（連携時に既にあった予定＝autoManaged=false は除く）。
+ * 似た失敗ログがあれば、その内容を添えた文面にする。
+ * 「なかった」を押した予定（noFailureAt）は対象外。踏まれなくても他で催促はしない。
  */
 export async function notifyPostEventFailureChecks(
   userId: string,
@@ -444,26 +447,31 @@ export async function notifyPostEventFailureChecks(
   const events = await prisma.event.findMany({
     where: {
       userId,
-      categoryId: { not: null },
+      autoManaged: true,
       postFailureCheckNotifiedAt: null,
+      noFailureAt: null,
       eventDatetime: { lte: now, gte: horizon },
     },
     orderBy: { eventDatetime: "desc" },
-    take: 20,
+    take: 30,
     include: { category: true },
   });
   if (events.length === 0) return 0;
 
-  const catIds = [...new Set(events.map((e) => e.categoryId!))];
-  const logs: LogRow[] = await prisma.failureLog.findMany({
-    where: {
-      userId,
-      categoryId: { in: catIds },
-      outcome: { not: "irrelevant" },
-    },
-    orderBy: { occurredAt: "desc" },
-    select: LOG_SELECT,
-  });
+  const catIds = [
+    ...new Set(events.map((e) => e.categoryId).filter((c): c is string => !!c)),
+  ];
+  const logs: LogRow[] = catIds.length
+    ? await prisma.failureLog.findMany({
+        where: {
+          userId,
+          categoryId: { in: catIds },
+          outcome: { not: "irrelevant" },
+        },
+        orderBy: { occurredAt: "desc" },
+        select: LOG_SELECT,
+      })
+    : [];
 
   const logsByCat = new Map<string, LogRow[]>();
   for (const l of logs) {
@@ -478,11 +486,7 @@ export async function notifyPostEventFailureChecks(
   for (const e of events) {
     if (!isPastEvent(e)) continue;
 
-    const feature = featureOf(e);
-    const applicable = (logsByCat.get(e.categoryId!) ?? []).filter((l) =>
-      logApplies(l, e.title, e.recurringEventId, feature),
-    );
-
+    // 通知したか否かに関わらず「処理済み」にする（1 予定 1 回）。
     await prisma.event.update({
       where: { id: e.id },
       data: { postFailureCheckNotifiedAt: now },
@@ -490,17 +494,31 @@ export async function notifyPostEventFailureChecks(
 
     const seriesKey = e.recurringEventId ?? "";
     const seriesDup = seriesKey !== "" && notifiedSeries.has(seriesKey);
-    if (applicable.length === 0 || sent >= limit || seriesDup) continue;
+    if (sent >= limit || seriesDup) continue;
     if (seriesKey !== "") notifiedSeries.add(seriesKey);
 
-    const top = applicable[0];
-    const short =
-      top.description.length > 24
-        ? `${top.description.slice(0, 24)}…`
-        : top.description;
+    const feature = featureOf(e);
+    const applicable = e.categoryId
+      ? (logsByCat.get(e.categoryId) ?? []).filter((l) =>
+          logApplies(l, e.title, e.recurringEventId, feature),
+        )
+      : [];
+
+    const body =
+      applicable.length > 0
+        ? (() => {
+            const top = applicable[0];
+            const short =
+              top.description.length > 24
+                ? `${top.description.slice(0, 24)}…`
+                : top.description;
+            return `前に「${short}」がありました。今回はどうでしたか？ タップして、防げた／防げなかったを選ぶだけでOKです。`;
+          })()
+        : "うっかりはありましたか？ あったら一言だけ書いておくと、次に似た予定で先回りできます。なければ「なかった」を押すだけでOK。";
+
     await sendPushToUser(userId, {
       title: `${e.title}、おつかれさまでした 🍵`,
-      body: `前に「${short}」がありました。今回はどうでしたか？ タップして、防げた／防げなかったを選ぶだけでOKです。`,
+      body,
       url: `/events/${e.id}#failure-check`,
       tag: `failcheck-${e.id}`,
     });

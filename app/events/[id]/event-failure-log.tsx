@@ -3,6 +3,7 @@ import {
   createFailureLog,
   deleteFailureLog,
   logRepeatedFailure,
+  markNoFailure,
   updateFailureLog,
 } from "@/app/actions";
 import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
@@ -22,7 +23,7 @@ export async function EventFailureLog({
   eventId: string;
   userId: string;
 }) {
-  const [linked, others] = await Promise.all([
+  const [linked, others, ev] = await Promise.all([
     prisma.failureLog.findMany({
       where: { userId, eventId },
       orderBy: { occurredAt: "desc" },
@@ -33,6 +34,10 @@ export async function EventFailureLog({
       take: 80,
       include: { event: { select: { title: true } } },
     }),
+    prisma.event.findFirst({
+      where: { id: eventId, userId },
+      select: { eventDatetime: true, endDatetime: true, noFailureAt: true },
+    }),
   ]);
 
   const linkedDesc = new Set(linked.map((l) => l.description.trim()));
@@ -40,10 +45,15 @@ export async function EventFailureLog({
     (o) => !linkedDesc.has(o.description.trim()),
   );
 
+  const isPast = !!ev && (ev.endDatetime ?? ev.eventDatetime) <= new Date();
+  // 終了後で、まだ何も記録していない予定は「あった？なかった？」を出す。
+  const askOutcome = isPast && linked.length === 0;
+
   return (
     <details
-      className="rounded-2xl bg-surface p-5 [&_summary::-webkit-details-marker]:hidden"
-      open={linked.length > 0}
+      id="failure-check"
+      className="scroll-mt-4 rounded-2xl bg-surface p-5 [&_summary::-webkit-details-marker]:hidden"
+      open={linked.length > 0 || (askOutcome && !ev?.noFailureAt)}
     >
       <summary className="cursor-pointer list-none text-sm font-semibold text-muted">
         📓 この予定の失敗ログ（{linked.length}）
@@ -51,6 +61,33 @@ export async function EventFailureLog({
       <p className="mt-2 text-xs text-muted">
         次に似た予定が来たときに先回りするためのメモです。内容・金額・日付・結果は、ここからいつでも直せます。金額は分からなければ空でOK。
       </p>
+
+      {askOutcome &&
+        (ev?.noFailureAt ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-surface-muted p-3 text-xs text-muted">
+            <span>この予定は「失敗はなかった」で記録済みです。</span>
+            <form action={markNoFailure}>
+              <input type="hidden" name="eventId" value={eventId} />
+              <input type="hidden" name="undo" value="1" />
+              <button type="submit" className="underline hover:text-foreground">
+                取り消す
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div className="mt-3 rounded-xl border border-teal/20 bg-teal-soft p-3">
+            <p className="text-xs font-medium text-teal-dark">
+              この予定、うっかりはありましたか？
+            </p>
+            <p className="mt-0.5 text-[11px] text-teal-dark/80">
+              あったら下の欄に一言。なければワンタップでどうぞ。
+            </p>
+            <form action={markNoFailure} className="mt-2">
+              <input type="hidden" name="eventId" value={eventId} />
+              <SubmitButton variant="ghost">なかった 🙆</SubmitButton>
+            </form>
+          </div>
+        ))}
 
       {/* 紐づく失敗ログ：その場で編集（失敗内容・金額・日付・結果／状態）・削除 */}
       {linked.length > 0 && (

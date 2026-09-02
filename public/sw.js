@@ -1,4 +1,4 @@
-/* 勝手に準備分解くん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v6 */
+/* 勝手に予定分解くん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v7 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -7,10 +7,10 @@ self.addEventListener("activate", (event) => {
 
 function urlFromTag(tag) {
   if (!tag) return null;
-  let m = tag.match(/^(?:event|prep|listreminder)-(.+)$/);
-  if (m) return "/events/" + m[1];
-  m = tag.match(/^failcheck-(.+)$/);
+  let m = tag.match(/^failcheck-(.+)$/);
   if (m) return "/events/" + m[1] + "#failure-check";
+  m = tag.match(/^(?:event|prep|listreminder)-(.+)$/);
+  if (m) return "/events/" + m[1];
   return null;
 }
 
@@ -20,11 +20,11 @@ self.addEventListener("push", (event) => {
     data = event.data ? event.data.json() : {};
   } catch {
     data = {
-      title: "勝手に準備分解くん",
+      title: "勝手に予定分解くん",
       body: event.data ? event.data.text() : "",
     };
   }
-  const title = data.title || "勝手に準備分解くん";
+  const title = data.title || "勝手に予定分解くん";
   const url = data.url || urlFromTag(data.tag) || "/";
   event.waitUntil(
     self.registration.showNotification(title, {
@@ -44,6 +44,8 @@ self.addEventListener("notificationclick", (event) => {
   const rawUrl = d.url || urlFromTag(event.notification.tag) || "/";
   const target = new URL(rawUrl, self.location.origin);
   const targetHref = target.href;
+  // ハッシュを外した比較用（/events/x と /events/x#failure-check を同じ窓扱いにする）
+  const targetNoHash = target.origin + target.pathname + target.search;
 
   event.waitUntil(
     (async () => {
@@ -51,45 +53,53 @@ self.addEventListener("notificationclick", (event) => {
         type: "window",
         includeUncontrolled: true,
       });
-      const sameOrigin = all.filter((c) =>
-        c.url.startsWith(self.location.origin),
-      );
+      const wins = all.filter((c) => c.url.startsWith(self.location.origin));
 
-      // 1) まったく同じ URL（ハッシュまで一致）を開いている窓 → フォーカスするだけ
-      const exact = sameOrigin.find((c) => c.url === targetHref);
+      // 1) すでに目的ページを開いている窓 → フォーカスするだけ
+      const exact = wins.find(
+        (c) => c.url === targetHref || c.url === targetHref + "/",
+      );
       if (exact) {
-        await exact.focus().catch(() => {});
+        if ("focus" in exact) await exact.focus().catch(() => {});
         return;
       }
 
-      // 2) まず新しく目的 URL を開く。これが一番確実に「その通知のページ」へ着く。
-      //    （インストール済み PWA なら PWA 内で開く）
-      if (self.clients.openWindow) {
+      // 2) 既存の窓があれば、新しく増やさずその窓を目的ページへ移動する。
+      //    （インストール済み PWA でも確実に「その通知のページ」へ着くように）
+      for (const c of wins) {
         try {
-          const w = await self.clients.openWindow(targetHref);
-          if (w) {
-            if (typeof w.focus === "function") await w.focus().catch(() => {});
-            return;
-          }
+          if ("focus" in c) await c.focus().catch(() => {});
         } catch {
-          /* openWindow 不可（ブロック等）→ 下へ */
+          /* ignore */
         }
-      }
-
-      // 3) 開けなかったら、既存の同一オリジン窓を目的ページへ移動する
-      const navigable = sameOrigin.find((c) => typeof c.navigate === "function");
-      if (navigable) {
-        try {
-          await navigable.focus().catch(() => {});
-          await navigable.navigate(targetHref);
+        // 同じパスを既に開いているなら、ハッシュだけ postMessage で送って終わり
+        if (
+          (c.url === targetNoHash || c.url === targetNoHash + "/") &&
+          target.hash
+        ) {
+          c.postMessage({ type: "navigate", url: targetHref });
           return;
-        } catch {
-          /* navigate 不可 → 下へ */
         }
+        if (typeof c.navigate === "function") {
+          try {
+            const nav = await c.navigate(targetHref);
+            const w = nav || c;
+            if (w && "focus" in w) await w.focus().catch(() => {});
+            return;
+          } catch {
+            /* この窓は navigate 不可 → 次へ */
+          }
+        }
+        // navigate が使えない窓 → ページ側リスナーに遷移を依頼して終了
+        c.postMessage({ type: "navigate", url: targetHref });
+        return;
       }
 
-      // 4) 最後の手段: 既存窓をフォーカスだけでもする
-      if (sameOrigin[0]) await sameOrigin[0].focus().catch(() => {});
+      // 3) 窓が1つも無い → 新しく開く
+      if (self.clients.openWindow) {
+        const w = await self.clients.openWindow(targetHref).catch(() => null);
+        if (w && "focus" in w) await w.focus().catch(() => {});
+      }
     })(),
   );
 });

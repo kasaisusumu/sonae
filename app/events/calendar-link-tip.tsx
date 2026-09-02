@@ -68,7 +68,7 @@ export function CalendarLinkTip({ writeEnabled }: { writeEnabled: boolean }) {
 
           <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-surface p-3 text-[11px] leading-relaxed text-muted">
             <p>（予定のメモ）</p>
-            <p className="mt-2">--- 勝手に準備分解くん ---</p>
+            <p className="mt-2">--- 勝手に予定分解くん ---</p>
             <p className="font-medium text-teal-dark underline">
               準備リスト: https://…/events/xxxx ← ここをタップ
             </p>

@@ -285,7 +285,7 @@ export function Landing({
           に同意したものとみなします。
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-muted">
-          途中で「このアプリは確認されていません」と出たら、「詳細」→「勝手に準備分解くん に移動」で進めます。
+          途中で「このアプリは確認されていません」と出たら、「詳細」→「勝手に予定分解くん に移動」で進めます。
         </p>
         {devLogin && (
           <p className="mt-5 text-[11px] text-muted">

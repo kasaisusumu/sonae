@@ -19,14 +19,14 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "勝手に準備分解くん — 予定の準備リスト",
+  title: "勝手に予定分解くん — 予定の準備リスト",
   description:
     "予定を入れるだけで準備リストを自動生成。編集を学習して自分専用マニュアルに育てます。",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "勝手に準備分解くん",
+    title: "勝手に予定分解くん",
   },
   icons: {
     icon: "/icons/icon-192.png",
@@ -73,7 +73,7 @@ export default async function RootLayout({
               {isLoggedIn ? <MenuButton /> : null}
               <Link href="/" className="flex items-baseline gap-2 no-underline">
                 <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">
-                  勝手に準備分解くん
+                  勝手に予定分解くん
                 </span>
                 <span className="hidden text-xs text-muted sm:inline">
                   予定の準備、わすれない
@@ -113,7 +113,7 @@ export default async function RootLayout({
 
         <footer className="border-t bg-surface">
           <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-4 text-xs text-muted">
-            <span>勝手に準備分解くん（検証版）— 表示される金額はすべて推定値です。</span>
+            <span>勝手に予定分解くん（検証版）— 表示される金額はすべて推定値です。</span>
             <span className="flex items-center gap-3">
               <Link
                 href="/privacy"

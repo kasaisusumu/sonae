@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import { CONTACT, LegalPage, OPERATOR, Sec } from "@/app/legal";
 
 export const metadata: Metadata = {
-  title: "プライバシーポリシー — 勝手に準備分解くん",
+  title: "プライバシーポリシー — 勝手に予定分解くん",
 };
 
 export default function PrivacyPage() {
   return (
     <LegalPage title="プライバシーポリシー">
       <p>
-        「勝手に準備分解くん」（以下「本サービス」）は、{OPERATOR}
+        「勝手に予定分解くん」（以下「本サービス」）は、{OPERATOR}
         が個人で運営する検証版のサービスです。本ポリシーは、本サービスが取得する情報とその取り扱いについて定めます。
       </p>
 

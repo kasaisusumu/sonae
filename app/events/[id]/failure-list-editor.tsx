@@ -7,7 +7,7 @@ import {
   logRepeatedFailure,
   updateFailureLog,
 } from "@/app/actions";
-import { formatDateOnly, toDateInputValue } from "@/lib/format";
+import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 
@@ -40,11 +40,68 @@ function meta(o: string | null): { icon: string; label: string } {
   }
 }
 
+/** 1 行ぶんの編集フォーム（内容・結果・金額・日付）＋削除。両表示で共通。 */
+function RowEditForms({ r }: { r: FLRow }) {
+  return (
+    <>
+      <form action={updateFailureLog} className="space-y-2">
+        <input type="hidden" name="id" value={r.id} />
+        <textarea
+          name="description"
+          required
+          rows={2}
+          defaultValue={r.description}
+          className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+        />
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+          <select
+            name="outcome"
+            defaultValue={r.outcome ?? ""}
+            className="rounded-md border bg-background px-1.5 py-1 text-xs text-foreground"
+            aria-label="結果・状態"
+          >
+            <option value="">未確認</option>
+            <option value="linked">紐付け</option>
+            <option value="prevented">防げた</option>
+            <option value="not_prevented">防げなかった</option>
+            <option value="irrelevant">今回は関係ない</option>
+          </select>
+          <input
+            type="number"
+            name="estimatedLossYen"
+            min={0}
+            step={100}
+            defaultValue={r.estimatedLossYen || ""}
+            placeholder="円"
+            className="w-20 rounded-md border bg-background px-1.5 py-1 text-xs"
+            aria-label="金額"
+          />
+          <input
+            type="date"
+            name="occurredAt"
+            defaultValue={toDateInputValue(r.occurredAt)}
+            className="rounded-md border bg-background px-1.5 py-1 text-xs"
+            aria-label="日付"
+          />
+          <SubmitButton variant="ghost">更新</SubmitButton>
+        </div>
+      </form>
+      <form action={deleteFailureLog}>
+        <input type="hidden" name="id" value={r.id} />
+        <ConfirmButton
+          message="この失敗ログを削除しますか？"
+          className="text-[11px] text-muted underline hover:text-warn"
+        >
+          削除
+        </ConfirmButton>
+      </form>
+    </>
+  );
+}
+
 /**
- * 失敗ログを準備リストの各枠（ChecklistEditor）と同じ見た目・操作で扱う。
- * 行を ∨ で開いて内容・結果・金額・日付を編集／✕ で削除、＋ 追加 で
- * 内容と金額を一緒に入力、その他 ▾ から「過去の失敗から追加」。
- * 予定詳細でも学習内容ページでも同じものを使う。
+ * 予定詳細の失敗ログ枠。準備リストの各枠（ChecklistEditor）と同じ見た目・操作。
+ * variant="warn"（学習内容ページ）は昔どおりの「赤いだけ」の簡素な一覧＋「編集」ボタン。
  */
 export function FailureListEditor({
   eventId,
@@ -57,7 +114,6 @@ export function FailureListEditor({
   label?: string;
   initial: FLRow[];
   others?: FLOther[];
-  /** "warn" = 編集を開いていない行を赤（warn-soft）で表示（学習内容ページ用）。 */
   variant?: "plain" | "warn";
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
@@ -65,35 +121,68 @@ export function FailureListEditor({
   const [moreOpen, setMoreOpen] = useState(false);
   const [pickOpen, setPickOpen] = useState(false);
 
-  const warn = variant === "warn";
-
-  return (
-    <div className="rounded-2xl bg-surface p-3">
-      <div className="mb-1.5 flex items-baseline gap-2">
-        <h3
-          className={`text-sm font-semibold ${
-            warn ? "text-warn" : "text-foreground"
-          }`}
-        >
-          {label}
-        </h3>
-        <span className="text-xs text-muted tabular-nums">{initial.length}</span>
-      </div>
-
-      {initial.length > 0 && (
-        <ul className={warn ? "space-y-1" : "divide-y divide-border/70"}>
+  // ── 学習内容ページ用：昔どおり「ただ赤いだけ」の一覧。追加ボタンは出さない。 ──
+  if (variant === "warn") {
+    if (initial.length === 0) return null;
+    return (
+      <div className="mt-3">
+        <p className="text-[11px] font-semibold text-warn">
+          失敗ログ（{initial.length}）
+        </p>
+        <ul className="mt-1 space-y-1">
           {initial.map((r) => {
             const m = meta(r.outcome);
             const open = openId === r.id;
             return (
               <li
                 key={r.id}
-                className={
-                  warn && !open
-                    ? "rounded-lg bg-warn-soft px-2 py-1.5"
-                    : "py-1.5"
-                }
+                className="rounded bg-warn-soft px-2 py-1 text-[11px]"
               >
+                <p className="whitespace-pre-wrap break-words text-foreground">
+                  {r.description}
+                </p>
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-muted">
+                  <span>{formatDateOnly(r.occurredAt)}</span>
+                  {r.estimatedLossYen > 0 && (
+                    <span>・ 推定 {formatYen(r.estimatedLossYen)}</span>
+                  )}
+                  <span>・ {m.label}</span>
+                  <button
+                    type="button"
+                    onClick={() => setOpenId(open ? null : r.id)}
+                    className="ml-auto rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] text-muted hover:text-foreground"
+                  >
+                    {open ? "閉じる" : "編集"}
+                  </button>
+                </p>
+                {open && (
+                  <div className="mt-1.5 space-y-2 rounded bg-surface p-2">
+                    <RowEditForms r={r} />
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    );
+  }
+
+  // ── 予定詳細ページ用：準備リストの枠と同じフル機能。 ──
+  return (
+    <div className="rounded-2xl bg-surface p-3">
+      <div className="mb-1.5 flex items-baseline gap-2">
+        <h3 className="text-sm font-semibold text-foreground">{label}</h3>
+        <span className="text-xs text-muted tabular-nums">{initial.length}</span>
+      </div>
+
+      {initial.length > 0 && (
+        <ul className="divide-y divide-border/70">
+          {initial.map((r) => {
+            const m = meta(r.outcome);
+            const open = openId === r.id;
+            return (
+              <li key={r.id} className="py-1.5">
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 shrink-0 text-sm">{m.icon}</span>
                   <span className="min-w-0 flex-1 whitespace-pre-wrap break-words py-0.5 text-sm">
@@ -118,57 +207,7 @@ export function FailureListEditor({
 
                 {open && (
                   <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
-                    <form action={updateFailureLog} className="space-y-2">
-                      <input type="hidden" name="id" value={r.id} />
-                      <textarea
-                        name="description"
-                        required
-                        rows={2}
-                        defaultValue={r.description}
-                        className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
-                      />
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                        <select
-                          name="outcome"
-                          defaultValue={r.outcome ?? ""}
-                          className="rounded-md border bg-background px-1.5 py-1 text-xs text-foreground"
-                          aria-label="結果・状態"
-                        >
-                          <option value="">未確認</option>
-                          <option value="linked">紐付け</option>
-                          <option value="prevented">防げた</option>
-                          <option value="not_prevented">防げなかった</option>
-                          <option value="irrelevant">今回は関係ない</option>
-                        </select>
-                        <input
-                          type="number"
-                          name="estimatedLossYen"
-                          min={0}
-                          step={100}
-                          defaultValue={r.estimatedLossYen || ""}
-                          placeholder="円"
-                          className="w-20 rounded-md border bg-background px-1.5 py-1 text-xs"
-                          aria-label="金額"
-                        />
-                        <input
-                          type="date"
-                          name="occurredAt"
-                          defaultValue={toDateInputValue(r.occurredAt)}
-                          className="rounded-md border bg-background px-1.5 py-1 text-xs"
-                          aria-label="日付"
-                        />
-                        <SubmitButton variant="ghost">更新</SubmitButton>
-                      </div>
-                    </form>
-                    <form action={deleteFailureLog}>
-                      <input type="hidden" name="id" value={r.id} />
-                      <ConfirmButton
-                        message="この失敗ログを削除しますか？"
-                        className="text-[11px] text-muted underline hover:text-warn"
-                      >
-                        削除
-                      </ConfirmButton>
-                    </form>
+                    <RowEditForms r={r} />
                   </div>
                 )}
               </li>

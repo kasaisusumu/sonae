@@ -41,35 +41,27 @@ export default async function EventsPage({
         checklistItems: { select: { isDone: true, title: true } },
       },
     }),
-    // この予定で実際に失敗が記録／確定している＝「過去に失敗あり」（赤）。
-    // "linked"（提案を紐付けただけ）や "irrelevant" は含めない。
+    // この予定に「紐付け」した失敗ログがある＝「過去の危険性あり」（赤）。
     prisma.failureLog.findMany({
-      where: {
-        userId: user.id,
-        eventId: { not: null },
-        OR: [
-          { outcome: null },
-          { outcome: { in: ["not_prevented", "prevented"] } },
-        ],
-      },
+      where: { userId: user.id, eventId: { not: null }, outcome: "linked" },
       select: { eventId: true },
       distinct: ["eventId"],
     }),
-    // ひもづいてはいないが、似た予定・カテゴリで先回り警告が出ている＝「危険性あり」
-    // （ackEventWarning で却下済みのものは含まれない）
+    // 紐付けはされていないが、似た予定・カテゴリで先回り提案が出ている
+    // ＝「失敗の可能性あり」（黄）。ackEventWarning で却下済みは含まれない。
     getUpcomingWarnings(user.id),
   ]);
 
   const categoryNames = Array.from(
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
   );
-  const loggedEventIds = new Set(
+  const linkedEventIds = new Set(
     linkedLogs.map((l) => l.eventId).filter((v): v is string => !!v),
   );
   const suspectedEventIds = new Set(warnings.map((w) => w.event.id));
-  const riskOf = (id: string): "logged" | "suspected" | undefined =>
-    loggedEventIds.has(id)
-      ? "logged"
+  const riskOf = (id: string): "linked" | "suspected" | undefined =>
+    linkedEventIds.has(id)
+      ? "linked"
       : suspectedEventIds.has(id)
         ? "suspected"
         : undefined;
@@ -202,8 +194,8 @@ function EventRow({
   };
   categoryNames: string[];
   past?: boolean;
-  /** logged=この予定に失敗ログあり（赤）／suspected=提案段階の危険性（黄）／なし=非表示 */
-  risk?: "logged" | "suspected";
+  /** linked=この予定に「紐付け」した失敗ログあり（赤）／suspected=提案・未確認（黄）／なし=非表示 */
+  risk?: "linked" | "suspected";
 }) {
   const total = ev.checklistItems.length;
   const done = ev.checklistItems.filter((c) => c.isDone).length;
@@ -226,14 +218,14 @@ function EventRow({
         <div className="min-w-0 flex-1">
           <p className="font-medium text-foreground">
             {ev.title}
-            {risk === "logged" && (
+            {risk === "linked" && (
               <span className="ml-2 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-medium text-warn">
-                過去に失敗あり
+                過去の危険性あり
               </span>
             )}
             {risk === "suspected" && (
               <span className="ml-2 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                失敗の危険性あり
+                失敗の可能性あり
               </span>
             )}
           </p>

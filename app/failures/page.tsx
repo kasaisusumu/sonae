@@ -210,7 +210,7 @@ export default async function FailuresPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">失敗ログ</h1>
+        <h1 className="text-xl font-semibold tracking-tight">失敗ログ</h1>
         <p className="mt-1.5 text-sm text-muted">
           うっかりは誰にでもあります。責めるための記録ではありません。
           残しておくと、次に似た予定が来たときに先回りできます。
@@ -220,9 +220,9 @@ export default async function FailuresPage() {
       {/* ── 記入：まずは「ひとこと」だけでOK ── */}
       <section
         data-coach="fail-new"
-        className="rounded-2xl border border-teal/20 bg-surface p-5"
+        className="rounded-2xl border border-border bg-surface p-5"
       >
-        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-teal-dark">
+        <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           ✍️ ひとこと記録する
         </h2>
         <form action={createFailureLog} className="mt-3 space-y-3">
@@ -313,12 +313,12 @@ export default async function FailuresPage() {
         ) : (
           <>
             {unreviewed.length > 0 && (
-              <div className="space-y-2 rounded-2xl border border-teal/20 bg-teal-soft p-4">
+              <div className="space-y-2 rounded-2xl border border-border bg-surface p-4">
                 <div>
-                  <h3 className="text-sm font-semibold text-teal-dark">
+                  <h3 className="text-sm font-semibold text-foreground">
                     🤔 ふりかえり（{unreviewed.length}件）
                   </h3>
-                  <p className="mt-0.5 text-[11px] text-teal-dark/80">
+                  <p className="mt-0.5 text-[11px] text-muted">
                     終わった予定、どうでしたか？ ワンタップで大丈夫です。「防げた」にしたものだけが
                     <a href="/savings" className="underline">
                       節約額

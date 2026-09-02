@@ -94,7 +94,7 @@ export default async function EventsPage({
       {/* ── このページの主役: これからの予定 ── */}
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-xl font-semibold tracking-tight">
             これからの予定
           </h1>
           <form action={syncCalendar} data-coach="sync">

@@ -18,16 +18,16 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
     <section
       className={`rounded-2xl border p-5 ${
         isPast
-          ? "border-teal/20 bg-teal-soft"
+          ? "border-border bg-surface"
           : "border-warn/30 bg-warn-soft"
       }`}
     >
       {isPast ? (
         <>
-          <h2 className="text-sm font-semibold text-teal-dark">
+          <h2 className="text-sm font-semibold text-foreground">
             {event.title}、おつかれさまでした 🍵
           </h2>
-          <p className="mt-1 text-xs text-teal-dark/80">
+          <p className="mt-1 text-xs text-muted">
             前に「{event.categoryName}」であった失敗です。今回はどうだったか、ワンタップで教えてください。
           </p>
         </>
@@ -149,7 +149,7 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
               ) : (
                 <>
                   {isPast && (
-                    <p className="text-xs text-teal-dark/80">
+                    <p className="text-xs text-muted">
                       今回はどうでしたか？ どちらか押すだけでOKです。
                     </p>
                   )}

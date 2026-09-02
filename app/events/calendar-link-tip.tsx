@@ -39,23 +39,23 @@ export function CalendarLinkTip({ writeEnabled }: { writeEnabled: boolean }) {
   return (
     <section
       data-coach="cal-link-tip"
-      className="relative rounded-2xl border border-teal/30 bg-teal-soft p-5"
+      className="relative rounded-2xl border border-border bg-surface p-4"
     >
       <button
         type="button"
         onClick={close}
         aria-label="閉じる"
-        className="absolute right-3 top-3 rounded-full px-2 py-0.5 text-sm text-teal-dark/70 hover:bg-surface hover:text-teal-dark"
+        className="absolute right-2.5 top-2.5 rounded-full px-2 py-0.5 text-sm text-muted hover:bg-surface-muted hover:text-foreground"
       >
         ✕
       </button>
 
       <div className="flex items-start gap-3 pr-6">
-        <span aria-hidden className="text-3xl leading-none">
+        <span aria-hidden className="text-2xl leading-none">
           🔗
         </span>
         <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight text-teal-dark">
+          <h2 className="text-[15px] font-semibold tracking-tight text-foreground">
             カレンダーの説明欄から、そのまま準備リストへ
           </h2>
           <p className="mt-1.5 text-sm text-muted">

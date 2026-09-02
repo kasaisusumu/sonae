@@ -264,8 +264,8 @@ export async function ChecklistSection({
         </div>
 
         {unreviewed && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal/30 bg-teal-soft px-4 py-3">
-            <p className="text-xs text-teal-dark">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-muted px-4 py-3">
+            <p className="text-xs text-foreground">
               このリストはまだ確認されていません。中身を見て問題なければ「確認しました」を押してください（編集しても消えます）。
             </p>
             <form action={markListReviewed}>

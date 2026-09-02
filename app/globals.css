@@ -6,30 +6,32 @@
    売れている生産性アプリ（Things / Linear / Todoist 等）に寄せた、
    余白広め・境界線は繊細・影は控えめ。トークン名は据え置き。 */
 :root {
-  --background: #f7f8f8;
+  /* ほぼ無彩色（緑みを抑えたニュートラル）。本文はしっかり濃く、
+     副次テキストも読める濃さに（ADHD 向けに“見やすい・クッキリ”を優先）。 */
+  --background: #f6f7f7;
   --surface: #ffffff;
-  --surface-muted: #f1f3f2;
-  --foreground: #18211f;
-  --muted: #6a7674;
-  --border: #e7eae9;
+  --surface-muted: #eef0f0;
+  --foreground: #171a19;
+  --muted: #566160;
+  --border: #e6e8e8;
 
-  --teal: #05808f;
-  --teal-dark: #04616d;
-  --teal-soft: #e6f2f3;
-  --accent: #06b6a3;
-  --accent-soft: #e3f7f2;
+  --teal: #04737f;
+  --teal-dark: #0a5560;
+  --teal-soft: #e7f1f2;
+  --accent: #06a596;
+  --accent-soft: #e2f4f1;
 
-  --warn: #b5793a;
-  --warn-soft: #f9efe3;
+  --warn: #a96a2e;
+  --warn-soft: #f8ecdf;
 
   /* すりガラスのヘッダー用（不透明度モディファイアが効かない環境向けに実体トークン化） */
   --surface-translucent: color-mix(in srgb, var(--surface) 82%, transparent);
   --border-subtle: color-mix(in srgb, var(--border) 70%, transparent);
 
-  --ring: color-mix(in srgb, var(--accent) 45%, transparent);
-  --shadow-sm: 0 1px 2px rgb(15 30 28 / 0.04), 0 1px 3px rgb(15 30 28 / 0.03);
-  --shadow-md: 0 4px 12px rgb(15 30 28 / 0.06), 0 2px 6px rgb(15 30 28 / 0.04);
-  --shadow-lg: 0 12px 32px rgb(15 30 28 / 0.12), 0 6px 14px rgb(15 30 28 / 0.08);
+  --ring: color-mix(in srgb, var(--accent) 55%, transparent);
+  --shadow-sm: 0 1px 2px rgb(20 24 23 / 0.06), 0 1px 3px rgb(20 24 23 / 0.04);
+  --shadow-md: 0 4px 12px rgb(20 24 23 / 0.07), 0 2px 6px rgb(20 24 23 / 0.05);
+  --shadow-lg: 0 12px 32px rgb(20 24 23 / 0.13), 0 6px 14px rgb(20 24 23 / 0.09);
 }
 
 @theme inline {
@@ -72,17 +74,18 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
-  line-height: 1.55;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* 見出しは少し詰めてリズムを出す（本文はゆったりのまま） */
+/* 見出しは詰めてクッキリと。 */
 h1,
 h2,
 h3 {
-  letter-spacing: -0.015em;
-  line-height: 1.3;
+  letter-spacing: -0.014em;
+  line-height: 1.25;
+  font-weight: 600;
 }
 
 a {

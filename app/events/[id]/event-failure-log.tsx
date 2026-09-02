@@ -75,11 +75,11 @@ export async function EventFailureLog({
             </form>
           </div>
         ) : (
-          <div className="mt-3 rounded-xl border border-teal/20 bg-teal-soft p-3">
-            <p className="text-xs font-medium text-teal-dark">
+          <div className="mt-3 rounded-xl border border-border bg-surface-muted p-3">
+            <p className="text-xs font-medium text-foreground">
               この予定、うっかりはありましたか？
             </p>
-            <p className="mt-0.5 text-[11px] text-teal-dark/80">
+            <p className="mt-0.5 text-[11px] text-muted">
               あったら下の欄に一言。なければワンタップでどうぞ。
             </p>
             <form action={markNoFailure} className="mt-2">

@@ -12,9 +12,10 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
   ]);
   const maxCategory = Math.max(1, ...s.byCategory.map((c) => c.amountYen));
 
+  // まだ「防げた」記録が無いあいだは、金額欄に「例」を出す。
+  // 本物の記録が1件でも入ったら hasAny が true になり、例は自動で消える。
   const hasAny = s.entryCount > 0;
-  // データが無いときの「記入例」。この金額はダミーで、実データには一切入らない。
-  const EXAMPLE_YEN = 800;
+  const EXAMPLE_YEN = 800; // 表示専用のダミー。DB・集計には一切入らない。
 
   return (
     <section className="space-y-3">
@@ -40,18 +41,18 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
           </>
         ) : (
           <>
-            <div className="flex items-baseline gap-2">
-              <span className="rounded bg-surface/15 px-1.5 py-0.5 text-[10px] font-semibold text-surface/80">
-                記入例
-              </span>
+            <div className="flex items-center gap-2">
               <p className="text-sm text-surface/70">今月、防げた分（推定）</p>
+              <span className="rounded border border-surface/40 px-1.5 py-0.5 text-[10px] font-semibold text-surface/80">
+                例
+              </span>
             </div>
-            <p className="mt-1 text-4xl font-bold text-surface/40">
-              {formatYen(EXAMPLE_YEN)}
-            </p>
-            <p className="mt-1.5 text-xs text-surface/60">
-              例:「傘を忘れてコンビニで買った」→ 予定のあとに「防げた」を選ぶと、
-              避けられた {formatYen(EXAMPLE_YEN)} がここに積み上がります。
+            <p className="mt-1 text-4xl font-bold">{formatYen(EXAMPLE_YEN)}</p>
+            <p className="mt-1.5 text-xs text-surface/65">
+              これは<strong className="text-surface">例</strong>です。
+              「傘を忘れてコンビニで買った」→ 予定のあとに「防げた」を選ぶと、
+              避けられた {formatYen(EXAMPLE_YEN)} がこの数字になります。
+              最初の1件を記録すると、例は消えて本物の数字に変わります。
             </p>
           </>
         )}

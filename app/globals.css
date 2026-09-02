@@ -24,9 +24,10 @@
   --accent: #3f3f42;
   --accent-soft: #eceded;
 
-  /* 注意・失敗系も無彩色。意味は文言とアイコン（⚠️ など）で伝える。 */
-  --warn: #3a3a3d;
-  --warn-soft: #f0f0ef;
+  /* 例外: 「失敗の先回り警告・提案」だけは赤で出してよい（ユーザー指定）。
+     それ以外の注意表示は無彩色のまま。 */
+  --warn: #b42318;
+  --warn-soft: #fdeceb;
 
   /* グラフ専用アクセント（唯一、色を残す場所）。金額＝ティール／件数＝アンバー。 */
   --chart-amount: #0f766e;
@@ -98,11 +99,10 @@ h3 {
   font-weight: 600;
 }
 
-/* 白黒ベースでは色でリンクを示せないので、既定は下線。
-   no-underline を明示したものはユーティリティ側が勝つ（据え置き）。 */
+/* 白黒ベース。リンク色はほぼ黒。下線は各所で明示している（globals では強制しない
+   ＝見出しリンクやボタン化したリンクに予期しない下線が付くのを避ける）。 */
 a {
   color: var(--teal-dark);
-  text-decoration-line: underline;
   text-underline-offset: 2px;
 }
 

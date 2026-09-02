@@ -148,8 +148,10 @@ export function GettingStartedClient({ step1, step2, step3, step5 }: Props) {
   ];
 
   const doneCount = steps.filter((s) => s.done).length;
-  // 全部おわったら消す（ハイドレート後に判定。step4 は localStorage 依存のため）。
-  if (hydrated && doneCount === steps.length) return null;
+  // step4 は localStorage 依存。判定が固まるまで（ハイドレート前）は何も出さない
+  // ＝「一瞬出て消える」チカチカを防ぐ。固まってから、未完なら表示する。
+  if (!hydrated) return null;
+  if (doneCount === steps.length) return null;
 
   return (
     <section

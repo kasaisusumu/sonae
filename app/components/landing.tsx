@@ -1,21 +1,31 @@
 import Link from "next/link";
+import { PrivateModeNotice } from "@/app/components/private-mode-notice";
 
 // 白黒ベース。色が出なくても「押せるボタン」と分かるよう、面＋枠線＋下線なしを明示。
+// （Tailwind v4 では important は接尾辞。ここは通常ユーティリティで十分効く）
 const CTA_CLASS =
-  "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-foreground bg-foreground px-6 py-3.5 text-[15px] font-semibold !text-surface !no-underline shadow-sm transition-opacity hover:opacity-90";
+  "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-foreground bg-foreground px-6 py-3.5 text-[15px] font-semibold text-surface no-underline shadow-sm transition-opacity hover:opacity-90";
 
 function CtaButton({ loggedout }: { loggedout: boolean }) {
   return (
     <a href="/api/auth/google" className={CTA_CLASS}>
-      {loggedout ? "Google で入り直す" : "Googleではじめる / ログイン"}
+      {loggedout ? "Google で入り直す" : "Google ではじめる / ログイン"}
     </a>
+  );
+}
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+      {children}
+    </p>
   );
 }
 
 /** カレンダーの予定 → 準備リスト の小さな見本。 */
 function HeroMock() {
   return (
-    <div className="mx-auto mt-8 grid max-w-sm gap-2 text-left sm:grid-cols-[1fr_auto_1.2fr] sm:items-center">
+    <div className="mx-auto mt-10 grid max-w-sm gap-2 text-left sm:max-w-md sm:grid-cols-[1fr_auto_1.15fr] sm:items-center">
       <div className="rounded-xl border border-border bg-surface p-3 shadow-sm">
         <p className="text-[10px] font-medium text-muted">📅 カレンダーの予定</p>
         <p className="mt-1 text-sm font-medium text-foreground">大阪へ日帰り出張</p>
@@ -40,7 +50,7 @@ function HeroMock() {
   );
 }
 
-function DiffCard({
+function FeatureCard({
   icon,
   title,
   body,
@@ -50,11 +60,47 @@ function DiffCard({
   body: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-surface p-4 text-left shadow-sm">
+    <div className="rounded-2xl border border-border bg-surface p-5 text-left shadow-sm">
       <div className="text-2xl leading-none">{icon}</div>
-      <h3 className="mt-2 text-sm font-semibold text-foreground">{title}</h3>
-      <p className="mt-1 text-[13px] leading-relaxed text-muted">{body}</p>
+      <h3 className="mt-3 text-[15px] font-semibold text-foreground">{title}</h3>
+      <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{body}</p>
     </div>
+  );
+}
+
+function Step({
+  n,
+  title,
+  body,
+}: {
+  n: number;
+  title: string;
+  body: string;
+}) {
+  return (
+    <li className="flex gap-4">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-foreground text-sm font-bold text-foreground">
+        {n}
+      </span>
+      <div className="pt-0.5">
+        <p className="text-[15px] font-semibold text-foreground">{title}</p>
+        <p className="mt-0.5 text-[13px] leading-relaxed text-muted">{body}</p>
+      </div>
+    </li>
+  );
+}
+
+function Faq({ q, children }: { q: string; children: React.ReactNode }) {
+  return (
+    <details className="group border-b border-border py-4 [&_summary::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-medium text-foreground">
+        {q}
+        <span className="shrink-0 text-muted transition-transform group-open:rotate-45">
+          ＋
+        </span>
+      </summary>
+      <div className="mt-2 text-[13px] leading-relaxed text-muted">{children}</div>
+    </details>
   );
 }
 
@@ -68,34 +114,29 @@ export function Landing({
   devLogin: boolean;
 }) {
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto max-w-2xl">
       {/* ── ヒーロー ── */}
-      <section className="text-center">
-        <span className="inline-block rounded-full border border-border bg-surface-muted px-3 py-1 text-[11px] font-medium text-muted">
-          予定の“準備”を、あなた仕様で
-        </span>
-        <h1 className="mt-4 text-3xl font-semibold leading-tight tracking-tight text-foreground">
-          予定を書けば、
+      <section className="pt-2 text-center sm:pt-6">
+        <Eyebrow>予定の準備を、自動で</Eyebrow>
+        <h1 className="mx-auto mt-3 max-w-xl text-[32px] font-semibold leading-[1.15] tracking-tight text-foreground sm:text-[44px]">
+          持ち物リストを、
           <br className="hidden sm:block" />
-          準備リストができている。
+          もう毎回つくらない。
         </h1>
         <p className="mx-auto mt-4 max-w-md text-[15px] leading-relaxed text-muted">
           カレンダーに予定を入れるだけ。「準備すること」と「持ち物」を AI が用意します。
-          直すたびに学習して、
-          <strong className="text-foreground">あなた専用の準備マニュアル</strong>
+          直すたびに学習して、<strong className="text-foreground">あなた専用の準備マニュアル</strong>
           に育ちます。
         </p>
 
-        <HeroMock />
-
         {loggedout && (
-          <p className="mx-auto mt-6 max-w-md rounded-xl bg-accent-soft px-4 py-3 text-sm text-teal-dark">
-            ログアウトしました。データは保存されています。同じ Google
-            アカウントで入り直すと、そのまま元に戻ります。
+          <p className="mx-auto mt-6 max-w-md rounded-xl border border-border bg-surface-muted px-4 py-3 text-sm text-foreground">
+            ログアウトしました。データは保存されています。
+            同じ Google アカウントで入り直すと、そのまま元に戻ります。
           </p>
         )}
         {authMessage && (
-          <p className="mx-auto mt-6 max-w-md rounded-xl bg-warn-soft px-4 py-3 text-sm text-warn">
+          <p className="mx-auto mt-6 max-w-md rounded-xl border border-foreground bg-surface px-4 py-3 text-sm font-medium text-foreground">
             {authMessage}
           </p>
         )}
@@ -103,112 +144,171 @@ export function Landing({
         <div className="mx-auto mt-7 max-w-sm">
           <CtaButton loggedout={loggedout} />
           <p className="mt-2 text-xs text-muted">
-            はじめての方はこのままアカウントができます。使ったことがある方は、
-            同じ Google アカウントで入るだけ。どちらも同じボタンです。
+            はじめての方も、使ったことがある方も、同じボタンでOK。
           </p>
-          <p className="mt-1 text-xs text-muted">
-            カレンダーは読み取りのみ。書き込みは設定で ON にしたときだけ。
-          </p>
-          <p className="mt-2 text-[11px] leading-relaxed text-muted">
-            続けると
-            <Link href="/terms" className="underline">
-              利用規約
-            </Link>
-            と
-            <Link href="/privacy" className="underline">
-              プライバシーポリシー
-            </Link>
-            に同意したものとみなします。
-          </p>
+          <PrivateModeNotice />
         </div>
+
+        <HeroMock />
+
+        <p className="mx-auto mt-6 max-w-md text-[11px] leading-relaxed text-muted">
+          カレンダーは<strong className="text-foreground">読み取りのみ</strong>。
+          説明欄への書き込みは、設定で明示的に ON にしたときだけ。
+          無料の検証版です。
+        </p>
       </section>
 
-      {/* ── ここが違う ── */}
-      <section className="mt-14">
-        <h2 className="text-center text-lg font-semibold tracking-tight text-foreground">
-          ふつうのチェックリストと、ここが違う
-        </h2>
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <DiffCard
-            icon="🧠"
-            title="育つチェックリスト"
-            body="いる／いらないを直すだけ。次に似た予定が来たら、あなた好みで出てきます。毎回ゼロから作りません。"
-          />
-          <DiffCard
-            icon="🔗"
-            title="カレンダーから直接ひらける"
-            body="予定の説明欄に準備リストのリンクを自動で記入。いつも使っているカレンダーアプリからワンタップで開けます。"
-          />
-          <DiffCard
-            icon="🛟"
-            title="うっかりを“先回り”に"
-            body="失敗をひとこと記録すると、似た予定で事前に注意。防げた分は“節約できた額”として見える化します。"
-          />
+      {/* ── 困りごと ── */}
+      <section className="mt-16 sm:mt-20">
+        <div className="text-center">
+          <Eyebrow>こんなこと、ありませんか</Eyebrow>
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+            準備は、いつも直前で慌てる
+          </h2>
         </div>
+        <ul className="mx-auto mt-6 max-w-md space-y-2.5 text-[14px] text-muted">
+          <li className="flex gap-3 rounded-xl border border-border bg-surface p-3.5">
+            <span aria-hidden>🌀</span>
+            出かける直前に「あれ、持った？」と不安になる
+          </li>
+          <li className="flex gap-3 rounded-xl border border-border bg-surface p-3.5">
+            <span aria-hidden>🔁</span>
+            似た予定なのに、毎回ゼロから持ち物を思い出す
+          </li>
+          <li className="flex gap-3 rounded-xl border border-border bg-surface p-3.5">
+            <span aria-hidden>💸</span>
+            忘れ物や予約忘れで、地味な出費と時間のロス
+          </li>
+        </ul>
       </section>
 
       {/* ── 使い方 ── */}
-      <section className="mt-14">
-        <h2 className="text-center text-lg font-semibold tracking-tight text-foreground">
-          はじめかたは 3 ステップ
-        </h2>
-        <ol className="mx-auto mt-5 max-w-md space-y-3">
-          {[
-            ["つなぐ", "Google カレンダーと連携（約30秒）。読み取りだけ。"],
-            [
-              "予定を入れる",
-              "いつも通りカレンダーに予定を書くだけ。取り込みは自動。",
-            ],
-            [
-              "準備リストが出る",
-              "予定ごとに「準備すること」「持ち物」が用意されます。直すと次から賢く。",
-            ],
-          ].map(([t, d], i) => (
-            <li key={i} className="flex gap-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-surface">
-                {i + 1}
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-foreground">{t}</p>
-                <p className="text-[13px] leading-relaxed text-muted">{d}</p>
-              </div>
-            </li>
-          ))}
+      <section className="mt-16 sm:mt-20">
+        <div className="text-center">
+          <Eyebrow>使い方</Eyebrow>
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+            かんたん 3 ステップ
+          </h2>
+        </div>
+        <ol className="mx-auto mt-7 max-w-md space-y-6">
+          <Step
+            n={1}
+            title="Google カレンダーとつなぐ"
+            body="連携は約30秒。読み取りだけなので、予定が書き換わることはありません。"
+          />
+          <Step
+            n={2}
+            title="いつも通り予定を入れる"
+            body="カレンダーに書くだけ。このアプリへの取り込みは自動です。"
+          />
+          <Step
+            n={3}
+            title="準備リストが出てくる"
+            body="予定ごとに「準備すること」「持ち物」が用意されます。直すと次から賢く。"
+          />
         </ol>
       </section>
 
-      {/* ── 音声入力 ── */}
-      <section className="mt-14 rounded-2xl border border-border bg-surface-muted p-5 text-center">
-        <div className="text-2xl">🎤</div>
-        <h2 className="mt-1 text-base font-semibold text-foreground">
-          話すだけでも作れます
+      {/* ── 違い ── */}
+      <section className="mt-16 sm:mt-20">
+        <div className="text-center">
+          <Eyebrow>ここが違う</Eyebrow>
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+            ふつうのチェックリストとの差
+          </h2>
+        </div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <FeatureCard
+            icon="🧠"
+            title="育つチェックリスト"
+            body="いる／いらないを直すだけ。次に似た予定が来たら、あなた好みで出てきます。"
+          />
+          <FeatureCard
+            icon="🔗"
+            title="カレンダーから直接ひらける"
+            body="予定の説明欄に準備リストのリンクを自動記入。使い慣れたカレンダーからワンタップ。"
+          />
+          <FeatureCard
+            icon="🛟"
+            title="うっかりを先回り"
+            body="失敗をひとこと記録すると似た予定で事前に注意。防げた分は節約額として見える化。"
+          />
+        </div>
+      </section>
+
+      {/* ── 目玉（濃い帯・端まで） ── */}
+      <section className="mt-16 -mx-5 bg-foreground px-5 py-12 text-surface sm:mx-0 sm:rounded-3xl sm:px-10 sm:py-14">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-surface/60">
+          使うほど、あなた仕様に
+        </p>
+        <h2 className="mt-2 max-w-lg text-xl font-semibold leading-snug tracking-tight sm:text-2xl">
+          あなた専用の“準備マニュアル”に育っていく。
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-[13px] leading-relaxed text-muted">
-          スマホのキーボードのマイクで「着替えと充電器、宿の予約を確認して、
-          駅で弁当を買う」と話すと、AI が
-          <strong>準備すること・持ち物・その他の枠</strong>に振り分けて追加します。
+        <p className="mt-3 max-w-lg text-[13px] leading-relaxed text-surface/80">
+          「これは毎回いる」「これはいらない」を直すたびに学習。
+          リストが増えて散らかることはなく、出す項目とタイミングの精度だけが上がります。
+        </p>
+        <p className="mt-4 max-w-lg text-[13px] leading-relaxed text-surface/80">
+          🎤 スマホのキーボードのマイクで「着替えと充電器、宿の予約を確認、駅で弁当」
+          と話すだけでも、AI が準備すること・持ち物・その他の枠に振り分けます。
         </p>
       </section>
 
       {/* ── やさしい設計 ── */}
-      <section className="mt-14 text-center">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">
-          責めない・急かさない
+      <section className="mt-16 text-center sm:mt-20">
+        <Eyebrow>設計のこだわり</Eyebrow>
+        <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+          責めない、急かさない
         </h2>
         <p className="mx-auto mt-3 max-w-md text-[13px] leading-relaxed text-muted">
-          段取りが苦手でも続けられるように、言葉づかいまでやさしく設計しています。
+          段取りが苦手でも続けられるよう、言葉づかいまでやさしく設計。
           できなかった日があっても大丈夫。淡々と、次に活かします。
         </p>
       </section>
 
+      {/* ── FAQ ── */}
+      <section className="mt-16 sm:mt-20">
+        <div className="text-center">
+          <Eyebrow>よくある質問</Eyebrow>
+        </div>
+        <div className="mx-auto mt-5 max-w-lg">
+          <Faq q="無料ですか？">
+            はい。いまは無料の検証版です。
+          </Faq>
+          <Faq q="カレンダーの予定が書き換わりませんか？">
+            既定は読み取りのみです。予定の説明欄への追記は、設定で自分で ON
+            にしたときだけ行います。
+          </Faq>
+          <Faq q="スマホだけで使えますか？">
+            使えます。ブラウザの「ホーム画面に追加」で、アプリのように使えます。
+          </Faq>
+          <Faq q="シークレット／プライベートモードでも使えますか？">
+            おすすめしません。そのモードだとログイン状態や学習した内容が保存されず、
+            毎回リセットされます。ふだんの（通常の）ウィンドウでご利用ください。
+          </Faq>
+        </div>
+      </section>
+
       {/* ── 最後の CTA ── */}
-      <section className="mx-auto mt-12 max-w-sm text-center">
-        <CtaButton loggedout={loggedout} />
+      <section className="mx-auto mt-16 max-w-sm text-center sm:mt-20">
+        <h2 className="text-xl font-semibold tracking-tight text-foreground">
+          まずは1つ、予定をつないでみる
+        </h2>
+        <div className="mt-5">
+          <CtaButton loggedout={loggedout} />
+        </div>
         <p className="mt-3 text-[11px] leading-relaxed text-muted">
-          カレンダーは読み取りのみ。予定の説明欄への書き込みは、設定で明示的に ON
-          にしたときだけ行います。これは検証版です。
+          続けると
+          <Link href="/terms" className="underline">
+            利用規約
+          </Link>
+          と
+          <Link href="/privacy" className="underline">
+            プライバシーポリシー
+          </Link>
+          に同意したものとみなします。
         </p>
-        <p className="mt-2 text-[11px] text-muted">
+        <p className="mt-2 text-[11px] leading-relaxed text-muted">
           途中で「このアプリは確認されていません」と出たら、「詳細」→「（アプリ名）に移動」で進めます。
         </p>
         {devLogin && (
@@ -220,16 +320,6 @@ export function Landing({
           </p>
         )}
       </section>
-
-      <footer className="mt-12 border-t border-border pt-4 text-center text-[11px] text-muted">
-        <Link href="/privacy" className="underline">
-          プライバシーポリシー
-        </Link>
-        {" ・ "}
-        <Link href="/terms" className="underline">
-          利用規約
-        </Link>
-      </footer>
     </div>
   );
 }

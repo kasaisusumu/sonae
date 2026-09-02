@@ -484,9 +484,9 @@ export function ChecklistEditor({
 
   return (
     <div className="rounded-2xl bg-surface p-3">
-      {/* 保存中だけ、右上に小さく出す（スクロール追従・邪魔にならない大きさ）。 */}
+      {/* 保存中だけ、右上に小さく出す（スクロール追従・ヘッダーの下・邪魔にならない大きさ）。 */}
       {pending && (
-        <div className="fixed right-3 top-3 z-[70] flex items-center gap-2 rounded-full border border-border bg-surface/95 px-3 py-1.5 text-xs text-muted shadow-md">
+        <div className="fixed right-3 top-16 z-[70] flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-muted shadow-md">
           <span className="h-3 w-3 animate-spin rounded-full border-2 border-border border-t-foreground" />
           自動保存中…
         </div>
@@ -591,19 +591,8 @@ export function ChecklistEditor({
                   aria-label="完了"
                 />
                 <textarea
-                  ref={(el) => {
-                    if (el) {
-                      el.style.height = "auto";
-                      el.style.height = `${el.scrollHeight}px`;
-                    }
-                  }}
                   value={it.title}
-                  onChange={(e) => {
-                    update(it.key, { title: e.target.value });
-                    const t = e.target;
-                    t.style.height = "auto";
-                    t.style.height = `${t.scrollHeight}px`;
-                  }}
+                  onChange={(e) => update(it.key, { title: e.target.value })}
                   rows={1}
                   placeholder={`${kindLabel}を書く`}
                   className={`min-w-0 flex-1 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg leading-snug [field-sizing:content] hover:border-border focus:border-border focus:bg-background ${

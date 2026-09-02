@@ -1,6 +1,7 @@
 import {
   createListTemplate,
   deleteListTemplate,
+  duplicateListTemplate,
   renameListTemplate,
 } from "@/app/actions";
 import type { TemplateDetail } from "@/lib/templates";
@@ -40,6 +41,15 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
             className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
           >
             名前を変更
+          </button>
+        </form>
+        <form action={duplicateListTemplate}>
+          <input type="hidden" name="id" value={t.id} />
+          <button
+            type="submit"
+            className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
+          >
+            コピーを作る
           </button>
         </form>
         <form action={deleteListTemplate}>

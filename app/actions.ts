@@ -1801,3 +1801,47 @@ export async function deleteListTemplate(formData: FormData): Promise<void> {
   await prisma.listTemplate.deleteMany({ where: { id, userId } });
   revalidateAppViews();
 }
+
+/** 名前をつけたリスト（テンプレート）を、中身ごと複製する。 */
+export async function duplicateListTemplate(
+  formData: FormData,
+): Promise<void> {
+  const userId = await requireUserId();
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const src = await prisma.listTemplate.findFirst({
+    where: { id, userId },
+    include: { items: { orderBy: { sortOrder: "asc" } } },
+  });
+  if (!src) return;
+
+  // 同じ種類で名前が重複しないように「〜 のコピー」「〜 のコピー2」…
+  let name = `${src.name} のコピー`.slice(0, 60);
+  for (let n = 2; n <= 30; n++) {
+    const dup = await prisma.listTemplate.findUnique({
+      where: { userId_kind_name: { userId, kind: src.kind, name } },
+      select: { id: true },
+    });
+    if (!dup) break;
+    name = `${src.name} のコピー${n}`.slice(0, 60);
+  }
+
+  await prisma.listTemplate.create({
+    data: {
+      userId,
+      kind: src.kind,
+      name,
+      sourceEventId: src.sourceEventId,
+      items: {
+        create: src.items.map((it, i) => ({
+          kind: src.kind,
+          title: it.title,
+          notifyLeadMinutes: it.notifyLeadMinutes,
+          sortOrder: i,
+        })),
+      },
+    },
+  });
+  revalidateAppViews();
+}

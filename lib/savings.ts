@@ -21,10 +21,12 @@ export interface SavedItem {
 
 /** 防げた失敗の時系列（金額＋件数）。月・週・日で切り替えて見せる用。 */
 export interface SeriesItem {
+  id: string; // failureLog の id（ポップアップから編集するため）
   description: string;
   eventTitle: string | null;
   amountYen: number;
   occurredAt: Date;
+  outcome: string | null; // ここに出るものは基本 "prevented"
 }
 export interface SeriesPoint {
   key: string;
@@ -228,10 +230,12 @@ function buildSeries(rows: SeriesRow[]): SavingsSeries {
     p.amountYen += r.amountYen;
     p.count += 1;
     p.items.push({
+      id: r.id,
       description: r.description,
       eventTitle: r.eventTitle,
       amountYen: r.amountYen,
       occurredAt: r.occurredAt,
+      outcome: r.outcome,
     });
   };
 
@@ -310,11 +314,13 @@ export async function getSavingsSummary(userId: string): Promise<SavingsSummary>
     monthly,
     series: buildSeries(
       entries.map((e) => ({
+        id: e.failureLogId ?? "",
         createdAt: e.createdAt,
         amountYen: e.amountYen,
         description: e.failureLog?.description ?? "（失敗ログ削除済み）",
         eventTitle: e.event?.title ?? null,
         occurredAt: e.failureLog?.occurredAt ?? e.createdAt,
+        outcome: e.failureLog?.outcome ?? "prevented",
       })),
     ),
     byCategory,

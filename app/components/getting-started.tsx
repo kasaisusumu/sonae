@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { GettingStartedClient } from "./getting-started-client";
+import { GuidedSetup } from "./guided-setup";
 
 /**
  * はじめての人向けの「はじめかた」カード。
@@ -17,12 +18,19 @@ export async function GettingStarted({ userId }: { userId: string }) {
     prisma.pushSubscription.count({ where: { userId } }),
   ]);
 
+  const flags = {
+    step1: Boolean(account),
+    step2: eventCount > 0,
+    step3: itemCount > 0,
+    step5: pushCount > 0,
+  };
+
   return (
-    <GettingStartedClient
-      step1={Boolean(account)}
-      step2={eventCount > 0}
-      step3={itemCount > 0}
-      step5={pushCount > 0}
-    />
+    <>
+      {/* ログインしたては、1工程ずつポップアップで手取り足取り誘導する。 */}
+      <GuidedSetup {...flags} />
+      {/* 据え置きの進捗カード（一覧・いつでも見返せる）。 */}
+      <GettingStartedClient {...flags} />
+    </>
   );
 }

@@ -13,7 +13,7 @@ function Pending({ label }: { label: string }) {
   if (!pending) return null;
   return (
     <span className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-xl bg-surface-muted">
-      <span className="rounded-full bg-teal px-3 py-1 text-xs font-medium text-white shadow">
+      <span className="rounded-full bg-foreground px-3 py-1 text-xs font-medium text-surface shadow">
         {label}
       </span>
     </span>

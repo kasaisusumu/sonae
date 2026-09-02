@@ -141,7 +141,7 @@ export default async function SettingsPage() {
                   <ConfirmLink
                     href="/api/auth/google?write=1"
                     message="予定の説明欄への書き込みを有効にします。Google で「予定の編集」権限の追加許可（再認証1回）が必要です。進めますか？"
-                    className="inline-block rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white no-underline hover:bg-teal-dark"
+                    className="inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface no-underline hover:opacity-90"
                   >
                     有効にする
                   </ConfirmLink>
@@ -155,7 +155,7 @@ export default async function SettingsPage() {
             <ConfirmLink
               href="/api/auth/google"
               message="Google カレンダーと接続します。よろしいですか？"
-              className="mt-3 inline-block rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white no-underline hover:bg-teal-dark"
+              className="mt-3 inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface no-underline hover:opacity-90"
             >
               Google カレンダーと接続
             </ConfirmLink>

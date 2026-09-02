@@ -52,7 +52,7 @@ export function FeedbackWidget() {
       />
       <button
         type="submit"
-        className="rounded-md bg-teal px-3 py-1 font-medium text-white"
+        className="rounded-md bg-foreground px-3 py-1 font-medium text-surface"
       >
         送信
       </button>

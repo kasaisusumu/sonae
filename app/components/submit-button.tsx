@@ -15,10 +15,11 @@ export function SubmitButton({
   const { pending } = useFormStatus();
   const base =
     "inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium transition-all active:translate-y-px disabled:opacity-50 disabled:active:translate-y-0";
+  // 白黒ベースのユニバーサルデザイン。primary = 前景色ベタ、ghost = 枠線のみ。
   const styles =
     variant === "primary"
-      ? "bg-teal text-white shadow-sm hover:bg-teal-dark"
-      : "bg-surface-muted text-foreground hover:bg-border";
+      ? "bg-foreground text-surface shadow-sm hover:opacity-90"
+      : "border border-border bg-surface text-foreground hover:bg-surface-muted";
   return (
     <button
       type="submit"

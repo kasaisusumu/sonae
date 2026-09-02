@@ -40,23 +40,18 @@ function OutcomeButton({
   target,
   active,
   label,
-  tone,
 }: {
   logId: string;
   target: "prevented" | "not_prevented" | "irrelevant";
   active: boolean;
   label: string;
-  tone: "teal" | "warn" | "muted";
 }) {
   const base =
     "rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors";
+  // 白黒ベース。選択中＝前景色ベタ、未選択＝枠線のみ。意味は絵文字と✓で示す。
   const cls = active
-    ? tone === "teal"
-      ? "bg-teal text-white"
-      : tone === "warn"
-        ? "bg-warn text-white"
-        : "bg-foreground/70 text-white"
-    : "border border-border bg-surface text-muted hover:border-teal hover:text-teal-dark";
+    ? "bg-foreground text-surface"
+    : "border border-border bg-surface text-muted hover:border-foreground/40 hover:text-foreground";
   return (
     <form action={setFailureOutcome}>
       <input type="hidden" name="failureLogId" value={logId} />
@@ -110,21 +105,18 @@ function FailureRow({
             target="prevented"
             active={l.outcome === "prevented"}
             label="🛡️ 防げた"
-            tone="teal"
           />
           <OutcomeButton
             logId={l.id}
             target="not_prevented"
             active={l.outcome === "not_prevented"}
             label="😓 防げなかった"
-            tone="warn"
           />
           <OutcomeButton
             logId={l.id}
             target="irrelevant"
             active={l.outcome === "irrelevant"}
             label="今回は関係ない"
-            tone="muted"
           />
         </div>
       ) : (

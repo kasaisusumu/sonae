@@ -810,7 +810,7 @@ export function ChecklistEditor({
               type="button"
               onClick={bulkAdd}
               disabled={pending || !bulkText.trim()}
-              className="rounded-lg bg-teal px-3 py-1.5 text-sm font-medium text-white hover:bg-teal-dark disabled:opacity-50"
+              className="rounded-lg bg-foreground px-3 py-1.5 text-sm font-medium text-surface hover:opacity-90 disabled:opacity-50"
             >
               追加する
             </button>
@@ -873,7 +873,7 @@ export function ChecklistEditor({
                     type="button"
                     onClick={doSaveTemplate}
                     disabled={pending || !tplName.trim()}
-                    className="rounded-lg bg-teal px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                    className="rounded-lg bg-foreground px-4 py-1.5 text-sm font-medium text-surface disabled:opacity-50"
                   >
                     {pending ? "保存中…" : "保存"}
                   </button>
@@ -921,7 +921,7 @@ export function ChecklistEditor({
                     type="button"
                     onClick={doApplyTemplate}
                     disabled={pending || !applyId}
-                    className="rounded-lg bg-teal px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                    className="rounded-lg bg-foreground px-4 py-1.5 text-sm font-medium text-surface disabled:opacity-50"
                   >
                     {pending ? "追加中…" : "追加"}
                   </button>
@@ -969,7 +969,7 @@ export function ChecklistEditor({
                     type="button"
                     onClick={doCopyFromEvent}
                     disabled={pending || !copyId}
-                    className="rounded-lg bg-teal px-4 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+                    className="rounded-lg bg-foreground px-4 py-1.5 text-sm font-medium text-surface disabled:opacity-50"
                   >
                     {pending ? "コピー中…" : "コピー"}
                   </button>

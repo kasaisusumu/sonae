@@ -283,7 +283,7 @@ export function Tutorial() {
             <button
               type="button"
               onClick={() => (last ? finish() : setI(i + 1))}
-              className="rounded-lg bg-teal px-4 py-1.5 text-sm font-medium text-white hover:bg-teal-dark"
+              className="rounded-lg bg-foreground px-4 py-1.5 text-sm font-medium text-surface hover:opacity-90"
             >
               {last ? "はじめる" : "次へ"}
             </button>

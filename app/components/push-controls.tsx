@@ -200,7 +200,7 @@ export function PushControls({ publicKey }: { publicKey: string | null }) {
           type="button"
           onClick={enable}
           disabled={busy}
-          className="rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white hover:bg-teal-dark disabled:opacity-60"
+          className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface hover:opacity-90 disabled:opacity-60"
         >
           {busy ? "処理中…" : "通知をオンにする"}
         </button>

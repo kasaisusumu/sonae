@@ -69,7 +69,7 @@ export function SuggestionList({ suggestions }: { suggestions: SuggestionItem[] 
                   type="button"
                   disabled={pending}
                   onClick={() => act(s.id, "accept")}
-                  className="rounded-lg bg-teal px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-dark disabled:opacity-60"
+                  className="rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90 disabled:opacity-60"
                 >
                   {d.yes}
                 </button>

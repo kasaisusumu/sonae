@@ -34,7 +34,7 @@ function Seg({
       onClick={onClick}
       className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
         active
-          ? "bg-teal text-white shadow-sm"
+          ? "bg-foreground text-surface shadow-sm"
           : "text-muted hover:text-foreground"
       }`}
     >

@@ -142,7 +142,7 @@ export function TemplateEditor({
           type="button"
           onClick={save}
           disabled={pending}
-          className="rounded-lg bg-teal px-4 py-1.5 text-xs font-medium text-white hover:bg-teal-dark disabled:opacity-50"
+          className="rounded-lg bg-foreground px-4 py-1.5 text-xs font-medium text-surface hover:opacity-90 disabled:opacity-50"
         >
           {pending ? "保存中…" : "保存する"}
         </button>
@@ -162,7 +162,7 @@ export function TemplateEditor({
             type="button"
             onClick={addBulk}
             disabled={!bulk.trim()}
-            className="rounded-md bg-teal px-3 py-1 text-xs font-medium text-white hover:bg-teal-dark disabled:opacity-50"
+            className="rounded-md bg-foreground px-3 py-1 text-xs font-medium text-surface hover:opacity-90 disabled:opacity-50"
           >
             一括で行に追加
           </button>

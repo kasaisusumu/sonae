@@ -58,7 +58,7 @@ export function DictationInput({ eventId }: { eventId: string }) {
           type="button"
           onClick={run}
           disabled={pending || !text.trim()}
-          className="rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-teal-dark disabled:opacity-50"
+          className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface shadow-sm transition-colors hover:opacity-90 disabled:opacity-50"
         >
           {pending ? "振り分け中…" : "AIで振り分けて追加"}
         </button>

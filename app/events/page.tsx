@@ -69,7 +69,7 @@ export default async function EventsPage({
           </p>
           <a
             href="/api/auth/google"
-            className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-teal px-6 py-3 text-sm font-medium text-white no-underline shadow-sm transition-colors hover:bg-teal-dark"
+            className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-foreground px-6 py-3 text-sm font-medium text-surface no-underline shadow-sm transition-colors hover:opacity-90"
           >
             接続する（約30秒）
           </a>

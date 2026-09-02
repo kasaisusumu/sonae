@@ -499,7 +499,7 @@ export function PageCoach() {
             <button
               type="button"
               onClick={next}
-              className="rounded-lg bg-teal px-3 py-1 text-xs font-medium text-white hover:bg-teal-dark"
+              className="rounded-lg bg-foreground px-3 py-1 text-xs font-medium text-surface hover:opacity-90"
             >
               {last ? "おわり" : "次へ"}
             </button>

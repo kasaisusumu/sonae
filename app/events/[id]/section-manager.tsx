@@ -62,7 +62,7 @@ export function AddSectionButton({ eventId }: { eventId: string }) {
         type="button"
         onClick={submit}
         disabled={pending || !name.trim()}
-        className="rounded-md bg-teal px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
+        className="rounded-md bg-foreground px-2.5 py-1 text-xs font-medium text-surface disabled:opacity-50"
       >
         追加
       </button>

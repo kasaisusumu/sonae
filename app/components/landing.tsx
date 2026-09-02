@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 const CTA_CLASS =
-  "inline-flex w-full items-center justify-center rounded-xl bg-teal px-6 py-3.5 text-[15px] font-semibold text-white no-underline shadow-sm transition-colors hover:bg-teal-dark";
+  "inline-flex w-full items-center justify-center rounded-xl bg-foreground px-6 py-3.5 text-[15px] font-semibold text-surface no-underline shadow-sm transition-opacity hover:opacity-90";
 
 /** カレンダーの予定 → 準備リスト の小さな見本。 */
 function HeroMock() {
@@ -154,7 +154,7 @@ export function Landing({
             ],
           ].map(([t, d], i) => (
             <li key={i} className="flex gap-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-teal text-sm font-semibold text-white">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-surface">
                 {i + 1}
               </span>
               <div>

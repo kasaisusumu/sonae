@@ -41,7 +41,7 @@ export async function GettingStarted({ userId }: { userId: string }) {
           {!step1 && (
             <a
               href="/api/auth/google"
-              className="mt-1.5 inline-block rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white no-underline hover:bg-teal-dark"
+              className="mt-1.5 inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface no-underline hover:opacity-90"
             >
               つなぐ（約30秒）
             </a>
@@ -78,7 +78,7 @@ export async function GettingStarted({ userId }: { userId: string }) {
           {step2 && !step3 && (
             <Link
               href="/events"
-              className="mt-1.5 inline-block rounded-lg bg-teal px-4 py-2 text-sm font-medium text-white no-underline hover:bg-teal-dark"
+              className="mt-1.5 inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface no-underline hover:opacity-90"
             >
               予定を開く
             </Link>
@@ -110,7 +110,7 @@ function Step({
       <span
         className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
           done
-            ? "bg-teal text-white"
+            ? "bg-foreground text-surface"
             : "border border-teal/40 bg-surface text-teal-dark"
         }`}
       >

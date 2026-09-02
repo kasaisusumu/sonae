@@ -207,7 +207,6 @@ export default async function FailuresPage() {
   const categoryNames = Array.from(
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
   );
-  const total = logs.reduce((s, l) => s + l.estimatedLossYen, 0);
   // 予定に紐づく記録は、その予定が終わってから振り返る。
   const now = new Date();
   const reviewable = (l: (typeof logs)[number]) =>
@@ -313,14 +312,7 @@ export default async function FailuresPage() {
       </section>
 
       <section data-coach="fail-list" className="space-y-3">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-lg font-semibold">これまでの記録</h2>
-          {logs.length > 0 && (
-            <span className="text-xs text-muted">
-              推定損失の合計 {formatYen(total)}（参考値）
-            </span>
-          )}
-        </div>
+        <h2 className="text-lg font-semibold">これまでの記録</h2>
 
         {logs.length === 0 ? (
           <p className="rounded-2xl bg-surface px-4 py-10 text-center text-sm text-muted">

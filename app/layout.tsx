@@ -52,15 +52,10 @@ export default async function RootLayout({
   // 「結果記録待ち」の失敗ログ数（ナビにドットを出す）。1 件の軽い count。
   let pendingReview = 0;
   if (uid) {
+    // 「結果を記録しよう」に出るのと同じ範囲だけ数える。
+    // 予定に紐づく未確認（＝アプリ提案で採用されなかった失敗）は確認不要なので数えない。
     pendingReview = await prisma.failureLog.count({
-      where: {
-        userId: uid,
-        outcome: null,
-        OR: [
-          { eventId: null },
-          { event: { eventDatetime: { lte: new Date() } } },
-        ],
-      },
+      where: { userId: uid, outcome: null, eventId: null },
     });
   }
 

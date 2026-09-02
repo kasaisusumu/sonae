@@ -204,14 +204,21 @@ export default async function FailuresPage() {
   );
   // 予定に紐づく記録は、その予定が終わってから振り返る。
   const now = new Date();
-  const reviewable = (l: (typeof logs)[number]) =>
+  const eventEnded = (l: (typeof logs)[number]) =>
     !l.event || (l.event.endDatetime ?? l.event.eventDatetime) <= now;
-  const reviewableLogs = logs.filter(reviewable);
-  const pendingFuture = logs.filter((l) => !l.outcome && !reviewable(l));
-  const reviewed = logs.filter((l) => l.outcome);
+  // アプリが提案しただけで、その予定に採用（linked）されなかった失敗は「記録」では
+  // ない。結果の確認はしない（一覧の各セクションにも出さない）。
+  const isUnadopted = (l: (typeof logs)[number]) =>
+    !!l.event && l.outcome === null;
+
+  const reviewableLogs = logs.filter((l) => !isUnadopted(l) && eventEnded(l));
+  const pendingFuture = logs.filter(
+    (l) => l.outcome === "linked" && !eventEnded(l),
+  );
+  const reviewed = logs.filter((l) => !!l.outcome);
   // ふりかえり済みも「過去の予定」と「これからの予定」で分ける。
-  const reviewedPast = reviewed.filter((l) => reviewable(l));
-  const reviewedFuture = reviewed.filter((l) => !reviewable(l));
+  const reviewedPast = reviewed.filter((l) => eventEnded(l));
+  const reviewedFuture = reviewed.filter((l) => !eventEnded(l));
 
   return (
     <div className="space-y-8">

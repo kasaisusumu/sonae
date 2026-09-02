@@ -492,23 +492,25 @@ export async function notifyPostEventFailureChecks(
     logsByCat.set(l.categoryId, arr);
   }
 
-  // この予定に紐づく失敗ログの振り返り状況。すでに全部「防げた／防げなかった／
-  // 今回は関係ない」まで決まっていれば、催促の通知は送らない（処理済みにはする）。
+  // この予定に紐づく失敗ログの振り返り状況。振り返りが要るのは「採用した（linked）」
+  // 失敗だけ。採用されなかった提案（outcome=null）は確認不要なので数えない。
+  // 採用ぶんが全部「防げた／防げなかった…」まで決まっていれば催促しない。
   const evLogs = await prisma.failureLog.findMany({
     where: { userId, eventId: { in: events.map((e) => e.id) } },
     select: { eventId: true, outcome: true },
   });
-  const reviewByEvent = new Map<string, { total: number; pending: number }>();
+  const reviewByEvent = new Map<string, { adopted: number; pending: number }>();
   for (const l of evLogs) {
     if (!l.eventId) continue;
-    const cur = reviewByEvent.get(l.eventId) ?? { total: 0, pending: 0 };
-    cur.total += 1;
-    if (l.outcome === null || l.outcome === "linked") cur.pending += 1;
+    if (l.outcome === null) continue; // 採用されなかった提案は対象外
+    const cur = reviewByEvent.get(l.eventId) ?? { adopted: 0, pending: 0 };
+    cur.adopted += 1;
+    if (l.outcome === "linked") cur.pending += 1;
     reviewByEvent.set(l.eventId, cur);
   }
   const reviewDone = (eventId: string): boolean => {
     const r = reviewByEvent.get(eventId);
-    return !!r && r.total > 0 && r.pending === 0;
+    return !!r && r.adopted > 0 && r.pending === 0;
   };
 
   let sent = 0;

@@ -129,9 +129,13 @@ model Event {
   lastInboundEditAt DateTime?
   // 事後の「今回は防げた？」通知を送った日時（再送防止）
   postFailureCheckNotifiedAt DateTime?
-  // 準備リスト全体のリマインド通知。予定開始の何分前に「準備リストを確認しましょう」を1回送るか。
-  // null = 送らない。既定は 1 日前(1440)。
+  // 準備リスト全体のリマインド通知。予定開始の何分前に「準備リストを確認しましょう」を送るか。
+  // listReminderLeads = JSON の number[]（分・最大5個、早い順）。[] = 送らない。
+  // listReminderLeadMinutes は先頭値のミラー（後方互換）。
   listReminderLeadMinutes Int? @default(1440)
+  listReminderLeads       String @default("[1440]")
+  // すでに送信済みのリード時間（JSON number[]）。leads を変えると [] にリセット。
+  sentListReminderLeads   String @default("[]")
   listReminderNotifiedAt  DateTime?
   // ユーザーが明示的にリマインドを変えた日時。null = まだ既定のまま（学習で上書きしてよい）。
   listReminderTouchedAt   DateTime?

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push";
+import { parseLeads, stringifyLeads } from "@/lib/lead-time";
 
 /** 分 → 「X時間Y分前 / N日前」などの短いラベル。 */
 export function leadLabel(m: number): string {
@@ -123,8 +124,7 @@ export async function sendDueListReminders(
   const events = await prisma.event.findMany({
     where: {
       userId,
-      listReminderLeadMinutes: { not: null },
-      listReminderNotifiedAt: null,
+      listReminderLeads: { notIn: ["[]"] },
       eventDatetime: { gte: earliestEvent },
       checklistItems: { some: { isSuggested: false } },
     },
@@ -133,7 +133,8 @@ export async function sendDueListReminders(
       title: true,
       eventDatetime: true,
       recurringEventId: true,
-      listReminderLeadMinutes: true,
+      listReminderLeads: true,
+      sentListReminderLeads: true,
       checklistItems: {
         where: { isSuggested: false },
         select: { isDone: true },
@@ -143,11 +144,20 @@ export async function sendDueListReminders(
     take: 100,
   });
 
-  const ready = events.filter((e) => {
-    const lead = e.listReminderLeadMinutes ?? 0;
-    const fireAt = e.eventDatetime.getTime() - lead * 60_000;
-    return fireAt <= now.getTime();
-  });
+  // 各予定で「まだ送っていない & もう時刻が来た」リード時間を集める
+  type Due = (typeof events)[number] & { due: number[]; alreadySent: number[] };
+  const ready: Due[] = [];
+  for (const e of events) {
+    const leads = parseLeads(e.listReminderLeads);
+    const alreadySent = parseLeads(e.sentListReminderLeads);
+    const sentSet = new Set(alreadySent);
+    const due = leads.filter(
+      (L) =>
+        !sentSet.has(L) &&
+        e.eventDatetime.getTime() - L * 60_000 <= now.getTime(),
+    );
+    if (due.length > 0) ready.push({ ...e, due, alreadySent });
+  }
   if (ready.length === 0) return 0;
 
   let sent = 0;
@@ -156,10 +166,13 @@ export async function sendDueListReminders(
     const seriesKey = e.recurringEventId ?? "";
     const seriesDup = seriesKey !== "" && seenSeries.has(seriesKey);
 
+    // 送らない場合でも、同時に来たぶんは「送信済み」にして次回以降スキップ
     if (sent >= limit || seriesDup) {
       await prisma.event.update({
         where: { id: e.id },
-        data: { listReminderNotifiedAt: now },
+        data: {
+          sentListReminderLeads: stringifyLeads([...e.alreadySent, ...e.due]),
+        },
       });
       continue;
     }
@@ -167,10 +180,11 @@ export async function sendDueListReminders(
 
     const total = e.checklistItems.length;
     const left = e.checklistItems.filter((i) => !i.isDone).length;
+    const label = leadLabel(Math.max(...e.due)); // 複数同時なら一番早いラベル
     const body =
       left > 0
-        ? `準備リストの確認を（未完 ${left}/${total}）`
-        : `準備リストの確認を（${total}件）`;
+        ? `準備リストの確認を（${label}・未完 ${left}/${total}）`
+        : `準備リストの確認を（${label}・${total}件）`;
 
     await sendPushToUser(userId, {
       title: `「${e.title}」`,
@@ -180,7 +194,9 @@ export async function sendDueListReminders(
     });
     await prisma.event.update({
       where: { id: e.id },
-      data: { listReminderNotifiedAt: now },
+      data: {
+        sentListReminderLeads: stringifyLeads([...e.alreadySent, ...e.due]),
+      },
     });
     sent++;
   }

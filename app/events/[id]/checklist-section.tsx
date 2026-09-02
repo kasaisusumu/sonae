@@ -10,6 +10,7 @@ import { getWarningForEvent } from "@/lib/failures";
 import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
+import { parseLeads } from "@/lib/lead-time";
 import { markListReviewed } from "@/app/actions";
 import { Suspense } from "react";
 import {
@@ -100,7 +101,7 @@ export async function ChecklistSection({
     categoryId: string | null;
     recurringEventId: string | null;
     failureWarningAckAt: Date | null;
-    listReminderLeadMinutes: number | null;
+    listReminderLeads: string;
     category: { name: string } | null;
   };
 }) {
@@ -157,7 +158,7 @@ export async function ChecklistSection({
       select: {
         listReviewedAt: true,
         listCustomized: true,
-        listReminderLeadMinutes: true,
+        listReminderLeads: true,
         sectionOrder: true,
         _count: { select: { editRecords: true } },
       },
@@ -238,10 +239,9 @@ export async function ChecklistSection({
         >
           <ListReminderControl
             eventId={event.id}
-            current={
-              reviewState?.listReminderLeadMinutes ??
-              event.listReminderLeadMinutes
-            }
+            current={parseLeads(
+              reviewState?.listReminderLeads ?? event.listReminderLeads,
+            )}
           />
           <DictationInput eventId={event.id} />
         </div>

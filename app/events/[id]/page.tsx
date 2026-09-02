@@ -93,7 +93,7 @@ export default async function EventDetailPage({
             categoryId: event.categoryId,
             recurringEventId: event.recurringEventId,
             failureWarningAckAt: event.failureWarningAckAt,
-            listReminderLeadMinutes: event.listReminderLeadMinutes,
+            listReminderLeads: event.listReminderLeads,
             category: event.category
               ? { name: event.category.name }
               : null,

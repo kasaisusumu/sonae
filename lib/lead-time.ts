@@ -19,6 +19,36 @@ export const LEAD_PRESETS: { label: string; minutes: number | null }[] = [
 export const isLeadPreset = (m: number | null): boolean =>
   LEAD_PRESETS.some((p) => p.minutes === m);
 
+/** 準備リストのリマインドは最大 5 個まで。 */
+export const MAX_LIST_REMINDERS = 5;
+
+export function normalizeLeads(leads: number[]): number[] {
+  return [
+    ...new Set(
+      leads
+        .map((n) => Math.max(0, Math.floor(n)))
+        .filter((n) => Number.isFinite(n)),
+    ),
+  ]
+    .sort((x, y) => y - x)
+    .slice(0, MAX_LIST_REMINDERS);
+}
+
+/** JSON 文字列 → 分の配列（0以上・重複除去・早い順＝大きい順・最大5）。壊れていれば []。 */
+export function parseLeads(raw: string | null | undefined): number[] {
+  try {
+    const a = JSON.parse(raw ?? "[]");
+    if (!Array.isArray(a)) return [];
+    return normalizeLeads(a.filter((n): n is number => typeof n === "number"));
+  } catch {
+    return [];
+  }
+}
+
+export function stringifyLeads(leads: number[]): string {
+  return JSON.stringify(normalizeLeads(leads));
+}
+
 /** 分 → 「1日前」「3時間前」「2時間30分前」。null は空文字。 */
 export function formatLead(minutes: number | null): string {
   if (minutes == null) return "";

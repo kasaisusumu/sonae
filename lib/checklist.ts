@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { buildChecklistForEvent, type BuiltItem } from "@/lib/suggest";
 import { syncEventDescription } from "@/lib/description-sync";
+import { parseLeads, stringifyLeads } from "@/lib/lead-time";
 
 export interface DraftItem {
   title: string;
@@ -169,13 +170,18 @@ export async function applyLearnedListReminder(eventId: string): Promise<void> {
       listReminderTouchedAt: { not: null },
     },
     orderBy: { listReminderTouchedAt: "desc" },
-    select: { listReminderLeadMinutes: true },
+    select: { listReminderLeads: true },
   });
   if (!learned) return;
 
+  const leads = parseLeads(learned.listReminderLeads);
   await prisma.event.update({
     where: { id: eventId },
-    data: { listReminderLeadMinutes: learned.listReminderLeadMinutes },
+    data: {
+      listReminderLeads: stringifyLeads(leads),
+      sentListReminderLeads: "[]",
+      listReminderLeadMinutes: leads[0] ?? null,
+    },
   });
 }
 

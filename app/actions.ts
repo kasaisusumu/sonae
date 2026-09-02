@@ -30,7 +30,7 @@ import {
 } from "@/lib/learning";
 import { extractEventFeature } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
-import { parseLead } from "@/lib/lead-time";
+import { parseLead, stringifyLeads } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
 import { parseJstDate, parseJstDateTimeLocal } from "@/lib/format";
 import { clusterKey } from "@/lib/failures";
@@ -382,19 +382,22 @@ export async function markListReviewed(formData: FormData): Promise<void> {
 }
 
 /**
- * 予定単位の「準備リストのリマインド」設定を変える（即時）。
- * leadMinutes = null で送らない。既定は 1 日前(1440)。
+ * 予定単位の「準備リストのリマインド」を変える（即時）。最大 5 個。
+ * leads = [] で送らない。
  */
-export async function setListReminder(
+export async function setListReminders(
   eventId: string,
-  leadMinutes: number | null,
+  leads: number[],
 ): Promise<void> {
   const userId = await requireUserId();
-  const lead = cleanLead(leadMinutes);
+  const json = stringifyLeads(Array.isArray(leads) ? leads : []);
+  const arr = JSON.parse(json) as number[];
   const res = await prisma.event.updateMany({
     where: { id: eventId, userId },
     data: {
-      listReminderLeadMinutes: lead,
+      listReminderLeads: json,
+      sentListReminderLeads: "[]", // 変えたので再送対象に
+      listReminderLeadMinutes: arr[0] ?? null, // 先頭値のミラー
       listReminderNotifiedAt: null,
       // ユーザーが決めたので、以後この予定は学習で上書きしない。次の似た予定はこの値を初期値にする。
       listReminderTouchedAt: new Date(),

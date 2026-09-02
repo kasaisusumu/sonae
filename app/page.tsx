@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { after } from "next/server";
 import { getCurrentUser } from "@/lib/session";
-import { prisma } from "@/lib/prisma";
 import { isDevLoginEnabled } from "@/lib/dev-login";
 import { getUpcomingWarnings } from "@/lib/failures";
 import { primeNotifiedChecklists } from "@/lib/checklist";
@@ -69,23 +68,7 @@ export default async function HomePage({
     );
   }
 
-  const now = new Date();
-
-  const [upcoming, warnings] = await Promise.all([
-    prisma.event.findMany({
-      where: { userId: user.id, eventDatetime: { gte: now } },
-      orderBy: { eventDatetime: "asc" },
-      take: 5,
-      select: {
-        id: true,
-        title: true,
-        eventDatetime: true,
-        category: { select: { name: true } },
-        checklistItems: { select: { isDone: true } },
-      },
-    }),
-    getUpcomingWarnings(user.id),
-  ]);
+  const warnings = await getUpcomingWarnings(user.id);
 
   after(() => primeNotifiedChecklists(user.id));
 
@@ -98,59 +81,6 @@ export default async function HomePage({
       <div data-coach="savings">
         <SavingsDashboard userId={user.id} />
       </div>
-
-      <section data-coach="upcoming">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight">
-            これからの予定
-          </h2>
-          <Link
-            href="/events"
-            className="text-sm no-underline hover:text-teal-dark"
-          >
-            すべて見る →
-          </Link>
-        </div>
-
-        {upcoming.length === 0 ? (
-          <p className="rounded-xl bg-surface px-4 py-6 text-center text-sm text-muted">
-            予定がまだありません。
-            <Link href="/events" className="ml-1 no-underline">
-              取り込む
-            </Link>
-          </p>
-        ) : (
-          <ul className="space-y-2">
-            {upcoming.map((ev) => {
-              const total = ev.checklistItems.length;
-              const done = ev.checklistItems.filter((c) => c.isDone).length;
-              return (
-                <li key={ev.id}>
-                  <Link
-                    href={`/events/${ev.id}`}
-                    className="flex items-center justify-between gap-3 rounded-xl bg-surface px-4 py-3 no-underline transition-colors hover:bg-surface-muted active:bg-accent-soft"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium text-foreground">
-                        {ev.title}
-                      </span>
-                      <span className="block text-xs text-muted">
-                        {formatDateTime(ev.eventDatetime)}
-                        {ev.category ? ` ・ ${ev.category.name}` : ""}
-                      </span>
-                    </span>
-                    {total > 0 && (
-                      <span className="shrink-0 text-xs text-muted">
-                        {done}/{total}
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
 
       {warnings.length > 0 && (
         <section className="rounded-2xl border border-warn/30 bg-warn-soft p-5">
@@ -182,15 +112,4 @@ export default async function HomePage({
       <HowTo />
     </div>
   );
-}
-
-function formatDateTime(d: Date): string {
-  return d.toLocaleString("ja-JP", {
-    timeZone: "Asia/Tokyo",
-    month: "numeric",
-    day: "numeric",
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }

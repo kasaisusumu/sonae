@@ -23,7 +23,7 @@ const FLAG_PREFIX = "mm_coach_";
 
 const TOURS: Tour[] = [
   {
-    key: "home_v4",
+    key: "home_v5",
     match: (p) => p === "/",
     steps: [
       {
@@ -35,11 +35,6 @@ const TOURS: Tour[] = [
         sel: '[data-coach="savings"]',
         title: "防げた分の見える化",
         body: "「防げた」と選んだ失敗の推定額の合計です（参考値）。下のグラフは棒をタップで内訳。",
-      },
-      {
-        sel: '[data-coach="upcoming"]',
-        title: "これからの予定",
-        body: "タップで準備リストへ。右の数字は「準備できた数 / 全部の数」です。",
       },
     ],
   },

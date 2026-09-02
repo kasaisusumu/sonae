@@ -152,8 +152,8 @@ export function Landing({
         <HeroMock />
 
         <p className="mx-auto mt-6 max-w-md text-[11px] leading-relaxed text-muted">
-          カレンダーは<strong className="text-foreground">読み取りのみ</strong>。
-          説明欄への書き込みは、設定で明示的に ON にしたときだけ。
+          予定の<strong className="text-foreground">説明欄に準備リストのリンクを自動で追記</strong>します
+          （予定の日時やタイトルは変更しません。設定でいつでもオフにできます）。
           無料の検証版です。
         </p>
       </section>
@@ -276,8 +276,9 @@ export function Landing({
             はい。いまは無料の検証版です。
           </Faq>
           <Faq q="カレンダーの予定が書き換わりませんか？">
-            既定は読み取りのみです。予定の説明欄への追記は、設定で自分で ON
-            にしたときだけ行います。
+            予定の日時・タイトル・場所は変更しません。行うのは、説明欄の末尾に
+            「準備リストのリンク＋箇条書き」ブロックを追記・更新することだけです。
+            元の説明文は残します。設定でいつでもオフにできます。
           </Faq>
           <Faq q="スマホだけで使えますか？">
             使えます。ブラウザの「ホーム画面に追加」で、アプリのように使えます。

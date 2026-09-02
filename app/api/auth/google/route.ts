@@ -7,7 +7,9 @@ export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const base = process.env.APP_BASE_URL || req.nextUrl.origin;
-  const withWrite = req.nextUrl.searchParams.get("write") === "1";
+  // 既定で「予定の編集」スコープも要求する（説明欄書き込みを初回から有効に）。
+  // 読み取りだけにしたい場合は ?write=0 を付ける。
+  const withWrite = req.nextUrl.searchParams.get("write") !== "0";
   try {
     const state = crypto.randomBytes(16).toString("hex");
     const url = buildConsentUrl(state, withWrite);

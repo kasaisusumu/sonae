@@ -120,36 +120,37 @@ export default async function SettingsPage() {
                 予定の説明欄に準備リストを書き込む
               </p>
               <p className="mt-1 text-[11px] text-muted">
-                連携より前からあった予定は、アプリで準備リストを1回編集するか
-                「確認しました」を押してからでないと、説明欄には書き込まれません。
+                既定でオンです。連携より前からあった予定は、アプリで準備リストを
+                1回編集するか「確認しました」を押してから書き込まれます。
+                予定の日時・タイトルは変更しません。
               </p>
               {account.writeDescriptionEnabled ? (
                 <div className="mt-1 space-y-2">
                   <p className="text-xs text-muted">
-                    有効です。準備リスト（リンク＋箇条書き）を予定の説明欄に自動で追記・更新します。
+                    オンです。準備リスト（リンク＋箇条書き）を予定の説明欄に自動で追記・更新します。
                     元の説明文は残し、「--- 私のマネージャー ---」ブロックだけ差し替えます。
                   </p>
                   <form action={disableDescriptionWrite}>
                     <SubmitButton
                       variant="ghost"
-                      confirm="説明欄への書き込みを無効にします。すでに書き込んだ予定の説明欄はそのまま残ります。よろしいですか？"
+                      confirm="説明欄への書き込みをオフにします。すでに書き込んだ予定の説明欄はそのまま残ります。よろしいですか？"
                     >
-                      無効にする
+                      オフにする
                     </SubmitButton>
                   </form>
                 </div>
               ) : (
                 <div className="mt-1 space-y-2">
                   <p className="text-xs text-muted">
-                    デフォルトは OFF（読み取りのみ）。オンにすると予定の説明欄に準備リストを追記します。
-                    有効化には Google で「予定の編集」権限の追加許可（再認証1回）が必要です。
+                    いまオフです。オンにすると予定の説明欄に準備リストを追記します。
+                    Google で「予定の編集」権限が未許可の場合は、追加許可（再認証1回）が必要です。
                   </p>
                   <ConfirmLink
                     href="/api/auth/google?write=1"
-                    message="予定の説明欄への書き込みを有効にします。Google で「予定の編集」権限の追加許可（再認証1回）が必要です。進めますか？"
+                    message="予定の説明欄への書き込みをオンにします。必要なら Google で「予定の編集」権限の追加許可（再認証1回）を行います。進めますか？"
                     className="inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface no-underline hover:opacity-90"
                   >
-                    有効にする
+                    オンにする
                   </ConfirmLink>
                 </div>
               )}

@@ -76,7 +76,7 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
           <div className="mt-4 rounded-xl bg-surface/10 p-4">
             <p className="text-xs font-semibold text-surface/80">今月防げたこと</p>
             <ul className="mt-2 space-y-1 text-sm text-surface/90">
-              {s.thisMonthItems.map((it, i) => (
+              {s.thisMonthItems.slice(0, 1).map((it, i) => (
                 <li key={i} className="flex items-baseline justify-between gap-3">
                   <span className="min-w-0 truncate">
                     ・{it.description}
@@ -90,6 +90,34 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
                 </li>
               ))}
             </ul>
+            {s.thisMonthItems.length > 1 && (
+              <details className="mt-1 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="cursor-pointer list-none text-[11px] text-surface/70 hover:text-surface">
+                  ほか {s.thisMonthItems.length - 1} 件を見る ▾
+                </summary>
+                <ul className="mt-1 space-y-1 text-sm text-surface/90">
+                  {s.thisMonthItems.slice(1).map((it, i) => (
+                    <li
+                      key={i}
+                      className="flex items-baseline justify-between gap-3"
+                    >
+                      <span className="min-w-0 truncate">
+                        ・{it.description}
+                        {it.eventTitle ? (
+                          <span className="text-surface/60">
+                            {" "}
+                            （{it.eventTitle}）
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="shrink-0 tabular-nums">
+                        {it.amountYen > 0 ? formatYen(it.amountYen) : "±0"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
           </div>
         )}
 

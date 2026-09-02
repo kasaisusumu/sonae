@@ -62,8 +62,9 @@ model UserGoogleAccount {
   watchChannelId     String?
   watchResourceId    String?
   watchExpiration    DateTime?
-  // 予定の説明欄への準備リスト書き込み（オプトイン。calendar.events スコープ許可済みで true）
-  writeDescriptionEnabled Boolean @default(false)
+  // 予定の説明欄への準備リスト書き込み。既定 true（初回連携で calendar.events も要求）。
+  // 設定でいつでもオフにできる。calendar.events 未許可なら書き込みは黙って失敗する。
+  writeDescriptionEnabled Boolean @default(true)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }

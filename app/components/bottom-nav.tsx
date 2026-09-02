@@ -11,7 +11,7 @@ const TABS = [
   { href: "/settings", label: "設定" },
 ];
 
-export function BottomNav() {
+export function BottomNav({ pendingReview = 0 }: { pendingReview?: number }) {
   const pathname = usePathname();
 
   return (
@@ -28,18 +28,22 @@ export function BottomNav() {
             tab.href === "/"
               ? pathname === "/"
               : pathname.startsWith(tab.href);
+          const dot = tab.href === "/failures" && pendingReview > 0;
           return (
             <li key={tab.href} className="flex-1">
               <Link
                 href={tab.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[11px] no-underline transition-colors ${
+                className={`relative flex flex-col items-center justify-center gap-1 rounded-xl py-2 text-[11px] no-underline transition-colors ${
                   active
                     ? "bg-accent-soft font-semibold text-teal-dark"
                     : "text-muted hover:text-foreground"
                 }`}
               >
                 {tab.label}
+                {dot && (
+                  <span className="absolute right-3 top-1.5 h-1.5 w-1.5 rounded-full bg-warn" />
+                )}
               </Link>
             </li>
           );

@@ -221,6 +221,30 @@ export default async function FailuresPage() {
         </p>
       </div>
 
+      {/* ── 結果記録待ち（振り返り）。溜まっていたら開いてすぐ見える位置に。 ── */}
+      {unreviewed.length > 0 && (
+        <section
+          id="review"
+          className="scroll-mt-4 space-y-2 rounded-2xl border border-foreground bg-surface p-4"
+        >
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+            🤔 結果を記録しよう（{unreviewed.length}件）
+            <InfoHint>
+              終わった予定、どうでしたか？ ワンタップでOK。「防げた」にしたものだけが
+              <a href="/savings" className="underline">
+                節約額
+              </a>
+              に積み上がります。
+            </InfoHint>
+          </h2>
+          <ul className="space-y-2">
+            {unreviewed.map((l) => (
+              <FailureRow key={l.id} log={l} />
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/* ── 記入：まずは「ひとこと」だけでOK ── */}
       <section
         data-coach="fail-new"
@@ -309,30 +333,10 @@ export default async function FailuresPage() {
           </p>
         ) : (
           <>
-            {unreviewed.length > 0 && (
-              <div className="space-y-2 rounded-2xl border border-border bg-surface p-4">
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                  🤔 ふりかえり（{unreviewed.length}件）
-                  <InfoHint>
-                    終わった予定、どうでしたか？ ワンタップでOK。「防げた」にしたものだけが
-                    <a href="/savings" className="underline">
-                      節約額
-                    </a>
-                    に積み上がります。
-                  </InfoHint>
-                </h3>
-                <ul className="space-y-2">
-                  {unreviewed.map((l) => (
-                    <FailureRow key={l.id} log={l} />
-                  ))}
-                </ul>
-              </div>
-            )}
-
             {pendingFuture.length > 0 && (
-              <details className="[&_summary::-webkit-details-marker]:hidden">
+              <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
                 <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
-                  まだ先の予定の記録（{pendingFuture.length}件）— 予定が終わってから振り返り
+                  ▸ まだ先の予定の記録を見る（{pendingFuture.length}件）
                 </summary>
                 <ul className="mt-2 space-y-2">
                   {pendingFuture.map((l) => (
@@ -343,16 +347,22 @@ export default async function FailuresPage() {
             )}
 
             {reviewed.length > 0 && (
-              <div className="space-y-2">
-                <h3 className="text-xs font-semibold text-muted">
-                  ふりかえり済み（{reviewed.length}件）
-                </h3>
-                <ul className="space-y-2">
+              <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
+                  ▸ ふりかえり済みを見る（{reviewed.length}件）
+                </summary>
+                <ul className="mt-2 space-y-2">
                   {reviewed.map((l) => (
                     <FailureRow key={l.id} log={l} />
                   ))}
                 </ul>
-              </div>
+              </details>
+            )}
+
+            {pendingFuture.length === 0 && reviewed.length === 0 && (
+              <p className="rounded-2xl bg-surface px-4 py-6 text-center text-sm text-muted">
+                済んだ記録はまだありません。
+              </p>
             )}
           </>
         )}

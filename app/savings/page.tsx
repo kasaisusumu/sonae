@@ -13,7 +13,10 @@ import { LearningExplorer } from "./learning-explorer";
 import { LazyLeaf } from "./lazy-leaf";
 import { LeafBody, type LeafItem, type LeafSectionData } from "./leaf-body";
 import { KindGroup } from "./templates-panel";
-import { FailureLogEditor } from "./failure-log-editor";
+import {
+  FailureListEditor,
+  type FLRow,
+} from "@/app/events/[id]/failure-list-editor";
 
 function Keywords({ words }: { words: string[] }) {
   if (words.length === 0) return null;
@@ -110,7 +113,11 @@ function EventLeaf({
       }
     >
       {/* 失敗ログは一番上に。予定詳細と同じ形式でその場編集・追加できる。 */}
-      <FailureLogEditor eventId={leaf.eventId} failures={leaf.failures} />
+      <FailureListEditor
+        eventId={leaf.eventId}
+        label="失敗ログ"
+        initial={leaf.failures satisfies FLRow[]}
+      />
       {leaf.mergedCount > 1 && !leaf.cleared && (
         <p className="mb-2 mt-3 flex items-center gap-1 text-[11px] text-muted">
           同じ名前の未編集 {leaf.mergedCount} 件をまとめて編集

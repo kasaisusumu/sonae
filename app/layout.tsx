@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 import { getSessionUserId } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
 import { FeedbackWidget } from "@/app/components/feedback-widget";
 import { LogoutButton } from "@/app/components/logout-button";
 import { SwRegister } from "@/app/components/sw-register";
@@ -45,8 +46,23 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  // レイアウトはログイン有無だけ判定（DB アクセスなし＝毎回のページ遷移を軽く）
-  const isLoggedIn = (await getSessionUserId()) !== null;
+  const uid = await getSessionUserId();
+  const isLoggedIn = uid !== null;
+
+  // 「結果記録待ち」の失敗ログ数（ナビにドットを出す）。1 件の軽い count。
+  let pendingReview = 0;
+  if (uid) {
+    pendingReview = await prisma.failureLog.count({
+      where: {
+        userId: uid,
+        outcome: null,
+        OR: [
+          { eventId: null },
+          { event: { eventDatetime: { lte: new Date() } } },
+        ],
+      },
+    });
+  }
 
   return (
     <html lang="ja" className={`${geistSans.variable} h-full`}>
@@ -80,9 +96,12 @@ export default async function RootLayout({
                   <Link
                     key={href}
                     href={href}
-                    className="rounded-lg px-2.5 py-1.5 text-muted no-underline transition-colors hover:bg-surface-muted hover:text-foreground"
+                    className="relative rounded-lg px-2.5 py-1.5 text-muted no-underline transition-colors hover:bg-surface-muted hover:text-foreground"
                   >
                     {label}
+                    {href === "/failures" && pendingReview > 0 && (
+                      <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-warn" />
+                    )}
                   </Link>
                 ))}
                 <span className="ml-1">
@@ -118,7 +137,7 @@ export default async function RootLayout({
           </div>
         </footer>
 
-        {isLoggedIn ? <BottomNav /> : null}
+        {isLoggedIn ? <BottomNav pendingReview={pendingReview} /> : null}
       </body>
     </html>
   );

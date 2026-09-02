@@ -1026,6 +1026,37 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
 }
 
 /**
+ * 「今回もやってしまった」の取り消し。logRepeatedFailure でこの予定に足した
+ * （まだ振り返り前＝outcome が "linked" の）コピーを消して、選び直せる状態に戻す。
+ * 元になった失敗ログ（failureLogId）自体は消さない。
+ */
+export async function undoRepeatedFailure(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  const failureLogId = String(formData.get("failureLogId") ?? "");
+  if (!eventId || !failureLogId) return;
+
+  const template = await prisma.failureLog.findFirst({
+    where: { id: failureLogId, userId },
+    select: { description: true },
+  });
+  if (!template) return;
+
+  await prisma.failureLog.deleteMany({
+    where: {
+      userId,
+      eventId,
+      description: template.description,
+      outcome: "linked",
+      id: { not: failureLogId },
+    },
+  });
+
+  revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
+}
+
+/**
  * 提案（または既存）の失敗を、内容・金額・成功/失敗を選んだ上でこの予定に記録する。
  * outcome:
  *   "prevented"     … 防げた → 推定損失額を節約に計上

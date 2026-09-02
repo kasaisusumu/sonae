@@ -41,8 +41,12 @@ function meta(o: string | null): { icon: string; label: string } {
   }
 }
 
-/** 1 行ぶんの編集フォーム（内容・結果・金額・日付）＋削除。両表示で共通。 */
-function RowEditForms({ r }: { r: FLRow }) {
+/**
+ * 1 行ぶんの編集フォーム（内容・結果・金額・日付）＋削除。両表示で共通。
+ * hideDate: この予定に紐づく失敗ログは日付が予定の日で確定しているので、
+ * 日付入力を出さない（省略すれば updateFailureLog 側で日付はそのまま）。
+ */
+function RowEditForms({ r, hideDate = false }: { r: FLRow; hideDate?: boolean }) {
   return (
     <>
       <form action={updateFailureLog} className="space-y-2">
@@ -77,13 +81,15 @@ function RowEditForms({ r }: { r: FLRow }) {
             className="w-20 rounded-md border bg-background px-1.5 py-1 text-xs"
             aria-label="金額"
           />
-          <input
-            type="date"
-            name="occurredAt"
-            defaultValue={toDateInputValue(r.occurredAt)}
-            className="rounded-md border bg-background px-1.5 py-1 text-xs"
-            aria-label="日付"
-          />
+          {!hideDate && (
+            <input
+              type="date"
+              name="occurredAt"
+              defaultValue={toDateInputValue(r.occurredAt)}
+              className="rounded-md border bg-background px-1.5 py-1 text-xs"
+              aria-label="日付"
+            />
+          )}
           <SubmitButton variant="ghost">更新</SubmitButton>
         </div>
       </form>
@@ -123,6 +129,14 @@ export function FailureListEditor({
   const [pickOpen, setPickOpen] = useState(false);
   // 学習内容ページ：一度でも「編集」を押したら編集モード（追加ボタンも出す）。
   const [editMode, setEditMode] = useState(false);
+  // 「今回は関係ない」にした失敗予測は、この予定からは消す。ただしその場では
+  // 消さず、画面を離れて戻ってから消える（マウント時点で irrelevant だったものだけ隠す）。
+  const [hiddenAtMount] = useState(
+    () =>
+      new Set(
+        initial.filter((r) => r.outcome === "irrelevant").map((r) => r.id),
+      ),
+  );
 
   // ── 学習内容ページ用：昔どおり「ただ赤いだけ」の一覧。 ──
   //   「編集」を押すとその行が編集でき、以降「＋ 追加」も出る。
@@ -235,16 +249,18 @@ export function FailureListEditor({
   }
 
   // ── 予定詳細ページ用：準備リストの枠と同じフル機能。 ──
+  // 「今回は関係ない」で外したものは（次にこの画面へ来たときに）並びから消える。
+  const rows = initial.filter((r) => !hiddenAtMount.has(r.id));
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="mb-1.5 flex items-baseline gap-2">
         <h3 className="text-sm font-semibold text-foreground">{label}</h3>
-        <span className="text-xs text-muted tabular-nums">{initial.length}</span>
+        <span className="text-xs text-muted tabular-nums">{rows.length}</span>
       </div>
 
-      {initial.length > 0 && (
+      {rows.length > 0 && (
         <ul className="space-y-1">
-          {initial.map((r) => {
+          {rows.map((r) => {
             const m = meta(r.outcome);
             const open = openId === r.id;
             // 未確認（＝アプリが提案した先回り）は赤で目立たせる。
@@ -307,7 +323,7 @@ export function FailureListEditor({
 
                 {open && (
                   <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
-                    <RowEditForms r={r} />
+                    <RowEditForms r={r} hideDate />
                   </div>
                 )}
               </li>

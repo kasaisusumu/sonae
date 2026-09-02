@@ -4,6 +4,7 @@ import {
   logRepeatedFailure,
   markPrevented,
   undoPrevented,
+  undoRepeatedFailure,
   updateFailureAmount,
 } from "@/app/actions";
 import { formatDateOnly, formatYen } from "@/lib/format";
@@ -144,9 +145,21 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                   </div>
                 </>
               ) : log.loggedThisEventCount > 0 ? (
-                <p className="text-sm font-medium text-warn">
-                  ✓ 「今回もやってしまった」を記録しました。次の似た予定で先回りします。
-                </p>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium text-warn">
+                    ✓ 「今回もやってしまった」を記録しました。次の似た予定で先回りします。
+                  </p>
+                  <form action={undoRepeatedFailure}>
+                    <input type="hidden" name="eventId" value={event.id} />
+                    <input type="hidden" name="failureLogId" value={log.id} />
+                    <ConfirmButton
+                      message="「今回もやってしまった」の記録を取り消しますか？（選び直せます）"
+                      className="text-xs text-muted underline hover:text-foreground"
+                    >
+                      取り消して選び直す
+                    </ConfirmButton>
+                  </form>
+                </div>
               ) : (
                 <>
                   {isPast && (

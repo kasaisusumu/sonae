@@ -468,6 +468,25 @@ export async function notifyPostEventFailureChecks(
     logsByCat.set(l.categoryId, arr);
   }
 
+  // この予定に紐づく失敗ログの振り返り状況。すでに全部「防げた／防げなかった／
+  // 今回は関係ない」まで決まっていれば、催促の通知は送らない（処理済みにはする）。
+  const evLogs = await prisma.failureLog.findMany({
+    where: { userId, eventId: { in: events.map((e) => e.id) } },
+    select: { eventId: true, outcome: true },
+  });
+  const reviewByEvent = new Map<string, { total: number; pending: number }>();
+  for (const l of evLogs) {
+    if (!l.eventId) continue;
+    const cur = reviewByEvent.get(l.eventId) ?? { total: 0, pending: 0 };
+    cur.total += 1;
+    if (l.outcome === null || l.outcome === "linked") cur.pending += 1;
+    reviewByEvent.set(l.eventId, cur);
+  }
+  const reviewDone = (eventId: string): boolean => {
+    const r = reviewByEvent.get(eventId);
+    return !!r && r.total > 0 && r.pending === 0;
+  };
+
   let sent = 0;
   const notifiedSeries = new Set<string>();
   for (const e of events) {
@@ -478,6 +497,9 @@ export async function notifyPostEventFailureChecks(
       where: { id: e.id },
       data: { postFailureCheckNotifiedAt: now },
     });
+
+    // すでに振り返り済みなら催促しない。
+    if (reviewDone(e.id)) continue;
 
     const seriesKey = e.recurringEventId ?? "";
     const seriesDup = seriesKey !== "" && notifiedSeries.has(seriesKey);

@@ -290,6 +290,13 @@ export async function getWarningForEvent(
     logApplies(l, event.title, event.recurringEventId, feature),
   );
 
+  // 終わった予定の「振り返り（今回どうでした？）」で出すのは、その予定に
+  // 登録された失敗だけ。カテゴリ全体の記録（eventId なし）は、確認のたびに
+  // 出さない（ユーザー指定）。これからの予定の先回り警告では従来どおり出す。
+  const forWarning = past
+    ? strong.filter((l) => l.eventId === event.id)
+    : strong;
+
   const savings = await prisma.savingsEntry.findMany({
     where: { failureLogId: { in: logs.map((l) => l.id) }, confirmedByUser: true },
     select: { failureLogId: true, eventId: true },
@@ -309,7 +316,7 @@ export async function getWarningForEvent(
   // 名前が似ている・同じ繰り返し系列・状況が近い、のいずれかで当たったものだけ。
   // 「同じカテゴリなだけ」の弱い参考表示はしない（ユーザー指定）。
   const clusters = buildClusters(
-    strong,
+    forWarning,
     preventedCountByLogId,
     preventedThisEvent,
     event.id,
@@ -524,9 +531,13 @@ export async function notifyPostEventFailureChecks(
     if (seriesKey !== "") notifiedSeries.add(seriesKey);
 
     const feature = featureOf(e);
+    // 本文で引用するのは「その予定に登録された失敗」だけ。カテゴリ全体の記録は
+    // 振り返りの催促には出さない（ユーザー指定）。無ければ一般的な文面にする。
     const applicable = e.categoryId
-      ? (logsByCat.get(e.categoryId) ?? []).filter((l) =>
-          logApplies(l, e.title, e.recurringEventId, feature),
+      ? (logsByCat.get(e.categoryId) ?? []).filter(
+          (l) =>
+            l.eventId === e.id &&
+            logApplies(l, e.title, e.recurringEventId, feature),
         )
       : [];
 

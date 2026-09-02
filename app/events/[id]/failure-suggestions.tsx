@@ -68,26 +68,19 @@ export async function FailureSuggestions({ eventId }: { eventId: string }) {
               />
             </label>
 
-            <fieldset className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-              <label className="inline-flex items-center gap-1">
-                <input type="radio" name="outcome" value="" defaultChecked />
-                🔗 紐付ける（結果は後で）
-              </label>
-              <label className="inline-flex items-center gap-1">
-                <input type="radio" name="outcome" value="prevented" />
-                防げた
-              </label>
-              <label className="inline-flex items-center gap-1">
-                <input type="radio" name="outcome" value="not_prevented" />
-                防げなかった
-              </label>
-              <label className="inline-flex items-center gap-1 text-muted/80">
-                <input type="radio" name="outcome" value="dismiss" />
-                今回は関係ない
-              </label>
-            </fieldset>
-
-            <SubmitButton variant="ghost">決定</SubmitButton>
+            {/* 追加時は結果を選ばせない。初期値は「まだ」。あとは下の一覧から編集。 */}
+            <div className="flex flex-wrap items-center gap-3">
+              <SubmitButton variant="ghost">この予定に追加</SubmitButton>
+              <button
+                type="submit"
+                name="outcome"
+                value="dismiss"
+                formNoValidate
+                className="text-[11px] text-muted underline hover:text-foreground"
+              >
+                今回は関係ない（消す）
+              </button>
+            </div>
           </form>
         ))}
       </div>

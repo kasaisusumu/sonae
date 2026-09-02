@@ -2,11 +2,9 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import {
   getLearningNameTree,
-  type LeafFailure,
   type NameTreeLeaf,
   type NameTreeNode,
 } from "@/lib/learning";
-import { formatDateOnly, formatYen } from "@/lib/format";
 import { formatLead } from "@/lib/lead-time";
 import { getUserTemplates } from "@/lib/templates";
 import { InfoHint } from "@/app/components/info-hint";
@@ -15,40 +13,7 @@ import { LearningExplorer } from "./learning-explorer";
 import { LazyLeaf } from "./lazy-leaf";
 import { LeafBody, type LeafItem, type LeafSectionData } from "./leaf-body";
 import { KindGroup } from "./templates-panel";
-
-const OUTCOME_LABEL: Record<string, string> = {
-  prevented: "防げた",
-  not_prevented: "防げなかった",
-};
-
-function FailureList({ failures }: { failures: LeafFailure[] }) {
-  if (failures.length === 0) return null;
-  return (
-    <div className="mt-3">
-      <p className="text-[11px] font-semibold text-warn">
-        失敗ログ（{failures.length}）
-      </p>
-      <ul className="mt-0.5 space-y-1">
-        {failures.map((f) => (
-          <li
-            key={f.id}
-            className="rounded bg-warn-soft px-2 py-1 text-[11px]"
-          >
-            <p className="whitespace-pre-wrap break-words">{f.description}</p>
-            <p className="mt-0.5 text-muted">
-              {formatDateOnly(f.occurredAt)}
-              {f.estimatedLossYen > 0
-                ? ` ・ 推定 ${formatYen(f.estimatedLossYen)}`
-                : ""}
-              {" ・ "}
-              {f.outcome ? OUTCOME_LABEL[f.outcome] ?? "未選択" : "未選択"}
-            </p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
+import { FailureLogEditor } from "./failure-log-editor";
 
 function Keywords({ words }: { words: string[] }) {
   if (words.length === 0) return null;
@@ -144,8 +109,8 @@ function EventLeaf({
         </>
       }
     >
-      {/* 失敗ログは一番上に。 */}
-      <FailureList failures={leaf.failures} />
+      {/* 失敗ログは一番上に。予定詳細と同じ形式でその場編集・追加できる。 */}
+      <FailureLogEditor eventId={leaf.eventId} failures={leaf.failures} />
       {leaf.mergedCount > 1 && !leaf.cleared && (
         <p className="mb-2 mt-3 flex items-center gap-1 text-[11px] text-muted">
           同じ名前の未編集 {leaf.mergedCount} 件をまとめて編集

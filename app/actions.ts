@@ -1048,11 +1048,11 @@ export async function attachFailureToEvent(formData: FormData): Promise<void> {
     return;
   }
 
-  // 結果を選ばず紐付けただけ＝"linked"（この予定で起こりうる・結果は後で）。
+  // 追加時は結果を選ばせない。初期値は「まだ」（null）。あとから一覧で編集する。
   const outcome =
     rawOutcome === "prevented" || rawOutcome === "not_prevented"
       ? rawOutcome
-      : "linked";
+      : null;
 
   const event = await prisma.event.findFirst({
     where: { id: eventId, userId },

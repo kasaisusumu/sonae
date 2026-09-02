@@ -1,18 +1,23 @@
-import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/session";
+"use client";
+
 import {
   createFailureLog,
   deleteFailureLog,
-  logRepeatedFailure,
-  markNoFailure,
   updateFailureLog,
 } from "@/app/actions";
 import { formatDateOnly, toDateInputValue } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 
-/** 失敗ログの「結果・状態」の見た目（アイコン＋短いラベル）。 */
-function failureStateMeta(o: string | null): { icon: string; label: string } {
+type F = {
+  id: string;
+  description: string;
+  occurredAt: Date;
+  estimatedLossYen: number;
+  outcome: string | null;
+};
+
+function meta(o: string | null): { icon: string; label: string } {
   switch (o) {
     case "prevented":
       return { icon: "🛡", label: "防げた" };
@@ -28,97 +33,27 @@ function failureStateMeta(o: string | null): { icon: string; label: string } {
 }
 
 /**
- * 予定詳細ページの失敗ログ（提案は別コンポーネント <FailureSuggestions> がページ上部に出す）。
- * - この予定に紐づく失敗ログの一覧（その場で編集／削除）
- * - 新しく記録する
- * - その他の失敗ログから選んで紐づける
+ * 学習内容ページの葉で使う、失敗ログのその場編集。予定詳細の <EventFailureLog> と
+ * 同じ形式（コンパクト行 → 開いて編集／削除、＋で追加）。データは props 経由なので
+ * 葉ごとに追加クエリを出さない。
  */
-export async function EventFailureLog({
+export function FailureLogEditor({
   eventId,
-  userId: userIdProp,
+  failures,
 }: {
   eventId: string;
-  /** 省略時はセッションから解決（学習内容ページなどから使う）。 */
-  userId?: string;
+  failures: F[];
 }) {
-  const userId = userIdProp ?? (await getCurrentUser())?.id;
-  if (!userId) return null;
-
-  const [linked, others, ev] = await Promise.all([
-    prisma.failureLog.findMany({
-      where: { userId, eventId },
-      orderBy: { occurredAt: "desc" },
-    }),
-    prisma.failureLog.findMany({
-      where: { userId, eventId: { not: eventId } },
-      orderBy: { occurredAt: "desc" },
-      take: 80,
-      include: { event: { select: { title: true } } },
-    }),
-    prisma.event.findFirst({
-      where: { id: eventId, userId },
-      select: { eventDatetime: true, endDatetime: true, noFailureAt: true },
-    }),
-  ]);
-
-  const linkedDesc = new Set(linked.map((l) => l.description.trim()));
-  const otherCandidates = others.filter(
-    (o) => !linkedDesc.has(o.description.trim()),
-  );
-
-  const isPast = !!ev && (ev.endDatetime ?? ev.eventDatetime) <= new Date();
-  // 終了後で、まだ何も記録していない予定は「あった？なかった？」を出す。
-  const askOutcome = isPast && linked.length === 0;
-
   return (
-    <details
-      id="failure-check"
-      className="group scroll-mt-4 rounded-2xl bg-surface p-3 [&_summary::-webkit-details-marker]:hidden"
-      open={askOutcome && !ev?.noFailureAt}
-    >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-1">
-        <span className="text-sm font-semibold text-foreground">
-          📓 この予定の失敗ログ（{linked.length}）
-        </span>
-        <span className="shrink-0 rounded-md border border-border px-2 py-0.5 text-xs text-muted group-open:hidden">
-          ＋ 追加・ひらく
-        </span>
-        <span className="hidden shrink-0 rounded-md border border-border px-2 py-0.5 text-xs text-muted group-open:inline">
-          閉じる
-        </span>
-      </summary>
-      {askOutcome &&
-        (ev?.noFailureAt ? (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-surface-muted p-3 text-xs text-muted">
-            <span>「失敗はなかった」で記録済み。</span>
-            <form action={markNoFailure}>
-              <input type="hidden" name="eventId" value={eventId} />
-              <input type="hidden" name="undo" value="1" />
-              <button type="submit" className="underline hover:text-foreground">
-                取り消す
-              </button>
-            </form>
-          </div>
-        ) : (
-          <div className="mt-3 rounded-xl border border-border bg-surface-muted p-3">
-            <p className="text-xs font-medium text-foreground">
-              この予定、うっかりはありましたか？
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted">
-              あったら下の欄に一言。なければワンタップで。
-            </p>
-            <form action={markNoFailure} className="mt-2">
-              <input type="hidden" name="eventId" value={eventId} />
-              <SubmitButton variant="ghost">なかった 🙆</SubmitButton>
-            </form>
-          </div>
-        ))}
+    <div className="mt-3">
+      <p className="text-[11px] font-semibold text-warn">
+        失敗ログ（{failures.length}）
+      </p>
 
-      {/* 紐づく失敗ログ：他のリストと同じくコンパクト表示。開くとその場で編集。 */}
-      {linked.length > 0 && (
-        <ul className="mt-3 divide-y divide-border overflow-hidden rounded-xl border border-border">
-          {linked.map((l) => {
-            const m = failureStateMeta(l.outcome);
+      {failures.length > 0 && (
+        <ul className="mt-1 divide-y divide-border overflow-hidden rounded-xl border border-border">
+          {failures.map((l) => {
+            const m = meta(l.outcome);
             return (
               <li key={l.id}>
                 <details className="[&_summary::-webkit-details-marker]:hidden">
@@ -203,12 +138,10 @@ export async function EventFailureLog({
         </ul>
       )}
 
-      {/* 他のリストと同じく「＋ 追加」で追加枠が開く */}
-      <details className="mt-3 [&_summary::-webkit-details-marker]:hidden">
+      <details className="mt-2 [&_summary::-webkit-details-marker]:hidden">
         <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-foreground/40 hover:text-foreground">
           ＋ 失敗を追加
         </summary>
-
         <form action={createFailureLog} className="mt-3 space-y-3">
           <input type="hidden" name="eventId" value={eventId} />
           <label className="block text-sm">
@@ -234,38 +167,7 @@ export async function EventFailureLog({
           </label>
           <SubmitButton>記録する</SubmitButton>
         </form>
-
-        {otherCandidates.length > 0 && (
-          <form action={logRepeatedFailure} className="mt-4 space-y-2">
-            <input type="hidden" name="eventId" value={eventId} />
-            <p className="text-xs text-muted">
-              これまでの失敗ログから選んで紐づける
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <select
-                name="failureLogId"
-                required
-                defaultValue=""
-                className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 text-sm"
-              >
-                <option value="" disabled>
-                  選ぶ
-                </option>
-                {otherCandidates.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {formatDateOnly(o.occurredAt)}
-                    {o.event ? ` ・「${o.event.title}」` : ""} ・{" "}
-                    {o.description.length > 30
-                      ? `${o.description.slice(0, 30)}…`
-                      : o.description}
-                  </option>
-                ))}
-              </select>
-              <SubmitButton variant="ghost">紐づける</SubmitButton>
-            </div>
-          </form>
-        )}
       </details>
-    </details>
+    </div>
   );
 }

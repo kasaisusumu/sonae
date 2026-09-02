@@ -225,22 +225,19 @@ export function ChecklistEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
 
-  // 自動保存は「ユーザーが実際にいじった（structEdited）」ときだけ。
-  // 何も書いていない状態では一切走らせない。編集が続く間は 1.8 秒ごとに
-  // タイマーが張り直され、止まったら 1 回だけ保存する。
-  // メモ（comment）は自動保存しない ＝ 書き終わったら「メモを保存」を押す。
+  // 自動保存は「ユーザーが実際にいじった」ときだけ。文言・通知に加えて、
+  // メモ（comment）の変更でも走らせる。編集が続く間は 1.8 秒ごとにタイマーが
+  // 張り直され、止まったら 1 回だけ保存する。何も変えていなければ走らない。
   useEffect(() => {
-    if (!structEdited || pending) return;
+    if ((!structEdited && !commentDirty) || pending) return;
     const t = window.setTimeout(() => {
       setStructEdited(false);
-      persist(items, false);
+      persist(items, true);
     }, 1800);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, structEdited, pending]);
+  }, [items, structEdited, commentDirty, pending]);
 
-  // includeMemo=false のとき（＝自動保存）は、メモは保存済みの値のまま送る。
-  // メモは「メモを保存」を押したときだけ（includeMemo=true）反映する。
   function toPayload(list: Item[], includeMemo: boolean) {
     return list
       .filter((it) => it.title.trim())
@@ -582,7 +579,7 @@ export function ChecklistEditor({
                   {open && (
                     <div className="ml-6 mt-1.5 space-y-1 rounded-lg bg-background/60 p-2 text-[11px] text-muted">
                       <p>通知タイミング（例: 1日前 / 3時間前 / なし）</p>
-                      <p>メモ・リンク（改行OK。「メモを保存」で保存）</p>
+                      <p>メモ・リンク（改行OK・自動保存）</p>
                       <p>＋ 写真（自動で圧縮）</p>
                     </div>
                   )}
@@ -729,23 +726,13 @@ export function ChecklistEditor({
                     placeholder="メモ・リンク（任意・学習しません）。改行できます。"
                     className="w-full resize-y rounded-md border border-border bg-background px-2 py-1 text-xs text-muted"
                   />
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => persist(items)}
-                      disabled={pending || !rowCommentDirty(it)}
-                      className="rounded-md border border-teal/40 px-2 py-0.5 text-[11px] text-teal-dark hover:border-teal disabled:opacity-40"
-                    >
-                      {pending ? "保存中…" : "メモを保存"}
-                    </button>
-                    <span className="text-[11px] text-muted">
-                      {rowCommentDirty(it)
-                        ? "未保存（自動保存されません）"
-                        : it.comment.trim()
-                          ? "保存済み"
-                          : ""}
-                    </span>
-                  </div>
+                  <span className="text-[11px] text-muted">
+                    {pending && rowCommentDirty(it)
+                      ? "保存中…"
+                      : rowCommentDirty(it)
+                        ? "変更あり（自動保存）"
+                        : ""}
+                  </span>
                   {it.comment.trim() && (
                     <p className="whitespace-pre-wrap break-words text-[11px] text-muted">
                       <Linkify text={it.comment} />
@@ -836,13 +823,11 @@ export function ChecklistEditor({
           <span className={dirty ? "text-muted" : "text-teal-dark"}>
             {pending
               ? "保存中…"
-              : commentDirty
-                ? "メモが未保存"
-                : structEdited
-                  ? "変更あり（自動保存）"
-                  : saved
-                    ? "保存しました"
-                    : ""}
+              : dirty
+                ? "変更あり（自動保存）"
+                : saved
+                  ? "保存しました"
+                  : ""}
           </span>
           {dirty && !pending && (
             <button
@@ -850,7 +835,7 @@ export function ChecklistEditor({
               onClick={() => persist(items)}
               className="rounded-md border border-teal/40 px-2 py-0.5 text-teal-dark hover:border-teal"
             >
-              {commentDirty ? "メモも保存" : "今すぐ保存"}
+              今すぐ保存
             </button>
           )}
         </div>
@@ -897,10 +882,10 @@ export function ChecklistEditor({
       {bulkNote && <p className="mt-2 text-xs text-teal-dark">{bulkNote}</p>}
 
       <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted">
-        文言・追加・削除は自動保存
+        文言・メモ・追加・削除は自動保存
         <InfoHint>
-          ∨ で通知タイミング・メモ・リンク・写真。メモは「メモを保存」で保存。
-          ✕ で削除。
+          ∨ で通知タイミング・メモ・リンク・写真。文言もメモも、手を止めたら
+          自動で保存されます。✕ で削除。
         </InfoHint>
       </p>
 

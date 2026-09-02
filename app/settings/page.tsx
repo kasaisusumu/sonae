@@ -38,7 +38,12 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-xl font-semibold">設定</h1>
+      <div>
+        <h1 className="text-xl font-semibold">設定</h1>
+        <p className="mt-1 text-sm text-muted">
+          カレンダー連携・通知・アカウントの設定。
+        </p>
+      </div>
 
       <section className="rounded-2xl bg-surface p-5">
         <h2 className="text-sm font-semibold text-muted">アカウント</h2>

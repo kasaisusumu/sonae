@@ -211,13 +211,15 @@ export default async function FailuresPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="flex items-center gap-1.5 text-xl font-semibold tracking-tight">
-        失敗ログ
-        <InfoHint>
-          うっかりを残しておくと、似た予定が発生した時に私が思い出させます。
-          責めるための記録ではありません。
-        </InfoHint>
-      </h1>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight">失敗ログ</h1>
+        <p className="mt-1 text-sm text-muted">
+          うっかりを記録すると、似た予定が発生した時に私が思い出させます。
+          <InfoHint>
+            責めるための記録ではありません。書くほど先回りの精度が上がります。
+          </InfoHint>
+        </p>
+      </div>
 
       {/* ── 記入：まずは「ひとこと」だけでOK ── */}
       <section
@@ -227,7 +229,8 @@ export default async function FailuresPage() {
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           ✍️ ひとこと記録する
           <InfoHint>
-            よくあるものはボタンで一発。内容・金額・日付は必須（概算でOK、あとから直せます）。
+            よくあるものはボタンで一発。必須は「何が起きたか」だけ。金額は空なら 0、
+            日付は予定を選べばその日になります。あとから直せます。
           </InfoHint>
         </h2>
         <form action={createFailureLog} className="mt-3 space-y-3">
@@ -235,24 +238,28 @@ export default async function FailuresPage() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-xs text-muted">
-              損失額（円）※必須
+              どの予定？
+              <select
+                name="eventId"
+                defaultValue=""
+                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+              >
+                <option value="">— 紐づけない（カテゴリ全体の記録）—</option>
+                {events.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {formatDateOnly(e.eventDatetime)} {e.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-muted">
+              損失額（円・任意）
               <input
                 type="number"
                 name="estimatedLossYen"
-                required
                 min={0}
                 step={100}
-                placeholder="分からなければ概算・0でも可"
-                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="text-xs text-muted">
-              いつ？ ※必須
-              <input
-                type="date"
-                name="occurredAt"
-                required
-                defaultValue={todayValue()}
+                placeholder="なければ空欄（0）"
                 className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
               />
             </label>
@@ -260,23 +267,17 @@ export default async function FailuresPage() {
 
           <details className="[&_summary::-webkit-details-marker]:hidden">
             <summary className="cursor-pointer list-none text-xs text-teal-dark">
-              くわしく（予定・カテゴリ・任意）▾
+              くわしく（日付・カテゴリ・任意）▾
             </summary>
             <div className="mt-2 grid gap-3 sm:grid-cols-2">
-              <label className="text-xs text-muted sm:col-span-2">
-                どの予定で起きた？（過去の予定）
-                <select
-                  name="eventId"
-                  defaultValue=""
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
-                >
-                  <option value="">— 紐づけない（カテゴリ全体の記録）—</option>
-                  {events.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {formatDateOnly(e.eventDatetime)} {e.title}
-                    </option>
-                  ))}
-                </select>
+              <label className="text-xs text-muted">
+                いつ？
+                <input
+                  type="date"
+                  name="occurredAt"
+                  defaultValue={todayValue()}
+                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
+                />
               </label>
               <label className="text-xs text-muted">
                 関連カテゴリ

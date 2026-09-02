@@ -576,46 +576,30 @@ export async function suggestFailureLogsForEvent(
     const key = clusterKey(l.description);
     if (!key || ownKeys.has(key) || dismissedKeys.has(key)) continue;
 
-    // 「堂々と提案してよい」もの＝名前が近い／掠っている／同じ繰り返し系列、
-    // もしくは この予定に紐づかないカテゴリ全体のメモ。
-    // 「同じカテゴリの“別予定”ログなだけ」は提案しない（確信度が低いので）。
-    const sameCat =
-      !!l.categoryId &&
-      !!event.categoryId &&
-      l.categoryId === event.categoryId;
-    const categoryNote = !l.eventId; // 予定に紐づかない＝カテゴリ全体のメモ
-    const nameClose = !!(l.event && similarText(l.event.title, event.title));
-    const grazes = !!(l.event && shareKeyword(l.event.title, event.title));
-    const sameSeries = !!(
-      l.event?.recurringEventId &&
-      event.recurringEventId &&
-      l.event.recurringEventId === event.recurringEventId
-    );
-    const sig = signatureMatches(l.featureSignature, feature);
-
-    const ok =
-      nameClose ||
-      sameSeries ||
-      (grazes && (sameCat || sig)) ||
-      (categoryNote && sameCat);
-    if (!ok) continue;
-
+    // 失敗ログの「予測」は確信度が低くても普通に提案してよい（ユーザー指定）。
+    // 同じカテゴリ・似た予定名・特徴シグネチャ一致でゆるくスコアリングして多めに出す。
+    let score = 0.4; // ベース（うっすら全部候補）
     const reasons: string[] = [];
-    if (nameClose) reasons.push("名前が近い");
-    if (sameSeries) reasons.push("同じ繰り返し予定");
-    if (grazes && !nameClose) reasons.push("キーワードが一致");
-    if (categoryNote && sameCat && reasons.length === 0) {
-      reasons.push("このカテゴリのメモ");
+    if (l.categoryId && event.categoryId && l.categoryId === event.categoryId) {
+      score += 2;
+      reasons.push("同じカテゴリ");
     }
-    if (sig && reasons.length === 0) reasons.push("状況が近い");
-
-    const rawScore =
-      (nameClose ? 3 : 0) +
-      (sameSeries ? 3 : 0) +
-      (grazes ? 2 : 0) +
-      (categoryNote && sameCat ? 1 : 0) +
-      (sig ? 1 : 0);
-    const score = Number((rawScore * decayMultiplier(l.occurredAt)).toFixed(3));
+    if (eventLinkApplies(l, event.title, event.recurringEventId)) {
+      score += 2;
+      if (!reasons.includes("同じカテゴリ")) reasons.push("似た予定");
+    }
+    if (signatureMatches(l.featureSignature, feature)) {
+      score += 1;
+      reasons.push("状況が近い");
+    }
+    if (l.event && similarText(l.event.title, event.title)) {
+      score += 1.5;
+      if (!reasons.some((r) => r === "似た予定" || r === "同じカテゴリ")) {
+        reasons.push("名前が近い");
+      }
+    }
+    score = Number((score * decayMultiplier(l.occurredAt)).toFixed(3));
+    if (score < 0.9 || reasons.length === 0) continue;
 
     const prev = byKey.get(key);
     if (!prev || score > prev.score) {

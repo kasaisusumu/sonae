@@ -116,10 +116,15 @@ export default async function EventsPage({
 
       {/* ── このページの主役: これからの予定 ── */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">
-            これからの予定
-          </h1>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">
+              これからの予定
+            </h1>
+            <p className="mt-1 text-sm text-muted">
+              カレンダーの予定と、その準備リストの一覧です。
+            </p>
+          </div>
           <form action={syncCalendar} data-coach="sync">
             <SubmitButton variant="ghost">↻ 取り込む</SubmitButton>
           </form>

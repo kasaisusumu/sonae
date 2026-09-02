@@ -43,43 +43,43 @@ export default async function EventDetailPage({
   );
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <ScrollToHash />
       <Link
         href="/events"
-        className="text-sm text-muted no-underline hover:text-teal-dark"
+        className="-mb-2 inline-block text-xs text-muted no-underline hover:text-foreground"
       >
         ← 予定一覧
       </Link>
 
-      {/* 予定の情報は「見出し」程度に。主役は下の準備リスト。 */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">
+      {/* 予定の情報は見出し程度に。主役は下の準備リスト。 */}
+      <header className="space-y-2">
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+          <h1 className="min-w-0 flex-1 text-2xl font-semibold leading-tight tracking-tight">
             {event.title}
           </h1>
-          <p className="mt-1 text-sm text-muted">
-            {formatDateTime(event.eventDatetime)}
-            {event.source === "google" ? " ・ Google" : " ・ 手動"}
-          </p>
+          <CategorySelect
+            eventId={event.id}
+            current={event.category?.name ?? "その他"}
+            options={categoryNames}
+          />
         </div>
-        <CategorySelect
-          eventId={event.id}
-          current={event.category?.name ?? "その他"}
-          options={categoryNames}
-        />
-      </div>
-      {event.memo && (
-        <p className="whitespace-pre-wrap rounded-xl bg-surface-muted p-3 text-sm text-muted">
-          {event.memo}
+        <p className="text-sm text-muted">
+          {formatDateTime(event.eventDatetime)}
+          {event.source === "google" ? " ・ Google" : " ・ 手動"}
         </p>
-      )}
+        {event.memo && (
+          <p className="whitespace-pre-wrap rounded-xl bg-surface-muted p-3 text-sm text-muted">
+            {event.memo}
+          </p>
+        )}
+      </header>
 
       <Suspense fallback={null}>
         <FailureSuggestions eventId={event.id} />
       </Suspense>
 
-      <h2 className="flex items-center gap-1.5 pt-1 text-lg font-semibold tracking-tight">
+      <h2 className="flex items-center gap-1.5 border-t border-border pt-5 text-lg font-semibold tracking-tight">
         準備リスト
         <InfoHint>
           追加・削除・通知タイミングの変更は、この種類の予定の学習に使われます。

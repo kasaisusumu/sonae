@@ -272,13 +272,16 @@ export default async function LearningTreePage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="flex items-center gap-1.5 text-xl font-semibold">
-        学習内容
-        <InfoHint>
-          自動で覚えた「どの予定でどんな準備リストになるか」と、名前を付けて保存した
-          テンプレートを確認・編集できます。上の検索は両方をまとめて探します。
-        </InfoHint>
-      </h1>
+      <div>
+        <h1 className="text-xl font-semibold">学習内容</h1>
+        <p className="mt-1 text-sm text-muted">
+          予定ごとに覚えた準備リストと、保存したテンプレートを確認・編集できます。
+          <InfoHint>
+            自動で覚えた「どの予定でどんなリストになるか」と、名前を付けて保存した
+            セットの両方。上の検索はまとめて探します。
+          </InfoHint>
+        </p>
+      </div>
 
       <LearningExplorer
         entries={searchEntries}

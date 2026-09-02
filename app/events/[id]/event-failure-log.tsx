@@ -6,7 +6,7 @@ import {
   markNoFailure,
   updateFailureLog,
 } from "@/app/actions";
-import { formatDateOnly, jstToday, toDateInputValue } from "@/lib/format";
+import { formatDateOnly, toDateInputValue } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 
@@ -198,78 +198,69 @@ export async function EventFailureLog({
         </ul>
       )}
 
-      {/* 新しく記録する（内容・金額・日付は必須） */}
-      <form action={createFailureLog} className="mt-4 space-y-3">
-        <input type="hidden" name="eventId" value={eventId} />
-        <label className="block text-sm">
-          <span className="text-muted">新しく記録する — 何が起きた？ ※必須</span>
-          <textarea
-            name="description"
-            required
-            rows={2}
-            placeholder="例: 集合時間に遅刻した／保険証を忘れた"
-            className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
-          />
-        </label>
-        <div className="grid gap-3 sm:grid-cols-2">
+      {/* 他のリストと同じく「＋ 追加」で追加枠が開く */}
+      <details className="mt-3 [&_summary::-webkit-details-marker]:hidden">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-foreground/40 hover:text-foreground">
+          ＋ 失敗を追加
+        </summary>
+
+        <form action={createFailureLog} className="mt-3 space-y-3">
+          <input type="hidden" name="eventId" value={eventId} />
           <label className="block text-sm">
-            <span className="text-muted">推定損失額（円）※必須</span>
+            <span className="text-muted">何が起きた？</span>
+            <textarea
+              name="description"
+              required
+              rows={2}
+              placeholder="例: 集合時間に遅刻した／保険証を忘れた"
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
+            />
+          </label>
+          <label className="block text-sm sm:max-w-xs">
+            <span className="text-muted">推定損失額（円・任意）</span>
             <input
               type="number"
               name="estimatedLossYen"
-              required
               min={0}
               step={100}
-              placeholder="概算・0でも可"
+              placeholder="なければ空欄（0）"
               className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
             />
           </label>
-          <label className="block text-sm">
-            <span className="text-muted">いつ？ ※必須</span>
-            <input
-              type="date"
-              name="occurredAt"
-              required
-              defaultValue={jstToday()}
-              className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
-            />
-          </label>
-        </div>
-        <SubmitButton>記録する</SubmitButton>
-      </form>
-
-      {/* その他の失敗ログから選ぶ */}
-      {otherCandidates.length > 0 && (
-        <form action={logRepeatedFailure} className="mt-4 space-y-2">
-          <input type="hidden" name="eventId" value={eventId} />
-          <p className="text-sm text-muted">その他の失敗ログから選ぶ</p>
-          <div className="flex flex-wrap gap-2">
-            <select
-              name="failureLogId"
-              required
-              defaultValue=""
-              className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 text-sm"
-            >
-              <option value="" disabled>
-                これまでの失敗ログから選ぶ
-              </option>
-              {otherCandidates.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {formatDateOnly(o.occurredAt)}
-                  {o.event ? ` ・「${o.event.title}」` : ""} ・{" "}
-                  {o.description.length > 30
-                    ? `${o.description.slice(0, 30)}…`
-                    : o.description}
-                </option>
-              ))}
-            </select>
-            <SubmitButton variant="ghost">この予定にも紐づける</SubmitButton>
-          </div>
-          <p className="text-[11px] text-muted">
-            同じ内容がこの予定に追加されます（追加後に上の一覧で編集できます）。
-          </p>
+          <SubmitButton>記録する</SubmitButton>
         </form>
-      )}
+
+        {otherCandidates.length > 0 && (
+          <form action={logRepeatedFailure} className="mt-4 space-y-2">
+            <input type="hidden" name="eventId" value={eventId} />
+            <p className="text-xs text-muted">
+              これまでの失敗ログから選んで紐づける
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <select
+                name="failureLogId"
+                required
+                defaultValue=""
+                className="min-w-0 flex-1 rounded-lg border bg-background px-3 py-2 text-sm"
+              >
+                <option value="" disabled>
+                  選ぶ
+                </option>
+                {otherCandidates.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {formatDateOnly(o.occurredAt)}
+                    {o.event ? ` ・「${o.event.title}」` : ""} ・{" "}
+                    {o.description.length > 30
+                      ? `${o.description.slice(0, 30)}…`
+                      : o.description}
+                  </option>
+                ))}
+              </select>
+              <SubmitButton variant="ghost">紐づける</SubmitButton>
+            </div>
+          </form>
+        )}
+      </details>
     </details>
   );
 }

@@ -914,16 +914,13 @@ export async function deleteLearnedRule(ruleId: string): Promise<void> {
 export async function createFailureLog(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const description = String(formData.get("description") ?? "").trim();
-  const rawAmount = formData.get("estimatedLossYen");
   const categoryName = String(formData.get("categoryName") ?? "").trim();
   const occurredAtRaw = String(formData.get("occurredAt") ?? "").trim();
   const eventId = String(formData.get("eventId") ?? "").trim() || null;
 
-  // 内容・金額・日付は必須（フォーム側でも required。ここは最後の砦）。
+  // 必須は「何が起きたか」だけ。金額は空なら 0、日付は空なら予定日／今日。
   if (!description) return;
-  if (rawAmount === null || String(rawAmount).trim() === "") return;
-  if (!occurredAtRaw) return;
-  const estimatedLossYen = parseYen(rawAmount);
+  const estimatedLossYen = parseYen(formData.get("estimatedLossYen"));
 
   const linkedEvent = eventId
     ? await prisma.event.findFirst({

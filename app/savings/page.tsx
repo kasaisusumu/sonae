@@ -103,7 +103,13 @@ function CompactList({ sections }: { sections: LeafSectionData[] }) {
   );
 }
 
-function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
+function EventLeaf({
+  leaf,
+  depth = 1,
+}: {
+  leaf: NameTreeLeaf;
+  depth?: number;
+}) {
   const sections: LeafSectionData[] = leaf.sections.map((s) => ({
     key: s.key,
     label: s.label,
@@ -123,6 +129,7 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
   return (
     <LazyLeaf
       id={`ev-${leaf.eventId}`}
+      tone={depth % 2 === 1 ? "muted" : "surface"}
       summary={
         <>
           {leaf.title}
@@ -136,35 +143,50 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
         </>
       }
     >
+      {/* 失敗ログは一番上に。 */}
+      <FailureList failures={leaf.failures} />
       {leaf.mergedCount > 1 && !leaf.cleared && (
-        <p className="mb-2 text-[11px] text-muted">
+        <p className="mb-2 mt-3 text-[11px] text-muted">
           同じ名前の未編集の予定 {leaf.mergedCount} 件をまとめています。ここでの編集は
           その全部に反映され、別の 1 件を違う内容に編集するとそこで分かれます。
         </p>
       )}
       {leaf.cleared ? (
-        <p className="rounded-lg bg-surface-muted p-3 text-xs text-muted">
+        <p className="mt-3 rounded-lg bg-surface-muted p-3 text-xs text-muted">
           この予定は準備リストを空にしています（内容なしとして学習）。
           似た予定でも何も出しません。同じ名前でも、中身のある予定とは分けて覚えています。
         </p>
       ) : (
-        <LeafBody
-          eventId={leaf.eventId}
-          compact={<CompactList sections={sections} />}
-          sections={sections}
-        />
+        <div className="mt-3">
+          <LeafBody
+            eventId={leaf.eventId}
+            compact={<CompactList sections={sections} />}
+            sections={sections}
+          />
+        </div>
       )}
-      <FailureList failures={leaf.failures} />
     </LazyLeaf>
   );
 }
 
-function NameBranch({ node }: { node: NameTreeNode }) {
+function NameBranch({
+  node,
+  depth = 1,
+}: {
+  node: NameTreeNode;
+  depth?: number;
+}) {
   if (node.children.length === 0 && node.leaves.length === 1) {
-    return <EventLeaf leaf={node.leaves[0]} />;
+    return <EventLeaf leaf={node.leaves[0]} depth={depth} />;
   }
+  // 階層ごとに白／グレーを交互に。
+  const muted = depth % 2 === 1;
   return (
-    <details className="rounded-xl bg-background p-2">
+    <details
+      className={`rounded-xl border border-border p-2.5 shadow-sm ${
+        muted ? "bg-surface-muted" : "bg-surface"
+      }`}
+    >
       <summary className="cursor-pointer text-sm font-medium">
         {node.label}
         <span className="ml-1.5 text-xs font-normal text-muted">
@@ -173,10 +195,10 @@ function NameBranch({ node }: { node: NameTreeNode }) {
       </summary>
       <div className="mt-1.5 space-y-1.5 border-l border-border pl-3">
         {node.children.map((c) => (
-          <NameBranch key={c.path} node={c} />
+          <NameBranch key={c.path} node={c} depth={depth + 1} />
         ))}
         {node.leaves.map((l) => (
-          <EventLeaf key={l.eventId} leaf={l} />
+          <EventLeaf key={l.eventId} leaf={l} depth={depth + 1} />
         ))}
       </div>
     </details>

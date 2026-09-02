@@ -59,6 +59,26 @@ export function SectionList({
   }, [order]);
   const dirtyRef = useRef(false);
 
+  // 長押しで初めて「持ち上がる」。押してすぐ動かした＝スクロール意図なのでドラッグしない。
+  const LONG_PRESS_MS = 320;
+  const CANCEL_MOVE_PX = 8;
+  const pressRef = useRef<{
+    key: string;
+    el: HTMLElement;
+    pid: number;
+    x: number;
+    y: number;
+    timer: number;
+  } | null>(null);
+
+  const clearPress = () => {
+    if (pressRef.current) {
+      window.clearTimeout(pressRef.current.timer);
+      pressRef.current = null;
+    }
+  };
+  useEffect(() => clearPress, []);
+
   function persist(next: string[]) {
     startTransition(async () => {
       await reorderChecklistSections({ eventId, order: next });
@@ -82,14 +102,34 @@ export function SectionList({
     if ((e.target as HTMLElement).closest("button,a,input,select,textarea")) {
       return;
     }
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    dirtyRef.current = false;
-    setDragKey(key);
+    // ここでは preventDefault しない＝待っているあいだは普通にスクロールできる。
+    const el = e.currentTarget as HTMLElement;
+    const pid = e.pointerId;
+    const timer = window.setTimeout(() => {
+      // 長押し成立：ここで初めて持ち上げる
+      pressRef.current = null;
+      dirtyRef.current = false;
+      el.setPointerCapture?.(pid);
+      setDragKey(key);
+      try {
+        navigator.vibrate?.(12);
+      } catch {
+        /* 未対応環境は無視 */
+      }
+    }, LONG_PRESS_MS);
+    pressRef.current = { key, el, pid, x: e.clientX, y: e.clientY, timer };
   }
 
   function onHandleMove(e: ReactPointerEvent<HTMLDivElement>) {
-    if (!dragKey) return;
+    // まだ持ち上がっていない：少しでも動いたら「スクロール」と判断して長押しを中止
+    if (!dragKey) {
+      const p = pressRef.current;
+      if (p) {
+        const moved = Math.hypot(e.clientX - p.x, e.clientY - p.y);
+        if (moved > CANCEL_MOVE_PX) clearPress();
+      }
+      return;
+    }
     e.preventDefault();
     const y = e.clientY;
     const cur = orderRef.current;
@@ -114,6 +154,7 @@ export function SectionList({
   }
 
   function onHandleUp(e: ReactPointerEvent<HTMLDivElement>) {
+    clearPress(); // 長押し待ち中に指を離した／キャンセルされた
     if (!dragKey) return;
     (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
     const wasDirty = dirtyRef.current;
@@ -145,15 +186,16 @@ export function SectionList({
               onPointerMove={onHandleMove}
               onPointerUp={onHandleUp}
               onPointerCancel={onHandleUp}
-              style={{ touchAction: "none" }}
-              className={`flex touch-none items-center gap-2 rounded-lg px-1 py-1.5 text-[11px] text-muted select-none ${
+              // 持ち上がるまではスクロールできるよう pan-y。持ち上がったら none。
+              style={{ touchAction: dragging ? "none" : "pan-y" }}
+              className={`flex items-center gap-2 rounded-lg px-1 py-1.5 text-[11px] text-muted select-none ${
                 dragging
                   ? "cursor-grabbing bg-surface-muted"
                   : "cursor-grab hover:bg-surface-muted"
               }`}
             >
               <span className="text-sm leading-none">⠿</span>
-              <span>ドラッグで並べ替え</span>
+              <span>{dragging ? "ドラッグ中…" : "長押しして並べ替え"}</span>
 
               <div className="ml-auto flex items-center gap-1">
                 <button

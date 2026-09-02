@@ -214,7 +214,7 @@ export default async function FailuresPage() {
         <h1 className="text-xl font-semibold tracking-tight">失敗ログ</h1>
         <p className="mt-1.5 text-sm text-muted">
           うっかりは誰にでもあります。責めるための記録ではありません。
-          残しておくと、次に似た予定が来たときに先回りできます。
+          残しておくと、似た予定が発生した時に私が思い出させます。
         </p>
       </div>
 

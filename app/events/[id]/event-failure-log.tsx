@@ -72,7 +72,7 @@ export async function EventFailureLog({
         </span>
       </summary>
       <p className="mt-2 px-1 text-xs text-muted">
-        次に似た予定が来たときに先回りするためのメモです。内容・金額・日付・結果は、ここからいつでも直せます。
+        似た予定が発生した時に私が思い出させます。内容・金額・日付・結果は、ここからいつでも直せます。
       </p>
 
       {askOutcome &&
@@ -200,7 +200,7 @@ export async function EventFailureLog({
             className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
           />
         </label>
-        <div className="flex flex-wrap gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
             <span className="text-muted">推定損失額（円）※必須</span>
             <input
@@ -210,7 +210,7 @@ export async function EventFailureLog({
               min={0}
               step={100}
               placeholder="概算・0でも可"
-              className="mt-1 w-40 rounded-lg border bg-background px-3 py-2"
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
             />
           </label>
           <label className="block text-sm">
@@ -220,7 +220,7 @@ export async function EventFailureLog({
               name="occurredAt"
               required
               defaultValue={jstToday()}
-              className="mt-1 w-44 rounded-lg border bg-background px-3 py-2"
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2"
             />
           </label>
         </div>

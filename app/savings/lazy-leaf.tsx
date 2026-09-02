@@ -10,16 +10,21 @@ export function LazyLeaf({
   id,
   summary,
   children,
+  tone = "surface",
 }: {
   id: string;
   summary: ReactNode;
   children: ReactNode;
+  /** 階層で白／グレーを交互にするための下地色。 */
+  tone?: "surface" | "muted";
 }) {
   const [opened, setOpened] = useState(false);
   return (
     <details
       id={id}
-      className="scroll-mt-24 rounded-lg bg-surface p-2 transition-shadow"
+      className={`scroll-mt-24 rounded-lg border border-border p-2.5 shadow-sm transition-shadow ${
+        tone === "muted" ? "bg-surface-muted" : "bg-surface"
+      }`}
       onToggle={(e) => {
         if ((e.currentTarget as HTMLDetailsElement).open) setOpened(true);
       }}

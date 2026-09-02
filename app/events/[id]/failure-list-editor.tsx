@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   createFailureLog,
   deleteFailureLog,
@@ -41,27 +41,73 @@ function meta(o: string | null): { icon: string; label: string } {
   }
 }
 
+/** 保存中だけ右上に出る小さなスピナー（他の自動保存と同じ見た目）。 */
+function SavingPill() {
+  return (
+    <div className="fixed right-3 top-16 z-[70] flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-muted shadow-md">
+      <span className="h-3 w-3 animate-spin rounded-full border-2 border-border border-t-foreground" />
+      自動保存中…
+    </div>
+  );
+}
+
 /**
  * 1 行ぶんの編集フォーム（内容・結果・金額・日付）＋削除。両表示で共通。
- * hideDate: この予定に紐づく失敗ログは日付が予定の日で確定しているので、
- * 日付入力を出さない（省略すれば updateFailureLog 側で日付はそのまま）。
+ * 「更新」ボタンはなく、変えたその場で自動保存する（内容・金額・日付は少し待って
+ * から、結果／状態の選択は即時）。要領は準備リストの自動保存と同じ。
+ * hideDate: この予定に紐づく失敗ログは日付が予定の日で確定しているので出さない。
  */
 function RowEditForms({ r, hideDate = false }: { r: FLRow; hideDate?: boolean }) {
+  const [desc, setDesc] = useState(r.description);
+  const [outcome, setOutcome] = useState<string>(r.outcome ?? "");
+  const [amount, setAmount] = useState(
+    r.estimatedLossYen ? String(r.estimatedLossYen) : "",
+  );
+  const [date, setDate] = useState(toDateInputValue(r.occurredAt));
+  const [pending, start] = useTransition();
+  const firstRun = useRef(true);
+
+  function buildFd(over: { outcome?: string } = {}): FormData {
+    const fd = new FormData();
+    fd.set("id", r.id);
+    fd.set("description", desc);
+    fd.set("estimatedLossYen", amount);
+    if (!hideDate) fd.set("occurredAt", date);
+    if (over.outcome !== undefined) fd.set("outcome", over.outcome);
+    return fd;
+  }
+
+  // 内容・金額・日付は入力が落ち着いてから保存（結果の select は onChange で即時）。
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    const t = window.setTimeout(() => {
+      start(() => updateFailureLog(buildFd()));
+    }, 800);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desc, amount, date]);
+
   return (
     <>
-      <form action={updateFailureLog} className="space-y-2">
-        <input type="hidden" name="id" value={r.id} />
+      {pending && <SavingPill />}
+      <div className="space-y-2">
         <textarea
-          name="description"
-          required
           rows={2}
-          defaultValue={r.description}
+          value={desc}
+          onChange={(e) => setDesc(e.target.value)}
           className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+          aria-label="失敗の内容"
         />
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
           <select
-            name="outcome"
-            defaultValue={r.outcome ?? ""}
+            value={outcome}
+            onChange={(e) => {
+              setOutcome(e.target.value);
+              start(() => updateFailureLog(buildFd({ outcome: e.target.value })));
+            }}
             className="rounded-md border bg-background px-1.5 py-1 text-xs text-foreground"
             aria-label="結果・状態"
           >
@@ -73,10 +119,10 @@ function RowEditForms({ r, hideDate = false }: { r: FLRow; hideDate?: boolean })
           </select>
           <input
             type="number"
-            name="estimatedLossYen"
             min={0}
             step={100}
-            defaultValue={r.estimatedLossYen || ""}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
             placeholder="円"
             className="w-20 rounded-md border bg-background px-1.5 py-1 text-xs"
             aria-label="金額"
@@ -84,15 +130,17 @@ function RowEditForms({ r, hideDate = false }: { r: FLRow; hideDate?: boolean })
           {!hideDate && (
             <input
               type="date"
-              name="occurredAt"
-              defaultValue={toDateInputValue(r.occurredAt)}
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
               className="rounded-md border bg-background px-1.5 py-1 text-xs"
               aria-label="日付"
             />
           )}
-          <SubmitButton variant="ghost">更新</SubmitButton>
+          <span className="text-[11px] text-muted">
+            {pending ? "保存中…" : "変更は自動保存"}
+          </span>
         </div>
-      </form>
+      </div>
       <form action={deleteFailureLog}>
         <input type="hidden" name="id" value={r.id} />
         <ConfirmButton

@@ -46,9 +46,12 @@ export default async function EventDetailPage({
       <ScrollToHash />
       <Link
         href="/events"
-        className="-mb-2 inline-block text-xs text-muted no-underline hover:text-foreground"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground no-underline shadow-sm transition-colors hover:bg-surface-muted active:bg-surface-muted"
       >
-        ← 予定一覧
+        <span aria-hidden className="text-base leading-none">
+          ←
+        </span>
+        予定一覧にもどる
       </Link>
 
       {/* 予定の情報は見出し程度に。主役は下の準備リスト。 */}

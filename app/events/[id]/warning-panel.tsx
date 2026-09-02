@@ -190,6 +190,11 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                     <form action={logRepeatedFailure}>
                       <input type="hidden" name="eventId" value={event.id} />
                       <input type="hidden" name="failureLogId" value={log.id} />
+                      <input
+                        type="hidden"
+                        name="outcome"
+                        value="not_prevented"
+                      />
                       <button
                         type="submit"
                         className="block w-full rounded-lg border border-warn/50 bg-surface px-3 py-2.5 text-sm font-medium text-warn hover:bg-warn-soft sm:w-auto sm:px-4"

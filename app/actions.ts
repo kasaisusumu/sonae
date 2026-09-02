@@ -980,12 +980,21 @@ export async function createFailureLog(formData: FormData): Promise<void> {
   }
 }
 
-/** 事後の警告で「今回もやってしまった」を1タップ記録（同じ内容で、この予定に紐づけて追記）。 */
+/**
+ * 「過去の失敗をこの予定に足す」1タップ記録。
+ * - 既定（outcome 指定なし）: 予定詳細の「📆 過去の失敗から追加」。初期状態は「紐付け」。
+ * - `outcome=not_prevented`: 事後の振り返りで「今回もやってしまった」。この予定の
+ *   結果として「防げなかった」を記録する（同じ内容の未確認/紐付け行があれば昇格）。
+ */
 export async function logRepeatedFailure(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const eventId = String(formData.get("eventId") ?? "");
   const failureLogId = String(formData.get("failureLogId") ?? "");
   if (!eventId || !failureLogId) return;
+
+  const asNotPrevented =
+    String(formData.get("outcome") ?? "") === "not_prevented";
+  const newOutcome = asNotPrevented ? "not_prevented" : "linked";
 
   const [event, template] = await Promise.all([
     prisma.event.findFirst({ where: { id: eventId, userId } }),
@@ -996,8 +1005,20 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
   // 同じ予定・同じ内容の二重記録を避ける
   const dup = await prisma.failureLog.findFirst({
     where: { userId, eventId, description: template.description },
+    select: { id: true, outcome: true },
   });
-  if (!dup) {
+  if (dup) {
+    // 振り返りの「今回もやってしまった」は、未確認/紐付けの行を「防げなかった」に昇格。
+    if (
+      asNotPrevented &&
+      (dup.outcome === null || dup.outcome === "linked")
+    ) {
+      await prisma.failureLog.update({
+        where: { id: dup.id },
+        data: { outcome: "not_prevented" },
+      });
+    }
+  } else {
     const featureSig = featureSignature(
       extractEventFeature({
         title: event.title,
@@ -1014,8 +1035,7 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
         featureSignature: featureSig,
         description: template.description,
         estimatedLossYen: template.estimatedLossYen,
-        // ユーザーが予定に紐づけて追加した＝初めから「紐付け」。
-        outcome: "linked",
+        outcome: newOutcome,
         occurredAt: event.eventDatetime,
       },
     });
@@ -1026,9 +1046,9 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
 }
 
 /**
- * 「今回もやってしまった」の取り消し。logRepeatedFailure でこの予定に足した
- * （まだ振り返り前＝outcome が "linked" の）コピーを消して、選び直せる状態に戻す。
- * 元になった失敗ログ（failureLogId）自体は消さない。
+ * 振り返りの「今回もやってしまった」を取り消して、選び直せる状態に戻す。
+ * この予定に紐づき「防げなかった」になっている、同じ内容の失敗ログを消す
+ * （過去の回の記録は eventId が違うので残る）。
  */
 export async function undoRepeatedFailure(formData: FormData): Promise<void> {
   const userId = await requireUserId();
@@ -1047,8 +1067,7 @@ export async function undoRepeatedFailure(formData: FormData): Promise<void> {
       userId,
       eventId,
       description: template.description,
-      outcome: "linked",
-      id: { not: failureLogId },
+      outcome: "not_prevented",
     },
   });
 

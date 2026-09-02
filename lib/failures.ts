@@ -98,6 +98,7 @@ type LogRow = {
   estimatedLossYen: number;
   occurredAt: Date;
   eventId: string | null;
+  outcome: string | null;
   featureSignature: string;
   event: { title: string; recurringEventId: string | null } | null;
 };
@@ -109,6 +110,7 @@ const LOG_SELECT = {
   estimatedLossYen: true,
   occurredAt: true,
   eventId: true,
+  outcome: true,
   featureSignature: true,
   event: { select: { title: true, recurringEventId: true } },
 } as const;
@@ -190,8 +192,13 @@ function buildClusters(
     const prevented = g.members.some((x) =>
       preventedThisEventLogIds.has(x.id),
     );
+    // 「今回もやってしまった」を実際に記録した数。この予定に紐づき、かつ
+    // 結果が「防げなかった」になっているものだけ数える（提案の未確認行や
+    // ただの紐付け行では "記録済み" 表示にしない）。
     const loggedThisEventCount = thisEventId
-      ? g.members.filter((x) => x.eventId === thisEventId).length
+      ? g.members.filter(
+          (x) => x.eventId === thisEventId && x.outcome === "not_prevented",
+        ).length
       : 0;
     // computeConfidence と同じ気持ち: 繰り返しで重く、経年で薄れる
     const base = 0.4 + 0.18 * Math.min(occurredCount, 3);

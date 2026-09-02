@@ -22,6 +22,7 @@ import { WarningPanel } from "./warning-panel";
 import { ListReminderControl } from "./list-reminder-control";
 import { AddSectionButton } from "./section-manager";
 import { SectionList, type SectionEntry } from "./section-list";
+import { DictationInput } from "./dictation-input";
 import { SubmitButton } from "@/app/components/submit-button";
 
 type TplOpt = { id: string; name: string };
@@ -273,6 +274,8 @@ export async function ChecklistSection({
             </form>
           </div>
         )}
+
+        <DictationInput eventId={event.id} />
 
         <SectionList
           eventId={event.id}

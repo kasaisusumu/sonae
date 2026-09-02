@@ -1736,6 +1736,102 @@ async function addSeedItemsToEvent(
   return fresh.length;
 }
 
+/**
+ * スマホのキーボードのマイクで話した自由文を AI で振り分け、
+ * 準備すること・持ち物・必要な枠 に分けて予定の準備リストへ追加する。
+ */
+export async function buildListFromDictation(input: {
+  eventId: string;
+  text: string;
+}): Promise<{
+  ok: boolean;
+  added: number;
+  summary?: string;
+  error?: string;
+}> {
+  const userId = await requireUserId();
+  const eventId = String(input.eventId ?? "");
+  const text = String(input.text ?? "").slice(0, 4000).trim();
+  if (!text) return { ok: false, added: 0, error: "内容がありません。" };
+
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    select: {
+      id: true,
+      title: true,
+      listCleared: true,
+      category: { select: { name: true } },
+    },
+  });
+  if (!event) return { ok: false, added: 0, error: "予定が見つかりません。" };
+
+  const { splitDictationIntoList } = await import("@/lib/dictation-to-list");
+  let parsed;
+  try {
+    parsed = await splitDictationIntoList(text, {
+      title: event.title,
+      categoryName: event.category?.name ?? "その他",
+    });
+  } catch (e) {
+    console.error("[buildListFromDictation] 失敗", e);
+    return {
+      ok: false,
+      added: 0,
+      error: "うまく振り分けられませんでした。少し短くして試してみてください。",
+    };
+  }
+
+  const seeds: TemplateSeed[] = [
+    ...parsed.task.map((t) => ({
+      kind: "task",
+      title: t,
+      notifyLeadMinutes: null,
+    })),
+    ...parsed.belonging.map((t) => ({
+      kind: "belonging",
+      title: t,
+      notifyLeadMinutes: null,
+    })),
+    ...parsed.sections.flatMap((s) => {
+      const kind = sectionKeyFromLabel(s.name);
+      return s.items.map((t) => ({ kind, title: t, notifyLeadMinutes: null }));
+    }),
+  ];
+  if (seeds.length === 0) {
+    return {
+      ok: false,
+      added: 0,
+      error: "追加できる項目が見つかりませんでした。",
+    };
+  }
+
+  // 全消し状態なら解除してから足す
+  if (event.listCleared) {
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { listCleared: false },
+    });
+  }
+
+  const added = await addSeedItemsToEvent(userId, eventId, seeds);
+
+  const parts: string[] = [];
+  if (parsed.task.length) parts.push(`準備 ${parsed.task.length}`);
+  if (parsed.belonging.length) parts.push(`持ち物 ${parsed.belonging.length}`);
+  for (const s of parsed.sections) {
+    if (s.items.length) parts.push(`${s.name} ${s.items.length}`);
+  }
+
+  return {
+    ok: true,
+    added,
+    summary:
+      added > 0
+        ? `${added}件を追加しました（${parts.join(" / ")}）。`
+        : "すべて登録済みでした。",
+  };
+}
+
 /** 保存済みテンプレートを予定の準備リストに追加する。 */
 export async function applyTemplateToEvent(formData: FormData): Promise<void> {
   const userId = await requireUserId();

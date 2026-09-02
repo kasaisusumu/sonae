@@ -41,13 +41,16 @@ export default async function EventsPage({
         checklistItems: { select: { isDone: true, title: true } },
       },
     }),
-    // この予定に「紐付け」した失敗ログがある＝「過去の危険性あり」（赤）。
+    // この予定に付いている失敗ログ（紐付け＝赤／未確認＝黄）。
     prisma.failureLog.findMany({
-      where: { userId: user.id, eventId: { not: null }, outcome: "linked" },
-      select: { eventId: true },
-      distinct: ["eventId"],
+      where: {
+        userId: user.id,
+        eventId: { not: null },
+        OR: [{ outcome: "linked" }, { outcome: null }],
+      },
+      select: { eventId: true, outcome: true },
     }),
-    // 紐付けはされていないが、似た予定・カテゴリで先回り提案が出ている
+    // 失敗ログはまだ無いが、似た予定・カテゴリで先回り提案が出ている
     // ＝「失敗の可能性あり」（黄）。ackEventWarning で却下済みは含まれない。
     getUpcomingWarnings(user.id),
   ]);
@@ -56,9 +59,18 @@ export default async function EventsPage({
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
   );
   const linkedEventIds = new Set(
-    linkedLogs.map((l) => l.eventId).filter((v): v is string => !!v),
+    linkedLogs
+      .filter((l) => l.outcome === "linked")
+      .map((l) => l.eventId)
+      .filter((v): v is string => !!v),
   );
-  const suspectedEventIds = new Set(warnings.map((w) => w.event.id));
+  const suspectedEventIds = new Set<string>([
+    ...warnings.map((w) => w.event.id),
+    ...linkedLogs
+      .filter((l) => l.outcome === null)
+      .map((l) => l.eventId)
+      .filter((v): v is string => !!v),
+  ]);
   const riskOf = (id: string): "linked" | "suspected" | undefined =>
     linkedEventIds.has(id)
       ? "linked"

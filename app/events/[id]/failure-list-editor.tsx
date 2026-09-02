@@ -242,12 +242,21 @@ export function FailureListEditor({
       </div>
 
       {initial.length > 0 && (
-        <ul className="divide-y divide-border/70">
+        <ul className="space-y-1">
           {initial.map((r) => {
             const m = meta(r.outcome);
             const open = openId === r.id;
+            // 未確認（＝アプリが提案した先回り）は赤で目立たせる。
+            const suggested = r.outcome === null;
             return (
-              <li key={r.id} className="py-1.5">
+              <li
+                key={r.id}
+                className={`px-2 py-1.5 ${
+                  suggested && !open
+                    ? "rounded-lg bg-warn-soft"
+                    : "border-b border-border/70 last:border-0"
+                }`}
+              >
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 shrink-0 text-sm">{m.icon}</span>
                   <span className="min-w-0 flex-1 whitespace-pre-wrap break-words py-0.5 text-sm">

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendPushToUser } from "@/lib/push";
 import { extractEventFeature, type EventFeatureData } from "@/lib/features";
-import { signatureMatches } from "@/lib/signature";
+import { featureSignature, signatureMatches } from "@/lib/signature";
 import { decayMultiplier } from "@/lib/learning";
 
 /**
@@ -744,4 +744,69 @@ export async function getEventDescriptionFailures(
     avoided: [...avoided.values()].slice(0, 5),
     occurred: [...occurred.values()].slice(0, 5),
   };
+}
+
+/**
+ * 似た予定でよくある失敗を、その予定に「未確認」の失敗ログとして自動で追加する。
+ * 特設の提案コーナーは出さず、予定の失敗ログ一覧に最初から並ぶようにする。
+ * すでに同じ内容がある・却下済み（suggestFailureLogsForEvent が除外）のものは足さない。
+ * 冪等。予定ページを開いたときに呼ぶ。
+ */
+export async function ensureSuggestedFailures(
+  eventId: string,
+  userId: string,
+): Promise<void> {
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    select: {
+      id: true,
+      title: true,
+      memo: true,
+      eventDatetime: true,
+      endDatetime: true,
+      categoryId: true,
+    },
+  });
+  if (!event) return;
+
+  const suggestions = await suggestFailureLogsForEvent(eventId, 6);
+  if (suggestions.length === 0) return;
+
+  const existing = await prisma.failureLog.findMany({
+    where: { userId, eventId },
+    select: { description: true },
+  });
+  const have = new Set(existing.map((e) => clusterKey(e.description)));
+
+  const toAdd = suggestions.filter((s) => {
+    const k = clusterKey(s.description);
+    return !!k && !have.has(k);
+  });
+  if (toAdd.length === 0) return;
+
+  const sig = featureSignature(
+    extractEventFeature({
+      title: event.title,
+      memo: event.memo,
+      eventDatetime: event.eventDatetime,
+      endDatetime: event.endDatetime,
+    }),
+  );
+
+  await Promise.allSettled(
+    toAdd.map((s) =>
+      prisma.failureLog.create({
+        data: {
+          userId,
+          categoryId: event.categoryId,
+          eventId: event.id,
+          featureSignature: sig,
+          description: s.description,
+          estimatedLossYen: s.estimatedLossYen,
+          outcome: null, // 提案＝未確認
+          occurredAt: event.eventDatetime,
+        },
+      }),
+    ),
+  );
 }

@@ -1128,9 +1128,24 @@ export async function deleteFailureLog(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   const log = await prisma.failureLog.findFirst({
     where: { id, userId },
-    select: { eventId: true },
+    select: { eventId: true, outcome: true, description: true },
   });
   await prisma.failureLog.deleteMany({ where: { id, userId } });
+
+  // 自動提案された「未確認」を消したときは、この予定で再提案しないよう記録する。
+  if (log?.eventId && log.outcome === null) {
+    const descKey = clusterKey(log.description);
+    if (descKey) {
+      await prisma.failureDismissal
+        .upsert({
+          where: { eventId_descKey: { eventId: log.eventId, descKey } },
+          create: { userId, eventId: log.eventId, descKey },
+          update: {},
+        })
+        .catch(() => {});
+    }
+  }
+
   revalidateAppViews(log?.eventId ?? undefined);
   if (log?.eventId) {
     const eid = log.eventId;

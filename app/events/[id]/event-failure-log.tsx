@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/session";
+import { ensureSuggestedFailures } from "@/lib/failures";
 import { markNoFailure } from "@/app/actions";
 import { SubmitButton } from "@/app/components/submit-button";
 import {
@@ -22,6 +23,9 @@ export async function EventFailureLog({
 }) {
   const userId = userIdProp ?? (await getCurrentUser())?.id;
   if (!userId) return null;
+
+  // 似た予定でよくある失敗を「未確認」の失敗ログとして先に取り込む（特設コーナーはやめた）。
+  await ensureSuggestedFailures(eventId, userId);
 
   const [linked, others, ev] = await Promise.all([
     prisma.failureLog.findMany({

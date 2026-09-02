@@ -10,7 +10,6 @@ import {
   ChecklistSection,
   ChecklistSectionSkeleton,
 } from "./checklist-section";
-import { FailureSuggestions } from "./failure-suggestions";
 import { ScrollToHash } from "./scroll-to-hash";
 import { InfoHint } from "@/app/components/info-hint";
 
@@ -74,10 +73,6 @@ export default async function EventDetailPage({
           </p>
         )}
       </header>
-
-      <Suspense fallback={null}>
-        <FailureSuggestions eventId={event.id} />
-      </Suspense>
 
       <h2 className="flex items-center gap-1.5 border-t border-border pt-5 text-lg font-semibold tracking-tight">
         準備リスト

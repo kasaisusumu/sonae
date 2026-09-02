@@ -90,11 +90,11 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
       {/* 凡例＋合計 */}
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
         <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-sm bg-teal" />
+          <span className="inline-block h-2 w-2 rounded-sm bg-chart-amount" />
           金額 {formatYen(totalAmount)}
         </span>
         <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-sm bg-warn" />
+          <span className="inline-block h-2 w-2 rounded-sm bg-chart-count" />
           件数 {totalCount}件
         </span>
       </div>
@@ -102,7 +102,7 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
       {/* 二軸: 左=金額 / 右=件数 */}
       <div className="mt-3 flex items-stretch gap-2">
         <div
-          className="flex w-9 shrink-0 flex-col justify-between py-1 text-right text-[9px] leading-none text-teal-dark"
+          className="flex w-9 shrink-0 flex-col justify-between py-1 text-right text-[9px] leading-none text-chart-amount"
           style={{ height: H }}
         >
           <span>{formatYen(maxAmount)}</span>
@@ -134,7 +134,7 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
                 >
                   <div className="flex w-full items-end justify-center gap-0.5">
                     <span
-                      className="w-1/2 max-w-[10px] rounded-t bg-teal"
+                      className="w-1/2 max-w-[10px] rounded-t bg-chart-amount"
                       style={{
                         height: Math.max(
                           d.amountYen > 0 ? 3 : 0,
@@ -143,7 +143,7 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
                       }}
                     />
                     <span
-                      className="w-1/2 max-w-[10px] rounded-t bg-warn"
+                      className="w-1/2 max-w-[10px] rounded-t bg-chart-count"
                       style={{
                         height: Math.max(
                           d.count > 0 ? 3 : 0,
@@ -167,7 +167,7 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
         </div>
 
         <div
-          className="flex w-6 shrink-0 flex-col justify-between py-1 text-left text-[9px] leading-none text-warn"
+          className="flex w-6 shrink-0 flex-col justify-between py-1 text-left text-[9px] leading-none text-chart-count"
           style={{ height: H }}
         >
           <span>{maxCount}</span>

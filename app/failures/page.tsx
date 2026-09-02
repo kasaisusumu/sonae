@@ -16,6 +16,7 @@ import {
 } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
+import { FailureQuickInput } from "./failure-quick-input";
 
 function todayValue(): string {
   return jstToday();
@@ -225,14 +226,11 @@ export default async function FailuresPage() {
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           ✍️ ひとこと記録する
         </h2>
+        <p className="mt-1 text-xs text-muted">
+          よくあるものはボタンで一発。金額や予定は「くわしく」で（すべて任意）。
+        </p>
         <form action={createFailureLog} className="mt-3 space-y-3">
-          <textarea
-            name="description"
-            required
-            rows={2}
-            placeholder="何があった？（例: 集合時間に遅刻した／保険証を忘れた）"
-            className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm"
-          />
+          <FailureQuickInput />
 
           <details className="[&_summary::-webkit-details-marker]:hidden">
             <summary className="cursor-pointer list-none text-xs text-teal-dark">

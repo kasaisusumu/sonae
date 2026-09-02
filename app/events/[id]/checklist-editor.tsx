@@ -397,17 +397,29 @@ export function ChecklistEditor({
 
   const doneCount = items.filter((it) => it.isDone).length;
 
-  // チュートリアル中・項目ゼロ・「準備すること」枠 のときだけ「例」を見せる。
+  // チュートリアル中で、その枠がまだ空のときだけ「例」を見せる。
+  // 何か 1 つでも実際に入ったら、その枠の例は消える（realCount === 0 ゲート）。
   const realCount = items.filter((it) => it.title.trim()).length;
-  const showExamples = coachActive && kind === "task" && realCount === 0;
-  const EXAMPLES: { title: string; lead: string }[] = [
-    { title: "持ち物を確認する", lead: "1日前" },
-    { title: "何時に出るか決める", lead: "1日前" },
-    { title: "集合時間を確認する", lead: "" },
-  ];
+  const showExamples =
+    coachActive &&
+    (kind === "task" || kind === "belonging") &&
+    realCount === 0;
+  const EXAMPLES: { title: string; lead: string }[] = isBelonging
+    ? [
+        { title: "モバイルバッテリー", lead: "" },
+        { title: "常備薬", lead: "1日前" },
+        { title: "身分証", lead: "" },
+      ]
+    : [
+        { title: "持ち物を確認する", lead: "1日前" },
+        { title: "何時に出るか決める", lead: "1日前" },
+        { title: "集合時間を確認する", lead: "" },
+      ];
 
   // ── テンプレート／他の予定 のポップアップ ──
   const [modal, setModal] = useState<null | "save" | "apply" | "copy">(null);
+  // 「＋ 追加」以外の操作は「その他」メニューに畳む（ボタンの氾濫を防ぐ）。
+  const [moreOpen, setMoreOpen] = useState(false);
   const [tplName, setTplName] = useState("");
   const [applyId, setApplyId] = useState("");
   const [copyId, setCopyId] = useState("");
@@ -472,6 +484,13 @@ export function ChecklistEditor({
 
   return (
     <div className="rounded-2xl bg-surface p-3">
+      {/* 保存中だけ、右上に小さく出す（スクロール追従・邪魔にならない大きさ）。 */}
+      {pending && (
+        <div className="fixed right-3 top-3 z-[70] flex items-center gap-2 rounded-full border border-border bg-surface/95 px-3 py-1.5 text-xs text-muted shadow-md">
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-border border-t-foreground" />
+          自動保存中…
+        </div>
+      )}
       <div className="mb-1.5 flex items-baseline gap-2">
         <h3 className="text-sm font-semibold text-foreground">{kindLabel}</h3>
         <span className="text-xs text-muted tabular-nums">
@@ -480,9 +499,12 @@ export function ChecklistEditor({
       </div>
 
       {showExamples && (
-        <div className="mb-2 rounded-lg border border-dashed border-teal/40 bg-teal-soft p-2">
-          <p className="mb-1 text-[11px] font-medium text-teal-dark">
-            例（説明用に置いています。保存も学習もされません）
+        <div className="mb-2 rounded-lg border border-dashed border-border bg-surface-muted p-2">
+          <p className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
+            <span className="rounded bg-foreground px-1 py-0.5 text-[10px] leading-none text-surface">
+              記入例
+            </span>
+            ここは説明用の例です。保存も学習もされません。1つでも入れると消えます。
           </p>
           <ul className="divide-y divide-border/50">
             {EXAMPLES.map((ex, i) => {
@@ -500,6 +522,9 @@ export function ChecklistEditor({
                       aria-hidden
                       className="h-4 w-4 shrink-0 accent-[var(--teal)]"
                     />
+                    <span className="shrink-0 rounded border border-border px-1 text-[10px] leading-tight text-muted">
+                      例
+                    </span>
                     <span className="min-w-0 flex-1 px-1 py-1 text-sm text-muted">
                       {ex.title}
                     </span>
@@ -554,36 +579,49 @@ export function ChecklistEditor({
               : String(it.notifyLeadMinutes);
           const open = openKeys.has(it.key);
           return (
-            <li key={it.key} data-coach="item-row" className="py-1">
-              {/* 1 行に集約：チェック / 文言 / 通知チップ */}
-              <div className="flex items-center gap-2">
+            <li key={it.key} data-coach="item-row" className="py-1.5">
+              {/* 1 行に集約：チェック / 文言 / 通知チップ。
+                  項目名は大きめ表示・長ければ折り返す（field-sizing で自動高さ）。 */}
+              <div className="flex items-start gap-2">
                 <input
                   type="checkbox"
                   checked={it.isDone}
                   onChange={(e) => toggleDone(it, e.target.checked)}
-                  className="h-4 w-4 shrink-0 accent-[var(--teal)]"
+                  className="mt-1 h-5 w-5 shrink-0 accent-[var(--teal)]"
                   aria-label="完了"
                 />
-                <input
+                <textarea
+                  ref={(el) => {
+                    if (el) {
+                      el.style.height = "auto";
+                      el.style.height = `${el.scrollHeight}px`;
+                    }
+                  }}
                   value={it.title}
-                  onChange={(e) => update(it.key, { title: e.target.value })}
+                  onChange={(e) => {
+                    update(it.key, { title: e.target.value });
+                    const t = e.target;
+                    t.style.height = "auto";
+                    t.style.height = `${t.scrollHeight}px`;
+                  }}
+                  rows={1}
                   placeholder={`${kindLabel}を書く`}
-                  className={`min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-1 text-sm hover:border-border focus:border-border focus:bg-background ${
+                  className={`min-w-0 flex-1 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg leading-snug [field-sizing:content] hover:border-border focus:border-border focus:bg-background ${
                     it.isDone ? "text-muted line-through" : ""
                   }`}
                 />
                 {it.isUserAdded && (
-                  <span className="hidden shrink-0 rounded bg-accent-soft px-1 text-[10px] text-teal-dark sm:inline">
+                  <span className="mt-1.5 hidden shrink-0 rounded bg-accent-soft px-1 text-[10px] text-teal-dark sm:inline">
                     追加
                   </span>
                 )}
                 {it.notifyLeadMinutes != null && (
-                  <span className="shrink-0 text-[11px] tabular-nums text-teal-dark">
+                  <span className="mt-1.5 shrink-0 text-[11px] tabular-nums text-teal-dark">
                     🔔{formatLead(it.notifyLeadMinutes)}
                   </span>
                 )}
                 {it.images.length > 0 && (
-                  <span className="shrink-0 text-[11px] tabular-nums text-muted">
+                  <span className="mt-1.5 shrink-0 text-[11px] tabular-nums text-muted">
                     🖼️{it.images.length}
                   </span>
                 )}
@@ -593,7 +631,7 @@ export function ChecklistEditor({
                   onClick={() => toggleOpen(it.key)}
                   aria-expanded={open}
                   aria-label={open ? "詳細を閉じる" : "詳細を開く"}
-                  className={`shrink-0 rounded-md border px-1.5 py-0.5 text-xs leading-none transition-colors ${
+                  className={`mt-0.5 shrink-0 rounded-md border px-2 py-1 text-sm leading-none transition-colors ${
                     open
                       ? "border-teal bg-teal-soft text-teal-dark"
                       : "border-border text-muted hover:border-teal hover:text-teal-dark"
@@ -605,7 +643,7 @@ export function ChecklistEditor({
                   type="button"
                   onClick={() => remove(it.key)}
                   aria-label="削除"
-                  className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[11px] text-muted hover:border-warn hover:text-warn"
+                  className="mt-0.5 shrink-0 rounded-full border border-border px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn"
                 >
                   ✕
                 </button>
@@ -723,46 +761,59 @@ export function ChecklistEditor({
       </ul>
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <div data-coach="templates" className="flex flex-wrap gap-1.5">
+        <div data-coach="templates" className="relative flex flex-wrap gap-1.5">
+          {/* メインは「＋ 追加」だけ。ほかの操作は「その他」メニューに畳む。 */}
           <button
             type="button"
             data-coach="add-item"
             onClick={add}
-            className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
+            className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-xs font-medium text-surface hover:opacity-90"
           >
             ＋ 追加
           </button>
           <button
             type="button"
-            onClick={() => {
-              setBulkOpen((v) => !v);
-              setBulkNote(null);
-            }}
-            className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
+            onClick={() => setMoreOpen((v) => !v)}
+            aria-expanded={moreOpen}
+            className="rounded-md border border-border px-2.5 py-1.5 text-xs text-muted hover:border-foreground/40 hover:text-foreground"
           >
-            メモから一括
+            その他 {moreOpen ? "▲" : "▾"}
           </button>
-          <button
-            type="button"
-            onClick={() => setModal("apply")}
-            className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
-          >
-            📋 テンプレから
-          </button>
-          <button
-            type="button"
-            onClick={() => setModal("copy")}
-            className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
-          >
-            📆 他の予定から
-          </button>
-          <button
-            type="button"
-            onClick={() => setModal("save")}
-            className="rounded-md border border-dashed border-border px-2.5 py-1 text-xs text-muted hover:border-teal hover:text-teal-dark"
-          >
-            ⭐ 名前をつけて保存
-          </button>
+
+          {moreOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => setMoreOpen(false)}
+              />
+              <div className="absolute left-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-lg">
+                {[
+                  {
+                    label: "📝 メモから一括で追加",
+                    on: () => {
+                      setBulkOpen(true);
+                      setBulkNote(null);
+                    },
+                  },
+                  { label: "📋 テンプレから追加", on: () => setModal("apply") },
+                  { label: "📆 他の予定からコピー", on: () => setModal("copy") },
+                  { label: "⭐ 名前をつけて保存", on: () => setModal("save") },
+                ].map((m) => (
+                  <button
+                    key={m.label}
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      m.on();
+                    }}
+                    className="block w-full px-3 py-2 text-left text-xs text-foreground hover:bg-surface-muted"
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2 text-[11px]">

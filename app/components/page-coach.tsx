@@ -398,7 +398,7 @@ export function PageCoach() {
 
       {/* スポットライト（周囲を暗く／対象を縁取り） */}
       <div
-        className="pointer-events-none absolute rounded-xl border-2 border-teal transition-all duration-200"
+        className="pointer-events-none absolute rounded-xl border-2 border-surface transition-all duration-200"
         style={{
           top: rect.top,
           left: rect.left,

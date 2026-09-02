@@ -123,11 +123,11 @@ function Visual({ id }: { id: string }): ReactNode {
             ].map(([a, b], i) => (
               <div key={i} className="flex flex-1 items-end justify-center gap-0.5">
                 <span
-                  className="w-1 rounded-t bg-teal"
+                  className="w-1 rounded-t bg-chart-amount"
                   style={{ height: `${b}%` }}
                 />
                 <span
-                  className="w-1 rounded-t bg-warn"
+                  className="w-1 rounded-t bg-chart-count"
                   style={{ height: `${a}%` }}
                 />
               </div>

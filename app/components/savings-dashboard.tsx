@@ -12,37 +12,75 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
   ]);
   const maxCategory = Math.max(1, ...s.byCategory.map((c) => c.amountYen));
 
+  const hasAny = s.entryCount > 0;
+  // データが無いときの「記入例」。この金額はダミーで、実データには一切入らない。
+  const EXAMPLE_YEN = 800;
+
   return (
     <section className="space-y-3">
       <div className="flex items-baseline justify-between">
-        <h2 className="text-lg font-semibold">節約額ダッシュボード</h2>
+        <h2 className="text-lg font-semibold">うっかり、いくら防げた？</h2>
         <Link
           href="/failures"
-          className="text-xs text-muted no-underline hover:text-teal-dark"
+          className="text-xs text-muted no-underline hover:text-foreground"
         >
           失敗ログ →
         </Link>
       </div>
 
-      <div className="rounded-2xl bg-teal-soft px-6 py-6">
-        <p className="text-sm text-teal-dark">今月の推定節約額（参考値）</p>
-        <p className="mt-1 text-4xl font-bold text-teal-dark">
-          {formatYen(s.thisMonthYen)}
-        </p>
-        <p className="mt-2 text-xs text-teal-dark/80">
-          累計 {formatYen(s.totalYen)} ・ {s.entryCount} 件
-        </p>
+      {/* このページの主役。白黒ベースなので、濃い面で反転させて目立たせる。 */}
+      <div className="rounded-2xl bg-foreground px-6 py-6 text-surface">
+        {hasAny ? (
+          <>
+            <p className="text-sm text-surface/70">今月、防げた分（推定）</p>
+            <p className="mt-1 text-4xl font-bold">{formatYen(s.thisMonthYen)}</p>
+            <p className="mt-1.5 text-xs text-surface/70">
+              防げたうっかり {retro.totalCount} 件 ・ 累計 {formatYen(s.totalYen)}
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-2">
+              <span className="rounded bg-surface/15 px-1.5 py-0.5 text-[10px] font-semibold text-surface/80">
+                記入例
+              </span>
+              <p className="text-sm text-surface/70">今月、防げた分（推定）</p>
+            </div>
+            <p className="mt-1 text-4xl font-bold text-surface/40">
+              {formatYen(EXAMPLE_YEN)}
+            </p>
+            <p className="mt-1.5 text-xs text-surface/60">
+              例:「傘を忘れてコンビニで買った」→ 予定のあとに「防げた」を選ぶと、
+              避けられた {formatYen(EXAMPLE_YEN)} がここに積み上がります。
+            </p>
+          </>
+        )}
 
-        {s.thisMonthItems.length > 0 ? (
-          <div className="mt-4 rounded-xl bg-surface/70 p-4">
-            <p className="text-xs font-semibold text-teal-dark">今月防げたこと</p>
-            <ul className="mt-2 space-y-1 text-sm text-teal-dark/90">
+        {/* 仕組みを 3 ステップで一目に */}
+        <ol className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-surface/75">
+          <li className="rounded-full bg-surface/12 px-2 py-0.5">
+            ① うっかりを一言記録
+          </li>
+          <li aria-hidden>→</li>
+          <li className="rounded-full bg-surface/12 px-2 py-0.5">
+            ② 予定のあと「防げた？」に回答
+          </li>
+          <li aria-hidden>→</li>
+          <li className="rounded-full bg-surface/12 px-2 py-0.5">
+            ③ 防げた分がここに貯まる
+          </li>
+        </ol>
+
+        {hasAny && s.thisMonthItems.length > 0 && (
+          <div className="mt-4 rounded-xl bg-surface/10 p-4">
+            <p className="text-xs font-semibold text-surface/80">今月防げたこと</p>
+            <ul className="mt-2 space-y-1 text-sm text-surface/90">
               {s.thisMonthItems.map((it, i) => (
                 <li key={i} className="flex items-baseline justify-between gap-3">
                   <span className="min-w-0 truncate">
                     ・{it.description}
                     {it.eventTitle ? (
-                      <span className="text-teal-dark/60"> （{it.eventTitle}）</span>
+                      <span className="text-surface/60"> （{it.eventTitle}）</span>
                     ) : null}
                   </span>
                   <span className="shrink-0 tabular-nums">
@@ -52,17 +90,17 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
               ))}
             </ul>
           </div>
-        ) : (
-          <p className="mt-3 text-xs text-muted">
-            <Link href="/failures" className="underline">
-              失敗ログ
-            </Link>
-            で「防げた」を選ぶと、ここに防げたことと金額が積み上がります。
-          </p>
         )}
 
-        <p className="mt-3 text-[11px] text-muted">
-          ※ 金額はすべて<strong>推定値</strong>です。あなたが記録した失敗の推定損失額のうち「防げた」と選んだものの合計で、自動判定はしていません。
+        <Link
+          href="/failures"
+          className="mt-4 inline-flex items-center justify-center rounded-lg bg-surface px-4 py-2 text-sm font-semibold text-foreground no-underline hover:opacity-90"
+        >
+          {hasAny ? "うっかりを記録する →" : "さっそく1つ記録してみる →"}
+        </Link>
+
+        <p className="mt-3 text-[11px] text-surface/55">
+          ※ 金額はすべて<strong>推定値</strong>です（あなたが書いた損失額のうち「防げた」の合計。自動判定はしていません）。
         </p>
       </div>
 

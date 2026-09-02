@@ -66,13 +66,15 @@ export default async function SettingsPage() {
             </p>
             {calendars.length > 0 && (
               <form action={setCalendarId} className="pt-1">
-                <label className="text-xs text-muted">
+                <label className="block text-xs text-muted">
                   同期するカレンダー
-                  <div className="mt-1 flex gap-2">
+                  {/* カレンダー名がどれだけ長くても、min-w-0 で select 側を縮め、
+                      入りきらなければ「変更」ボタンを下段へ折り返す（はみ出し防止）。 */}
+                  <div className="mt-1 flex flex-wrap items-stretch gap-2">
                     <select
                       name="calendarId"
                       defaultValue={account.calendarId || "primary"}
-                      className="flex-1 rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+                      className="min-w-0 flex-1 basis-48 truncate rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
                     >
                       {calendars.map((c) => (
                         <option key={c.id} value={c.id}>

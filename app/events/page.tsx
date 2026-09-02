@@ -232,7 +232,7 @@ function EventRow({
             {ev.title}
             {risk === "linked" && (
               <span className="ml-2 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-medium text-warn">
-                過去の危険性あり
+                登録された失敗あり
               </span>
             )}
             {risk === "suspected" && (

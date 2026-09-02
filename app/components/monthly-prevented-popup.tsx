@@ -50,7 +50,7 @@ export function MonthlyPreventedPopup({ items }: { items: Item[] }) {
           onClick={() => setOpen(false)}
         >
           <div
-            className="flex max-h-[80vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
+            className="flex max-h-[80vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-surface text-foreground shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-border p-4">

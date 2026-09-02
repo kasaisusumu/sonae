@@ -1268,6 +1268,10 @@ export async function updateFailureAmount(formData: FormData): Promise<void> {
   });
 
   revalidateAppViews(log.eventId ?? undefined);
+  if (log.eventId) {
+    const eid = log.eventId;
+    after(() => void syncEventDescription(eid));
+  }
 }
 
 /**

@@ -209,6 +209,9 @@ export default async function FailuresPage() {
   const reviewableLogs = logs.filter(reviewable);
   const pendingFuture = logs.filter((l) => !l.outcome && !reviewable(l));
   const reviewed = logs.filter((l) => l.outcome);
+  // ふりかえり済みも「過去の予定」と「これからの予定」で分ける。
+  const reviewedPast = reviewed.filter((l) => reviewable(l));
+  const reviewedFuture = reviewed.filter((l) => !reviewable(l));
 
   return (
     <div className="space-y-8">
@@ -326,14 +329,27 @@ export default async function FailuresPage() {
               </details>
             )}
 
-            {reviewed.length > 0 && (
+            {reviewedPast.length > 0 && (
               <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
                 <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
-                  ▸ ふりかえり済みを見る（{reviewed.length}件）
+                  ▸ 過去の予定のふりかえりを見る（{reviewedPast.length}件）
                 </summary>
                 <ul className="mt-2 space-y-2">
-                  {reviewed.map((l) => (
+                  {reviewedPast.map((l) => (
                     <FailureRow key={l.id} log={l} />
+                  ))}
+                </ul>
+              </details>
+            )}
+
+            {reviewedFuture.length > 0 && (
+              <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
+                  ▸ これからの予定のふりかえりを見る（{reviewedFuture.length}件）
+                </summary>
+                <ul className="mt-2 space-y-2">
+                  {reviewedFuture.map((l) => (
+                    <FailureRow key={l.id} log={l} reviewable={false} />
                   ))}
                 </ul>
               </details>

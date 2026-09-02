@@ -94,7 +94,15 @@ export function ListReminderControl({
                     <button
                       type="button"
                       disabled={pending}
-                      onClick={() => save(leads.filter((_, j) => j !== i))}
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `${formatLead(L)}のリマインドを削除しますか？`,
+                          )
+                        )
+                          return;
+                        save(leads.filter((_, j) => j !== i));
+                      }}
                       aria-label="このリマインドを削除"
                       className="shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn"
                     >

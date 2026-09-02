@@ -396,47 +396,50 @@ export function PageCoach() {
       {/* クリックを吸収する層（どこを押しても次へ） */}
       <div className="absolute inset-0" onClick={next} />
 
-      {/* スポットライト（周囲を暗く／対象を縁取り） */}
+      {/* スポットライト（周囲を暗く／対象を縁取り）。
+          対象が白いカードでも埋もれないよう「白い縁 → 濃い区切り → 減光」の三重に。 */}
       <div
-        className="pointer-events-none absolute rounded-xl border-2 border-surface transition-all duration-200"
+        className="pointer-events-none absolute rounded-xl transition-all duration-200"
         style={{
           top: rect.top,
           left: rect.left,
           width: rect.width,
           height: rect.height,
-          boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)",
+          boxShadow:
+            "0 0 0 3px #ffffff, 0 0 0 6px rgba(0,0,0,0.85), 0 0 0 9999px rgba(0,0,0,0.66)",
         }}
       />
 
-      {/* 説明カード（画面内に収まるよう clamp・長い本文は内部スクロール） */}
+      {/* 説明カード（画面内に収まるよう clamp・長い本文は内部スクロール）。
+          ハイライト（明るい実画面）と区別できるよう、あえて濃い面にする。 */}
       <div
-        className="absolute flex flex-col rounded-2xl bg-surface p-4 shadow-2xl"
+        className="absolute flex flex-col rounded-2xl bg-foreground p-4 text-surface shadow-2xl ring-1 ring-white/15"
         style={tipStyle}
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="shrink-0 text-sm font-semibold text-foreground">
+        <h3 className="shrink-0 text-sm font-semibold text-surface">
           {step.title}
         </h3>
-        <p className="mt-1 min-h-0 flex-1 overflow-y-auto text-[13px] leading-relaxed text-muted">
+        <p className="mt-1 min-h-0 flex-1 overflow-y-auto text-[13px] leading-relaxed text-surface/85">
           {step.body}
         </p>
         <div className="mt-3 flex shrink-0 items-center justify-between">
           <button
             type="button"
             onClick={finish}
-            className="text-[11px] text-muted hover:text-foreground"
+            className="text-[11px] text-surface/55 hover:text-surface"
           >
             スキップ
           </button>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] tabular-nums text-muted">
+            <span className="text-[11px] tabular-nums text-surface/55">
               {idx + 1}/{tour.steps.length}
             </span>
             {idx > 0 && (
               <button
                 type="button"
                 onClick={back}
-                className="rounded-lg border border-border px-2.5 py-1 text-xs text-muted hover:border-foreground/40"
+                className="rounded-lg border border-surface/30 px-2.5 py-1 text-xs text-surface/80 hover:border-surface/60"
               >
                 戻る
               </button>
@@ -444,7 +447,7 @@ export function PageCoach() {
             <button
               type="button"
               onClick={next}
-              className="rounded-lg bg-foreground px-3 py-1 text-xs font-medium text-surface hover:opacity-90"
+              className="rounded-lg bg-surface px-3 py-1 text-xs font-medium text-foreground hover:opacity-90"
             >
               {last ? "おわり" : "次へ"}
             </button>

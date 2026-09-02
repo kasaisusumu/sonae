@@ -3,6 +3,7 @@ import {
   deleteListTemplate,
   duplicateListTemplate,
   renameListTemplate,
+  setListTemplateKind,
 } from "@/app/actions";
 import type { TemplateDetail } from "@/lib/templates";
 import { SubmitButton } from "@/app/components/submit-button";
@@ -48,6 +49,24 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
             className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
           >
             名前を変更
+          </button>
+        </form>
+        <form action={setListTemplateKind} className="flex items-center gap-1">
+          <input type="hidden" name="id" value={t.id} />
+          <select
+            name="kind"
+            defaultValue={t.kind}
+            aria-label="どの枠に入るか"
+            className="rounded-md border bg-surface px-2 py-1 text-xs"
+          >
+            <option value="task">準備すること</option>
+            <option value="belonging">持ち物</option>
+          </select>
+          <button
+            type="submit"
+            className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
+          >
+            枠を変更
           </button>
         </form>
         <CopyTemplateButton text={t.items.map((i) => i.title).join("\n")} />

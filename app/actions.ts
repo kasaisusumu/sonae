@@ -2155,6 +2155,42 @@ export async function renameListTemplate(formData: FormData): Promise<void> {
   revalidateAppViews();
 }
 
+/** テンプレートが入る枠（準備すること／持ち物）を変更する。中の項目の kind も揃える。 */
+export async function setListTemplateKind(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const id = String(formData.get("id") ?? "");
+  const kind =
+    String(formData.get("kind") ?? "") === "belonging" ? "belonging" : "task";
+  if (!id) return;
+
+  const tpl = await prisma.listTemplate.findFirst({
+    where: { id, userId },
+    select: { id: true, kind: true, name: true },
+  });
+  if (!tpl || tpl.kind === kind) return;
+
+  // 同じ枠に同名があると @@unique([userId, kind, name]) に触れる。そのときだけ
+  // 名前に枠名を添えて重複を避ける。
+  let name = tpl.name;
+  const clash = await prisma.listTemplate.findUnique({
+    where: { userId_kind_name: { userId, kind, name } },
+    select: { id: true },
+  });
+  if (clash) {
+    const label = kind === "belonging" ? "持ち物" : "準備すること";
+    name = `${tpl.name}（${label}）`.slice(0, 60);
+  }
+
+  await prisma.$transaction([
+    prisma.listTemplate.update({ where: { id }, data: { kind, name } }),
+    prisma.listTemplateItem.updateMany({
+      where: { templateId: id },
+      data: { kind },
+    }),
+  ]);
+  revalidateAppViews();
+}
+
 /** テンプレートを削除する。 */
 export async function deleteListTemplate(formData: FormData): Promise<void> {
   const userId = await requireUserId();

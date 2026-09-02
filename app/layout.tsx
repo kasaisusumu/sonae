@@ -3,8 +3,8 @@ import { Geist } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 import { getSessionUserId } from "@/lib/session";
-import { logout } from "@/app/actions";
 import { FeedbackWidget } from "@/app/components/feedback-widget";
+import { LogoutButton } from "@/app/components/logout-button";
 import { SwRegister } from "@/app/components/sw-register";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { LiveSync } from "@/app/components/live-sync";
@@ -85,14 +85,9 @@ export default async function RootLayout({
                     {label}
                   </Link>
                 ))}
-                <form action={logout} className="ml-1">
-                  <button
-                    className="rounded-lg px-2.5 py-1.5 text-muted transition-colors hover:bg-surface-muted hover:text-foreground"
-                    type="submit"
-                  >
-                    ログアウト
-                  </button>
-                </form>
+                <span className="ml-1">
+                  <LogoutButton className="rounded-lg px-2.5 py-1.5 text-muted transition-colors hover:bg-surface-muted hover:text-foreground" />
+                </span>
               </nav>
             ) : null}
           </div>

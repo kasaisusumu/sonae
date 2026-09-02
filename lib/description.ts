@@ -109,12 +109,10 @@ export function buildSonaeBlock(
     if (seen.has(key)) continue;
     seen.add(key);
     const group = items.filter((i) => kindOf(i) === key).sort(checkedLast);
-    const builtin = key === "task" || key === "belonging";
-    // 組み込みの2枠は常に見出しを出す。ユーザーが足した枠は項目があるときだけ。
-    if (group.length === 0 && !builtin) continue;
+    // 中身が無い枠は、見出しごと説明欄に出さない（「準備すること」等も同じ）。
+    if (group.length === 0) continue;
     lines.push("", `【${sectionLabel(key)}】${progress(group)}`);
-    if (group.length > 0) lines.push(...group.map(bullet));
-    else lines.push(`${CHECK_TODO} （なし）`);
+    lines.push(...group.map(bullet));
   }
 
   lines.push(END);

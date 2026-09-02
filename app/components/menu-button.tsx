@@ -159,6 +159,15 @@ export function MenuButton() {
               <form action={logout} className="mt-2 border-t border-border pt-2">
                 <button
                   type="submit"
+                  onClick={(e) => {
+                    if (
+                      !window.confirm(
+                        "ログアウトします。データは保存され、入り直せば元に戻ります。よろしいですか？",
+                      )
+                    ) {
+                      e.preventDefault();
+                    }
+                  }}
                   className="w-full rounded-lg px-3 py-2 text-left text-sm text-muted hover:bg-surface-muted"
                 >
                   ログアウト

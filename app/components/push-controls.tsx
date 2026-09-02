@@ -61,6 +61,13 @@ export function PushControls({ publicKey }: { publicKey: string | null }) {
 
   async function enable() {
     if (!publicKey) return;
+    if (
+      !window.confirm(
+        "通知をオンにします。続けてブラウザの許可を求めます。よろしいですか？",
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setNote(null);
     try {
@@ -93,6 +100,13 @@ export function PushControls({ publicKey }: { publicKey: string | null }) {
   }
 
   async function disable() {
+    if (
+      !window.confirm(
+        "通知をオフにします。予定の追加やリマインドが届かなくなります。よろしいですか？",
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     setNote(null);
     try {

@@ -226,7 +226,12 @@ export default async function SettingsPage() {
 
       <section className="rounded-2xl bg-surface p-5">
         <form action={logout}>
-          <SubmitButton variant="ghost">ログアウト</SubmitButton>
+          <SubmitButton
+            variant="ghost"
+            confirm="ログアウトします。データは保存され、同じ Google アカウントで入り直せば元に戻ります。よろしいですか？"
+          >
+            ログアウト
+          </SubmitButton>
         </form>
       </section>
     </div>

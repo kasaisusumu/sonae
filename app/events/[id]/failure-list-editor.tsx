@@ -5,6 +5,7 @@ import {
   createFailureLog,
   deleteFailureLog,
   logRepeatedFailure,
+  setFailureOutcome,
   updateFailureLog,
 } from "@/app/actions";
 import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
@@ -278,6 +279,31 @@ export function FailureListEditor({
                     {open ? "∧" : "∨"}
                   </button>
                 </div>
+
+                {/* 提案（未確認）はワンタップ＋確認で採用／削除 */}
+                {suggested && !open && (
+                  <div className="ml-6 mt-1 flex flex-wrap items-center gap-2">
+                    <form action={setFailureOutcome}>
+                      <input type="hidden" name="failureLogId" value={r.id} />
+                      <input type="hidden" name="outcome" value="linked" />
+                      <ConfirmButton
+                        message="この失敗をこの予定の注意点として採用しますか？"
+                        className="rounded-md border border-foreground bg-foreground px-2.5 py-0.5 text-[11px] font-medium text-surface hover:opacity-90"
+                      >
+                        採用
+                      </ConfirmButton>
+                    </form>
+                    <form action={deleteFailureLog}>
+                      <input type="hidden" name="id" value={r.id} />
+                      <ConfirmButton
+                        message="この提案を消しますか？（この予定では再提案しません）"
+                        className="rounded-md border border-border px-2.5 py-0.5 text-[11px] text-muted hover:border-warn hover:text-warn"
+                      >
+                        削除
+                      </ConfirmButton>
+                    </form>
+                  </div>
+                )}
 
                 {open && (
                   <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">

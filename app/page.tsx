@@ -7,6 +7,7 @@ import { getUpcomingWarnings } from "@/lib/failures";
 import { primeNotifiedChecklists } from "@/lib/checklist";
 import { SavingsDashboard } from "@/app/components/savings-dashboard";
 import { GettingStarted } from "@/app/components/getting-started";
+import { Landing } from "@/app/components/landing";
 
 export const maxDuration = 60;
 
@@ -60,66 +61,11 @@ export default async function HomePage({
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-md">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold text-teal-dark">
-            予定の準備を、わすれない。
-          </h1>
-          <p className="mt-4 text-muted">
-            カレンダーに予定を入れるだけ。「準備すること」と「持ち物」が自動で用意されて、
-            当日までに通知します。
-          </p>
-
-          <ol className="mx-auto mt-6 max-w-xs space-y-2 text-left text-sm">
-            {[
-              "Google でログイン（約30秒）",
-              "予定ごとに準備リストが出る",
-              "いる／いらないを直すと、次から賢くなる",
-            ].map((s, i) => (
-              <li key={i} className="flex gap-2">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-teal-soft text-xs font-semibold text-teal-dark">
-                  {i + 1}
-                </span>
-                <span className="text-muted">{s}</span>
-              </li>
-            ))}
-          </ol>
-
-          {loggedout && (
-            <p className="mt-4 rounded-lg bg-accent-soft px-4 py-3 text-sm text-teal-dark">
-              ログアウトしました。データは保存されています。
-              <br />
-              同じ Google アカウントで入り直すと、そのまま元に戻ります。
-            </p>
-          )}
-          {authMessage && (
-            <p className="mt-4 rounded-lg bg-warn-soft px-4 py-3 text-sm text-warn">
-              {authMessage}
-            </p>
-          )}
-          <a
-            href="/api/auth/google"
-            className="mt-7 inline-flex w-full items-center justify-center rounded-xl bg-teal px-6 py-3.5 font-medium text-white no-underline transition-colors hover:bg-teal-dark"
-          >
-            {loggedout ? "Google で入り直す" : "Google ではじめる"}
-          </a>
-          <p className="mt-3 text-xs text-muted">
-            カレンダーは読み取りのみ。設定でオンにしたときだけ、予定の説明欄に準備リストを書き込みます。
-          </p>
-          <p className="mt-2 text-xs text-muted">
-            途中で「このアプリは確認されていません」と出たら、「詳細」→「
-            {"（アプリ名）"}に移動」で進めます（検証中のため）。
-          </p>
-          {isDevLoginEnabled() && (
-            <p className="mt-6 text-xs text-muted">
-              <a href="/api/auth/dev-login" className="underline">
-                開発用ログイン
-              </a>
-              （本番では無効）
-            </p>
-          )}
-        </div>
-      </div>
+      <Landing
+        loggedout={!!loggedout}
+        authMessage={authMessage}
+        devLogin={isDevLoginEnabled()}
+      />
     );
   }
 

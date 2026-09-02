@@ -17,10 +17,10 @@ export async function FailureSuggestions({ eventId }: { eventId: string }) {
       className="rounded-2xl border border-warn/30 bg-warn-soft p-4 [&_summary::-webkit-details-marker]:hidden"
     >
       <summary className="cursor-pointer list-none text-sm font-semibold text-warn">
-        ⚠ 似た予定でよくある失敗（{suggestions.length}）— 確認する
+        ⚠ 似た予定でよくある失敗（{suggestions.length}）
       </summary>
       <p className="mt-1 text-xs text-warn/80">
-        責めるためではありません。当てはまりそうなら結果を選んで記録、関係なければ「今回は関係ない」で消せます。
+        当てはまりそうなら「紐付け」や結果を選んで記録、関係なければ「今回は関係ない」で消せます。
       </p>
 
       <div className="mt-3 space-y-2">
@@ -71,7 +71,7 @@ export async function FailureSuggestions({ eventId }: { eventId: string }) {
             <fieldset className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
               <label className="inline-flex items-center gap-1">
                 <input type="radio" name="outcome" value="" defaultChecked />
-                まだ
+                🔗 紐付ける（結果は後で）
               </label>
               <label className="inline-flex items-center gap-1">
                 <input type="radio" name="outcome" value="prevented" />

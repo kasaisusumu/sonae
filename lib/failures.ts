@@ -288,29 +288,16 @@ export async function getWarningForEvent(
     if (s.eventId === event.id) preventedThisEvent.add(s.failureLogId);
   }
 
-  // 1) この予定に強く結びつく記録で通常のクラスタ
-  let clusters = buildClusters(
+  // この予定に「強く結びつく」記録だけでクラスタを作る。
+  // 名前が似ている・同じ繰り返し系列・状況が近い、のいずれかで当たったものだけ。
+  // 「同じカテゴリなだけ」の弱い参考表示はしない（ユーザー指定）。
+  const clusters = buildClusters(
     strong,
     preventedCountByLogId,
     preventedThisEvent,
     event.id,
   );
-  let weak = false;
-
-  // 2) 何も出ないが、このカテゴリに記録はある
-  //    → 一覧の「過去に失敗あり」バッジと表示を一致させるため、参考として出す。
-  //    まず strong を経年フロアなしで、それも空ならカテゴリ全記録から。
-  if (clusters.length === 0) {
-    const base = strong.length > 0 ? strong : logs;
-    clusters = buildClusters(
-      base,
-      preventedCountByLogId,
-      preventedThisEvent,
-      event.id,
-      { noFloor: true },
-    );
-    weak = true;
-  }
+  const weak = false;
   if (clusters.length === 0) return null;
 
   const categoryName =
@@ -589,28 +576,46 @@ export async function suggestFailureLogsForEvent(
     const key = clusterKey(l.description);
     if (!key || ownKeys.has(key) || dismissedKeys.has(key)) continue;
 
-    let score = 0.4; // ベース（うっすら全部候補）
+    // 「堂々と提案してよい」もの＝名前が近い／掠っている／同じ繰り返し系列、
+    // もしくは この予定に紐づかないカテゴリ全体のメモ。
+    // 「同じカテゴリの“別予定”ログなだけ」は提案しない（確信度が低いので）。
+    const sameCat =
+      !!l.categoryId &&
+      !!event.categoryId &&
+      l.categoryId === event.categoryId;
+    const categoryNote = !l.eventId; // 予定に紐づかない＝カテゴリ全体のメモ
+    const nameClose = !!(l.event && similarText(l.event.title, event.title));
+    const grazes = !!(l.event && shareKeyword(l.event.title, event.title));
+    const sameSeries = !!(
+      l.event?.recurringEventId &&
+      event.recurringEventId &&
+      l.event.recurringEventId === event.recurringEventId
+    );
+    const sig = signatureMatches(l.featureSignature, feature);
+
+    const ok =
+      nameClose ||
+      sameSeries ||
+      (grazes && (sameCat || sig)) ||
+      (categoryNote && sameCat);
+    if (!ok) continue;
+
     const reasons: string[] = [];
-    if (l.categoryId && event.categoryId && l.categoryId === event.categoryId) {
-      score += 2;
-      reasons.push("同じカテゴリ");
+    if (nameClose) reasons.push("名前が近い");
+    if (sameSeries) reasons.push("同じ繰り返し予定");
+    if (grazes && !nameClose) reasons.push("キーワードが一致");
+    if (categoryNote && sameCat && reasons.length === 0) {
+      reasons.push("このカテゴリのメモ");
     }
-    if (eventLinkApplies(l, event.title, event.recurringEventId)) {
-      score += 2;
-      if (!reasons.includes("同じカテゴリ")) reasons.push("似た予定");
-    }
-    if (signatureMatches(l.featureSignature, feature)) {
-      score += 1;
-      reasons.push("状況が近い");
-    }
-    if (l.event && similarText(l.event.title, event.title)) {
-      score += 1.5;
-      if (!reasons.some((r) => r === "似た予定" || r === "同じカテゴリ")) {
-        reasons.push("名前が近い");
-      }
-    }
-    score = Number((score * decayMultiplier(l.occurredAt)).toFixed(3));
-    if (score < 0.9 || reasons.length === 0) continue;
+    if (sig && reasons.length === 0) reasons.push("状況が近い");
+
+    const rawScore =
+      (nameClose ? 3 : 0) +
+      (sameSeries ? 3 : 0) +
+      (grazes ? 2 : 0) +
+      (categoryNote && sameCat ? 1 : 0) +
+      (sig ? 1 : 0);
+    const score = Number((rawScore * decayMultiplier(l.occurredAt)).toFixed(3));
 
     const prev = byKey.get(key);
     if (!prev || score > prev.score) {
@@ -739,10 +744,11 @@ export async function getEventDescriptionFailures(
     }
   }
 
-  // 今回の失敗（この予定に紐づく記録のうち、prevented / irrelevant 以外）
+  // 今回の失敗（直接記録された失敗＝ not_prevented か未確認）。
+  // "linked"（＝提案を紐付けただけ・結果未確定）や irrelevant は断定しない。
   const occurred = new Map<string, string>();
   for (const l of linked) {
-    if (l.outcome === "prevented" || l.outcome === "irrelevant") continue;
+    if (l.outcome !== "not_prevented" && l.outcome !== null) continue;
     const k = norm(l.description);
     if (avoided.has(k) || occurred.has(k)) continue;
     occurred.set(k, l.description.trim());

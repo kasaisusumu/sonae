@@ -1051,10 +1051,11 @@ export async function attachFailureToEvent(formData: FormData): Promise<void> {
     return;
   }
 
+  // 結果を選ばず紐付けただけ＝"linked"（この予定で起こりうる・結果は後で）。
   const outcome =
     rawOutcome === "prevented" || rawOutcome === "not_prevented"
       ? rawOutcome
-      : null;
+      : "linked";
 
   const event = await prisma.event.findFirst({
     where: { id: eventId, userId },
@@ -1116,6 +1117,7 @@ export async function attachFailureToEvent(formData: FormData): Promise<void> {
   }
 
   revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
 }
 
 /** 失敗ログを削除する。 */
@@ -1147,7 +1149,10 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
   const failureLogId = String(formData.get("failureLogId") ?? "");
   const raw = String(formData.get("outcome") ?? "");
   const outcome =
-    raw === "prevented" || raw === "not_prevented" || raw === "irrelevant"
+    raw === "prevented" ||
+    raw === "not_prevented" ||
+    raw === "irrelevant" ||
+    raw === "linked"
       ? raw
       : "unset";
   if (!failureLogId) return;
@@ -1274,7 +1279,8 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
   const outcome: string | null =
     outcomeStr === "prevented" ||
     outcomeStr === "not_prevented" ||
-    outcomeStr === "irrelevant"
+    outcomeStr === "irrelevant" ||
+    outcomeStr === "linked"
       ? outcomeStr
       : null;
 

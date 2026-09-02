@@ -10,7 +10,7 @@ import { getWarningForEvent } from "@/lib/failures";
 import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
-import { markListReviewed, regenerateChecklist } from "@/app/actions";
+import { markListReviewed } from "@/app/actions";
 import { Suspense } from "react";
 import {
   FAILURE_LOG_KEY,
@@ -246,22 +246,15 @@ export async function ChecklistSection({
       )}
 
       <section className="space-y-4" data-coach="checklist">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-muted">
-            追加・削除・タイミング変更は、この種類の予定の学習に使われます。
-          </p>
-          <form action={regenerateChecklist} data-coach="regen">
-            <input type="hidden" name="eventId" value={event.id} />
-            <SubmitButton
-              variant="ghost"
-              confirm="いまの準備すること・持ち物を作り直します（編集した内容は上書きされます）。よろしいですか？"
-            >
-              作り直す
-            </SubmitButton>
-          </form>
-        </div>
+        <p className="text-xs text-muted">
+          追加・削除・タイミング変更は、この種類の予定の学習に使われます。
+        </p>
 
-        <div data-coach="list-reminder">
+        {/* 小さめのボタン2つを横並び。押すとポップアップで開く。 */}
+        <div
+          data-coach="list-reminder"
+          className="flex flex-wrap items-center gap-2"
+        >
           <ListReminderControl
             eventId={event.id}
             current={
@@ -269,6 +262,7 @@ export async function ChecklistSection({
               event.listReminderLeadMinutes
             }
           />
+          <DictationInput eventId={event.id} />
         </div>
 
         {unreviewed && (
@@ -282,8 +276,6 @@ export async function ChecklistSection({
             </form>
           </div>
         )}
-
-        <DictationInput eventId={event.id} />
 
         <SectionList
           eventId={event.id}

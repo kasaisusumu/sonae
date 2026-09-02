@@ -139,8 +139,8 @@ function FailureRow({
             defaultValue={l.description}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
           />
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs text-muted">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="block text-xs text-muted">
               金額（円）
               <input
                 type="number"
@@ -149,20 +149,20 @@ function FailureRow({
                 step={100}
                 defaultValue={l.estimatedLossYen || ""}
                 placeholder="任意"
-                className="ml-1 w-24 rounded-md border bg-background px-2 py-1 text-sm"
+                className="mt-0.5 w-full rounded-md border bg-background px-3 py-2 text-sm"
               />
             </label>
-            <label className="text-xs text-muted">
+            <label className="block text-xs text-muted">
               日付
               <input
                 type="date"
                 name="occurredAt"
                 defaultValue={toDateInputValue(l.occurredAt)}
-                className="ml-1 rounded-md border bg-background px-2 py-1 text-sm"
+                className="mt-0.5 w-full rounded-md border bg-background px-3 py-2 text-sm"
               />
             </label>
-            <SubmitButton variant="ghost">更新</SubmitButton>
           </div>
+          <SubmitButton variant="ghost">更新</SubmitButton>
         </form>
       </details>
     </li>

@@ -41,12 +41,16 @@ export default async function EventsPage({
         checklistItems: { select: { isDone: true, title: true } },
       },
     }),
-    // この予定に直接ひもづく失敗ログがある＝「過去に失敗あり」
+    // この予定で実際に失敗が記録／確定している＝「過去に失敗あり」（赤）。
+    // "linked"（提案を紐付けただけ）や "irrelevant" は含めない。
     prisma.failureLog.findMany({
       where: {
         userId: user.id,
         eventId: { not: null },
-        outcome: { not: "irrelevant" },
+        OR: [
+          { outcome: null },
+          { outcome: { in: ["not_prevented", "prevented"] } },
+        ],
       },
       select: { eventId: true },
       distinct: ["eventId"],

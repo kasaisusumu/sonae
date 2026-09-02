@@ -138,14 +138,15 @@ export function buildSonaeBlock(
 ): string {
   const kindOf = (i: DescItem) => i.kind ?? "task";
   const used = new Set(items.map(kindOf));
-  const order =
+  const order = (
     opts.sections && opts.sections.length > 0
       ? opts.sections
       : [
           "task",
           "belonging",
           ...[...used].filter((k) => k !== "task" && k !== "belonging"),
-        ];
+        ]
+  ).filter((k) => !k.startsWith("@")); // "@faillog" 等の特別キーは説明欄に出さない
 
   const lines = [START, `準備リスト: ${url}`];
   if (opts.unreviewed) lines.push("", UNREVIEWED_NOTE);

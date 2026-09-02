@@ -11,12 +11,15 @@ import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
 import { markListReviewed, regenerateChecklist } from "@/app/actions";
+import { Suspense } from "react";
 import {
+  FAILURE_LOG_KEY,
   isBuiltinSection,
   resolveSections,
   sectionLabel,
 } from "@/lib/sections";
 import { ChecklistEditor } from "./checklist-editor";
+import { EventFailureLog } from "./event-failure-log";
 import { SuggestionList } from "./suggestion-list";
 import { WarningPanel } from "./warning-panel";
 import { ListReminderControl } from "./list-reminder-control";
@@ -207,6 +210,11 @@ export async function ChecklistSection({
     reviewState?.sectionOrder ?? null,
     items.map((i) => i.kind),
   );
+  // 「この予定の失敗ログ」もリスト枠として並べ替え対象にする。
+  // まだ並べ替えたことがなければ、話して作るのすぐ下（先頭）に置く。
+  const orderedKeys = sections.includes(FAILURE_LOG_KEY)
+    ? sections
+    : [FAILURE_LOG_KEY, ...sections];
 
   const tplByKind = (k: "task" | "belonging"): TplOpt[] =>
     allTemplates
@@ -279,7 +287,22 @@ export async function ChecklistSection({
 
         <SectionList
           eventId={event.id}
-          entries={sections.map((key): SectionEntry => {
+          entries={orderedKeys.map((key): SectionEntry => {
+            if (key === FAILURE_LOG_KEY) {
+              return {
+                key,
+                label: "この予定の失敗ログ",
+                builtin: true, // 名前変更・削除はさせない
+                node: (
+                  <Suspense fallback={null}>
+                    <EventFailureLog
+                      eventId={event.id}
+                      userId={event.userId}
+                    />
+                  </Suspense>
+                ),
+              };
+            }
             const builtin = isBuiltinSection(key);
             return {
               key,

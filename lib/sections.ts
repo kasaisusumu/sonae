@@ -5,6 +5,16 @@
  */
 
 export const BUILTIN_SECTIONS = ["task", "belonging"] as const;
+
+/**
+ * 「リスト枠として並べ替えできるが、準備項目の枠ではない」特別キー。
+ * 先頭が "@" のキーは実データの枠ではない目印。sectionOrder には保存されるが、
+ * 説明欄・学習など実枠を扱う所では isRealSection で除外する。
+ */
+export const FAILURE_LOG_KEY = "@faillog";
+export function isRealSection(key: string): boolean {
+  return !!key && !key.startsWith("@");
+}
 const BUILTIN_LABEL: Record<string, string> = {
   task: "準備すること",
   belonging: "持ち物",

@@ -790,9 +790,10 @@ export async function reorderChecklistSections(input: {
   const wanted = input.order
     .map((k) => String(k))
     .filter((k, i, a) => a.indexOf(k) === i);
-  // 要求された順に、実在するキーだけを並べる。要求に無い既存キーは末尾へ。
+  // 要求された順に、実在するキー（と "@" 始まりの特別キー）だけを並べる。
+  // 要求に無い既存キーは末尾へ。
   const next = [
-    ...wanted.filter((k) => cur.includes(k)),
+    ...wanted.filter((k) => cur.includes(k) || k.startsWith("@")),
     ...cur.filter((k) => !wanted.includes(k)),
   ];
   if (stringifySectionOrder(next) === stringifySectionOrder(cur)) return;

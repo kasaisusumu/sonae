@@ -57,14 +57,22 @@ export async function EventFailureLog({
   return (
     <details
       id="failure-check"
-      className="scroll-mt-4 rounded-2xl bg-surface p-5 [&_summary::-webkit-details-marker]:hidden"
-      open={linked.length > 0 || (askOutcome && !ev?.noFailureAt)}
+      className="group scroll-mt-4 rounded-2xl bg-surface p-3 [&_summary::-webkit-details-marker]:hidden"
+      open={askOutcome && !ev?.noFailureAt}
     >
-      <summary className="cursor-pointer list-none text-sm font-semibold text-muted">
-        📓 この予定の失敗ログ（{linked.length}）
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-1">
+        <span className="text-sm font-semibold text-foreground">
+          📓 この予定の失敗ログ（{linked.length}）
+        </span>
+        <span className="shrink-0 rounded-md border border-border px-2 py-0.5 text-xs text-muted group-open:hidden">
+          ＋ 追加・ひらく
+        </span>
+        <span className="hidden shrink-0 rounded-md border border-border px-2 py-0.5 text-xs text-muted group-open:inline">
+          閉じる
+        </span>
       </summary>
-      <p className="mt-2 text-xs text-muted">
-        次に似た予定が来たときに先回りするためのメモです。内容・金額・日付・結果は、ここからいつでも直せます。金額は分からなければ空でOK。
+      <p className="mt-2 px-1 text-xs text-muted">
+        次に似た予定が来たときに先回りするためのメモです。内容・金額・日付・結果は、ここからいつでも直せます。
       </p>
 
       {askOutcome &&

@@ -10,7 +10,6 @@ import {
   ChecklistSection,
   ChecklistSectionSkeleton,
 } from "./checklist-section";
-import { EventFailureLog } from "./event-failure-log";
 import { FailureSuggestions } from "./failure-suggestions";
 import { ScrollToHash } from "./scroll-to-hash";
 
@@ -99,10 +98,6 @@ export default async function EventDetailPage({
               : null,
           }}
         />
-      </Suspense>
-
-      <Suspense fallback={null}>
-        <EventFailureLog eventId={event.id} userId={event.userId} />
       </Suspense>
     </div>
   );

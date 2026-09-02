@@ -90,20 +90,24 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* 見出しは詰めてクッキリと。 */
-h1,
-h2,
-h3 {
-  letter-spacing: -0.014em;
-  line-height: 1.25;
-  font-weight: 600;
-}
+/* 要素既定は必ず @layer base に入れる。unlayered だと Tailwind の
+   ユーティリティ（@layer utilities）より強くなり、text-white 等が効かず
+   ボタン文字が潰れる原因になる。 */
+@layer base {
+  /* 見出しは詰めてクッキリと。 */
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.014em;
+    line-height: 1.25;
+    font-weight: 600;
+  }
 
-/* 白黒ベース。リンク色はほぼ黒。下線は各所で明示している（globals では強制しない
-   ＝見出しリンクやボタン化したリンクに予期しない下線が付くのを避ける）。 */
-a {
-  color: var(--teal-dark);
-  text-underline-offset: 2px;
+  /* 白黒ベース。リンク色はほぼ黒。下線は各所で個別指定（globals では強制しない）。 */
+  a {
+    color: var(--teal-dark);
+    text-underline-offset: 2px;
+  }
 }
 
 ::selection {

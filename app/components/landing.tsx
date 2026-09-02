@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { PrivateModeNotice } from "@/app/components/private-mode-notice";
 
-// 白黒ベース。色が出なくても「押せるボタン」と分かるよう、面＋枠線＋下線なしを明示。
-// （Tailwind v4 では important は接尾辞。ここは通常ユーティリティで十分効く）
+// 黒背景に白文字を、確実に出るユーティリティ（text-white / 明示 no-underline）で固定。
+// token の text-surface が万一効かない環境でも潰れないようにする。
 const CTA_CLASS =
-  "inline-flex w-full items-center justify-center gap-2 rounded-xl border border-foreground bg-foreground px-6 py-3.5 text-[15px] font-semibold text-surface no-underline shadow-sm transition-opacity hover:opacity-90";
+  "inline-flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-6 py-3.5 text-[15px] font-semibold text-white [text-decoration:none] shadow-sm transition-opacity hover:opacity-90";
 
 function CtaButton({ loggedout }: { loggedout: boolean }) {
   return (

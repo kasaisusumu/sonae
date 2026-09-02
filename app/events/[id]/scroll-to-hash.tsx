@@ -14,6 +14,9 @@ export function ScrollToHash() {
     const timer = window.setInterval(() => {
       const el = document.getElementById(id);
       if (el) {
+        // 折りたたみ（<details>）が対象なら開いてからスクロール
+        if (el.tagName === "DETAILS") (el as HTMLDetailsElement).open = true;
+        el.closest("details")?.setAttribute("open", "");
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         window.clearInterval(timer);
       } else if (++tries > 40) {

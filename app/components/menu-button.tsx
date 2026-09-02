@@ -173,6 +173,23 @@ export function MenuButton() {
                   ログアウト
                 </button>
               </form>
+
+              <div className="mt-2 flex gap-3 border-t border-border px-3 pt-2 text-[11px] text-muted">
+                <Link
+                  href="/privacy"
+                  onClick={() => setOpen(false)}
+                  className="no-underline hover:text-foreground"
+                >
+                  プライバシーポリシー
+                </Link>
+                <Link
+                  href="/terms"
+                  onClick={() => setOpen(false)}
+                  className="no-underline hover:text-foreground"
+                >
+                  利用規約
+                </Link>
+              </div>
             </nav>
           </div>
         </div>

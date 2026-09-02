@@ -98,8 +98,22 @@ export default async function RootLayout({
         </main>
 
         <footer className="border-t bg-surface">
-          <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3 px-5 py-4 text-xs text-muted">
+          <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-4 text-xs text-muted">
             <span>私のマネージャー（検証版）— 表示される金額はすべて推定値です。</span>
+            <span className="flex items-center gap-3">
+              <Link
+                href="/privacy"
+                className="text-muted no-underline hover:text-foreground"
+              >
+                プライバシーポリシー
+              </Link>
+              <Link
+                href="/terms"
+                className="text-muted no-underline hover:text-foreground"
+              >
+                利用規約
+              </Link>
+            </span>
             {isLoggedIn ? <FeedbackWidget /> : null}
           </div>
         </footer>

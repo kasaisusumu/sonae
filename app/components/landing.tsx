@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const CTA_CLASS =
   "inline-flex w-full items-center justify-center rounded-xl bg-teal px-6 py-3.5 text-[15px] font-semibold text-white no-underline shadow-sm transition-colors hover:bg-teal-dark";
 
@@ -95,6 +97,17 @@ export function Landing({
           </a>
           <p className="mt-2 text-xs text-muted">
             カレンダーは読み取りのみ。書き込みは設定で ON にしたときだけ。
+          </p>
+          <p className="mt-2 text-[11px] leading-relaxed text-muted">
+            続けると
+            <Link href="/terms" className="underline">
+              利用規約
+            </Link>
+            と
+            <Link href="/privacy" className="underline">
+              プライバシーポリシー
+            </Link>
+            に同意したものとみなします。
           </p>
         </div>
       </section>
@@ -198,6 +211,16 @@ export function Landing({
           </p>
         )}
       </section>
+
+      <footer className="mt-12 border-t border-border pt-4 text-center text-[11px] text-muted">
+        <Link href="/privacy" className="underline">
+          プライバシーポリシー
+        </Link>
+        {" ・ "}
+        <Link href="/terms" className="underline">
+          利用規約
+        </Link>
+      </footer>
     </div>
   );
 }

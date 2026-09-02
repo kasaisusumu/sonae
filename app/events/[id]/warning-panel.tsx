@@ -3,11 +3,11 @@ import {
   addPreventionItem,
   logRepeatedFailure,
   markPrevented,
-  updateFailureAmount,
 } from "@/app/actions";
 import { formatDateOnly, formatYen } from "@/lib/format";
 import { LEAD_PRESETS } from "@/lib/lead-time";
 import { SubmitButton } from "@/app/components/submit-button";
+import { RetroAmountInput } from "@/app/components/retro-amount-input";
 import { RetroOutcomeSelect } from "./retro-outcome-select";
 import type { EventWarning } from "@/lib/failures";
 
@@ -113,32 +113,10 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                       current="prevented"
                     />
                   )}
-                  <form
-                    action={updateFailureAmount}
-                    className="flex items-center gap-1"
-                  >
-                    <input
-                      type="hidden"
-                      name="failureLogId"
-                      value={log.thisEventLogId ?? log.id}
-                    />
-                    <span className="text-[11px] text-muted">金額</span>
-                    <input
-                      type="number"
-                      name="estimatedLossYen"
-                      min={0}
-                      step={100}
-                      defaultValue={log.estimatedLossYen || ""}
-                      placeholder="円"
-                      className="w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground"
-                    />
-                    <button
-                      type="submit"
-                      className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
-                    >
-                      更新
-                    </button>
-                  </form>
+                  <RetroAmountInput
+                    failureLogId={log.thisEventLogId ?? log.id}
+                    initial={log.estimatedLossYen}
+                  />
                 </div>
               ) : log.loggedThisEventCount > 0 ? (
                 <div className="space-y-1.5">

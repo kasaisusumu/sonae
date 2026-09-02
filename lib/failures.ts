@@ -24,6 +24,7 @@ export interface WarningCluster {
   weight: number; // 表示順・足切り用（経年劣化込み）
   prevented: boolean; // この予定で「防げた」計上済みか
   loggedThisEventCount: number; // 「今回もやってしまった」でこの予定に記録済みの回数
+  thisEventLogId: string | null; // この予定に紐づくメンバーの id（振り返りの結果を編集する対象）
   fromEventTitle: string | null;
 }
 
@@ -195,11 +196,17 @@ function buildClusters(
     // 「今回もやってしまった」を実際に記録した数。この予定に紐づき、かつ
     // 結果が「防げなかった」になっているものだけ数える（提案の未確認行や
     // ただの紐付け行では "記録済み" 表示にしない）。
-    const loggedThisEventCount = thisEventId
-      ? g.members.filter(
-          (x) => x.eventId === thisEventId && x.outcome === "not_prevented",
-        ).length
-      : 0;
+    const thisEventMembers = thisEventId
+      ? g.members.filter((x) => x.eventId === thisEventId)
+      : [];
+    const loggedThisEventCount = thisEventMembers.filter(
+      (x) => x.outcome === "not_prevented",
+    ).length;
+    // 振り返りの結果を編集する対象（防げなかった行を優先、なければ先頭）。
+    const thisEventLogId =
+      thisEventMembers.find((x) => x.outcome === "not_prevented")?.id ??
+      thisEventMembers[0]?.id ??
+      null;
     // computeConfidence と同じ気持ち: 繰り返しで重く、経年で薄れる
     const base = 0.4 + 0.18 * Math.min(occurredCount, 3);
     const weight = Number(
@@ -215,6 +222,7 @@ function buildClusters(
       weight,
       prevented,
       loggedThisEventCount,
+      thisEventLogId,
       fromEventTitle: g.rep.event?.title ?? null,
     };
   });

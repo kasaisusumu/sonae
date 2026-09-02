@@ -4,13 +4,13 @@ import {
   logRepeatedFailure,
   markPrevented,
   undoPrevented,
-  undoRepeatedFailure,
   updateFailureAmount,
 } from "@/app/actions";
 import { formatDateOnly, formatYen } from "@/lib/format";
 import { LEAD_PRESETS } from "@/lib/lead-time";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
+import { RetroOutcomeSelect } from "./retro-outcome-select";
 import type { EventWarning } from "@/lib/failures";
 
 export function WarningPanel({ warning }: { warning: EventWarning }) {
@@ -147,18 +147,14 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
               ) : log.loggedThisEventCount > 0 ? (
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium text-warn">
-                    ✓ 「今回もやってしまった」を記録しました。次の似た予定で先回りします。
+                    ✓ 「今回もやってしまった」で記録しました。次の似た予定で先回りします。
                   </p>
-                  <form action={undoRepeatedFailure}>
-                    <input type="hidden" name="eventId" value={event.id} />
-                    <input type="hidden" name="failureLogId" value={log.id} />
-                    <ConfirmButton
-                      message="「今回もやってしまった」の記録を取り消しますか？（選び直せます）"
-                      className="text-xs text-muted underline hover:text-foreground"
-                    >
-                      取り消して選び直す
-                    </ConfirmButton>
-                  </form>
+                  {log.thisEventLogId && (
+                    <RetroOutcomeSelect
+                      logId={log.thisEventLogId}
+                      current="not_prevented"
+                    />
+                  )}
                 </div>
               ) : (
                 <>

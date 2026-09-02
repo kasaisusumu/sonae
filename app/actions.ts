@@ -960,6 +960,9 @@ export async function createFailureLog(formData: FormData): Promise<void> {
       featureSignature: featureSig,
       description,
       estimatedLossYen,
+      // ユーザーが予定に紐づけて自分で追加したものは初めから「紐付け」。
+      // 予定なし（カテゴリ全体）の記録は「未確認」のまま。
+      outcome: linkedEvent ? "linked" : null,
       occurredAt:
         (occurredAtRaw ? parseJstDate(occurredAtRaw) : null) ??
         linkedEvent?.eventDatetime ??
@@ -1008,6 +1011,8 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
         featureSignature: featureSig,
         description: template.description,
         estimatedLossYen: template.estimatedLossYen,
+        // ユーザーが予定に紐づけて追加した＝初めから「紐付け」。
+        outcome: "linked",
         occurredAt: event.eventDatetime,
       },
     });

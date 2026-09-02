@@ -116,6 +116,7 @@ function EventLeaf({
       <FailureListEditor
         eventId={leaf.eventId}
         label="失敗ログ"
+        variant="warn"
         initial={leaf.failures satisfies FLRow[]}
       />
       {leaf.mergedCount > 1 && !leaf.cleared && (

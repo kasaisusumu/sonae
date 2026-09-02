@@ -51,31 +51,49 @@ export function FailureListEditor({
   label = "失敗ログ",
   initial,
   others = [],
+  variant = "plain",
 }: {
   eventId: string;
   label?: string;
   initial: FLRow[];
   others?: FLOther[];
+  /** "warn" = 編集を開いていない行を赤（warn-soft）で表示（学習内容ページ用）。 */
+  variant?: "plain" | "warn";
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [pickOpen, setPickOpen] = useState(false);
 
+  const warn = variant === "warn";
+
   return (
     <div className="rounded-2xl bg-surface p-3">
       <div className="mb-1.5 flex items-baseline gap-2">
-        <h3 className="text-sm font-semibold text-foreground">{label}</h3>
+        <h3
+          className={`text-sm font-semibold ${
+            warn ? "text-warn" : "text-foreground"
+          }`}
+        >
+          {label}
+        </h3>
         <span className="text-xs text-muted tabular-nums">{initial.length}</span>
       </div>
 
       {initial.length > 0 && (
-        <ul className="divide-y divide-border/70">
+        <ul className={warn ? "space-y-1" : "divide-y divide-border/70"}>
           {initial.map((r) => {
             const m = meta(r.outcome);
             const open = openId === r.id;
             return (
-              <li key={r.id} className="py-1.5">
+              <li
+                key={r.id}
+                className={
+                  warn && !open
+                    ? "rounded-lg bg-warn-soft px-2 py-1.5"
+                    : "py-1.5"
+                }
+              >
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 shrink-0 text-sm">{m.icon}</span>
                   <span className="min-w-0 flex-1 whitespace-pre-wrap break-words py-0.5 text-sm">

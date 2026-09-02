@@ -339,6 +339,21 @@ export function ChecklistEditor({
     setSaved(false);
   }
 
+  function clearAll() {
+    if (
+      !window.confirm(`「${kindLabel}」の項目をすべて削除します。よろしいですか？`)
+    )
+      return;
+    setItems([]);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("eventId", eventId);
+      fd.set("kind", kind);
+      await clearChecklistSection(fd);
+      router.refresh();
+    });
+  }
+
   function add() {
     setItems((prev) => [
       ...prev,
@@ -498,6 +513,16 @@ export function ChecklistEditor({
         <span className="text-xs text-muted tabular-nums">
           {doneCount}/{items.length}
         </span>
+        {items.length > 0 && (
+          <button
+            type="button"
+            onClick={clearAll}
+            disabled={pending}
+            className="ml-auto shrink-0 self-center rounded-md border border-border px-2 py-0.5 text-[11px] text-muted hover:border-warn hover:text-warn disabled:opacity-50"
+          >
+            全部消す
+          </button>
+        )}
       </div>
 
       {showExamples && (
@@ -789,25 +814,6 @@ export function ChecklistEditor({
                   { label: "📋 テンプレから追加", on: () => setModal("apply") },
                   { label: "📆 他の予定からコピー", on: () => setModal("copy") },
                   { label: "⭐ 名前をつけて保存", on: () => setModal("save") },
-                  {
-                    label: `🗑 「${kindLabel}」を全部消す`,
-                    on: () => {
-                      if (
-                        !window.confirm(
-                          `「${kindLabel}」の項目をすべて削除します。よろしいですか？`,
-                        )
-                      )
-                        return;
-                      setItems([]);
-                      startTransition(async () => {
-                        const fd = new FormData();
-                        fd.set("eventId", eventId);
-                        fd.set("kind", kind);
-                        await clearChecklistSection(fd);
-                        router.refresh();
-                      });
-                    },
-                  },
                 ].map((m) => (
                   <button
                     key={m.label}

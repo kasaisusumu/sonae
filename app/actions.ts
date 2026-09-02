@@ -672,6 +672,51 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
 }
 
 /**
+ * 予定詳細ページの「考えられる失敗」を一括削除する。提案由来（未確認／紐付けで
+ * 結果未定）は再提案されないよう FailureDismissal に記録する。この予定に紐づく
+ * 節約計上（SavingsEntry）も一緒に外す。
+ */
+export async function clearEventFailureLogs(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  if (!eventId) return;
+
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    select: { id: true },
+  });
+  if (!event) return;
+
+  const logs = await prisma.failureLog.findMany({
+    where: { userId, eventId },
+    select: { description: true, outcome: true },
+  });
+  if (logs.length === 0) return;
+
+  await prisma.savingsEntry.deleteMany({ where: { userId, eventId } });
+  await prisma.failureLog.deleteMany({ where: { userId, eventId } });
+
+  const dismissKeys = new Set(
+    logs
+      .filter((l) => l.outcome === null || l.outcome === "linked")
+      .map((l) => clusterKey(l.description))
+      .filter((k): k is string => !!k),
+  );
+  for (const descKey of dismissKeys) {
+    await prisma.failureDismissal
+      .upsert({
+        where: { eventId_descKey: { eventId, descKey } },
+        create: { userId, eventId, descKey },
+        update: {},
+      })
+      .catch(() => {});
+  }
+
+  revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
+}
+
+/**
  * 予定詳細ページの「リストごとに全部消す」。指定した枠（kind）の項目を一括削除する。
  * 個別の ✕ 削除と違い、これは学習（除外ルール）には流さない — この予定のリストを
  * まとめて空にするだけ。
@@ -1913,6 +1958,10 @@ export async function buildListFromDictation(input: {
     select: {
       id: true,
       title: true,
+      memo: true,
+      eventDatetime: true,
+      endDatetime: true,
+      categoryId: true,
       listCleared: true,
       category: { select: { name: true } },
     },
@@ -1951,7 +2000,7 @@ export async function buildListFromDictation(input: {
       return s.items.map((t) => ({ kind, title: t, notifyLeadMinutes: null }));
     }),
   ];
-  if (seeds.length === 0) {
+  if (seeds.length === 0 && parsed.failures.length === 0) {
     return {
       ok: false,
       added: 0,
@@ -1960,14 +2009,63 @@ export async function buildListFromDictation(input: {
   }
 
   // 全消し状態なら解除してから足す
-  if (event.listCleared) {
+  if (event.listCleared && seeds.length > 0) {
     await prisma.event.update({
       where: { id: eventId },
       data: { listCleared: false },
     });
   }
 
-  const added = await addSeedItemsToEvent(userId, eventId, seeds);
+  const added =
+    seeds.length > 0 ? await addSeedItemsToEvent(userId, eventId, seeds) : 0;
+
+  // 「考えられる失敗」も話して作れる。この予定に紐づけて（＝linked で）記録する。
+  let addedFailures = 0;
+  if (parsed.failures.length > 0) {
+    const existing = await prisma.failureLog.findMany({
+      where: { userId, eventId },
+      select: { description: true },
+    });
+    const have = new Set(
+      existing
+        .map((e) => clusterKey(e.description))
+        .filter((k): k is string => !!k),
+    );
+    const sig = featureSignature(
+      extractEventFeature({
+        title: event.title,
+        memo: event.memo,
+        eventDatetime: event.eventDatetime,
+        endDatetime: event.endDatetime,
+      }),
+    );
+    const fresh = parsed.failures.filter((d) => {
+      const k = clusterKey(d);
+      return !!k && !have.has(k) && (have.add(k), true);
+    });
+    if (fresh.length > 0) {
+      await prisma.$transaction(
+        fresh.map((description) =>
+          prisma.failureLog.create({
+            data: {
+              userId,
+              categoryId: event.categoryId,
+              eventId,
+              featureSignature: sig,
+              description,
+              estimatedLossYen: 0,
+              outcome: "linked",
+              occurredAt: event.eventDatetime,
+            },
+          }),
+        ),
+      );
+      addedFailures = fresh.length;
+      await markAutoManaged(eventId);
+      revalidateAppViews(eventId);
+      after(() => void syncEventDescription(eventId));
+    }
+  }
 
   const parts: string[] = [];
   if (parsed.task.length) parts.push(`準備 ${parsed.task.length}`);
@@ -1975,13 +2073,15 @@ export async function buildListFromDictation(input: {
   for (const s of parsed.sections) {
     if (s.items.length) parts.push(`${s.name} ${s.items.length}`);
   }
+  if (addedFailures > 0) parts.push(`考えられる失敗 ${addedFailures}`);
 
+  const total = added + addedFailures;
   return {
     ok: true,
-    added,
+    added: total,
     summary:
-      added > 0
-        ? `${added}件を追加しました（${parts.join(" / ")}）。`
+      total > 0
+        ? `${total}件を追加しました（${parts.join(" / ")}）。`
         : "すべて登録済みでした。",
   };
 }

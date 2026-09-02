@@ -10,6 +10,7 @@ export interface DictationResult {
   task: string[]; // 準備すること（行動）
   belonging: string[]; // 持ち物（物の名前）
   sections: DictationSection[]; // task/belonging に入らない独自の枠
+  failures: string[]; // 考えられる失敗（うっかり・ミス）
 }
 
 const SYSTEM_PROMPT = `あなたは、段取りが苦手な人（ADHD傾向）を支える日本語アシスタントです。
@@ -21,6 +22,10 @@ const SYSTEM_PROMPT = `あなたは、段取りが苦手な人（ADHD傾向）�
 - sections: task にも belonging にも当てはまらない、ユーザー固有のまとまり。
   例:「買うもの」（弁当・お茶）、「連絡すること」（上司に遅れる旨）、「渡すもの」「持って帰るもの」など。
   name は 2〜6 文字の短い日本語。無理に作らない（該当が無ければ空配列）。
+- failures（考えられる失敗）: 「前回◯◯を忘れた」「◯◯し忘れそう」「◯◯に遅刻しがち」など、
+  この予定で起こりうる うっかり・ミス。過去形／心配ごととして語られたもの。
+  一言の短い文（例「保険証を忘れた」「集合時間に遅刻した」）。準備の行動は task に入れ、
+  ここには入れない。該当が無ければ空配列。
 
 ルール:
 - ユーザーが言っていないことは足さない。推測で水増ししない。
@@ -28,7 +33,7 @@ const SYSTEM_PROMPT = `あなたは、段取りが苦手な人（ADHD傾向）�
 - 重複はまとめる。丁寧すぎる言い換えはしない。ユーザーの言葉を尊重する。
 - 各配列は最大 20 件、sections は最大 4 個。
 - 出力は必ず次の JSON のみ:
-{"task":["..."],"belonging":["..."],"sections":[{"name":"買うもの","items":["弁当","お茶"]}]}`;
+{"task":["..."],"belonging":["..."],"sections":[{"name":"買うもの","items":["弁当","お茶"]}],"failures":["..."]}`;
 
 const norm = (s: string) => s.trim().replace(/\s+/g, " ");
 function strList(v: unknown, cap = 20): string[] {
@@ -48,7 +53,7 @@ function strList(v: unknown, cap = 20): string[] {
   return out;
 }
 
-/** OpenAI 不使用時の素朴な振り分け（改行・読点・「と」で割り、行動か物かを推測）。 */
+/** OpenAI 不使用時の素朴な振り分け（改行・読点・「と」で割り、行動か物か失敗かを推測）。 */
 function fallback(text: string): DictationResult {
   const parts = text
     .split(/[\n、,，。・]|(?:\s+と\s+)|(?:\s*および\s*)/g)
@@ -57,11 +62,20 @@ function fallback(text: string): DictationResult {
 
   const task: string[] = [];
   const belonging: string[] = [];
+  const failures: string[] = [];
   const seen = new Set<string>();
   for (const p of parts) {
     const k = p.toLowerCase();
     if (seen.has(k)) continue;
     seen.add(k);
+    const looksFailure =
+      /(忘れ|忘れた|し忘れ|寝坊|遅刻|遅れた|遅れがち|なくし|失くし|無くし|ミス|うっかり|しくじ|間に合わな|見落と|勘違い)/.test(
+        p,
+      );
+    if (looksFailure) {
+      failures.push(p);
+      continue;
+    }
     const looksAction =
       /(する|して|しとく|しておく|確認|予約|連絡|準備|買う|買っ|調べ|決め|申し込|払|出す|送る|作る|チェック|手続き)/.test(
         p,
@@ -72,6 +86,7 @@ function fallback(text: string): DictationResult {
     task: strList(task),
     belonging: strList(belonging),
     sections: [],
+    failures: strList(failures),
   };
 }
 
@@ -84,7 +99,7 @@ export async function splitDictationIntoList(
   ctx: { title: string; categoryName: string },
 ): Promise<DictationResult> {
   const trimmed = text.trim().slice(0, 4000);
-  if (!trimmed) return { task: [], belonging: [], sections: [] };
+  if (!trimmed) return { task: [], belonging: [], sections: [], failures: [] };
 
   if (process.env.OPENAI_API_KEY) {
     try {
@@ -112,6 +127,7 @@ export async function splitDictationIntoList(
         task?: unknown;
         belonging?: unknown;
         sections?: unknown;
+        failures?: unknown;
       };
       const sections: DictationSection[] = Array.isArray(raw.sections)
         ? (raw.sections as unknown[])
@@ -128,11 +144,13 @@ export async function splitDictationIntoList(
         task: strList(raw.task),
         belonging: strList(raw.belonging),
         sections,
+        failures: strList(raw.failures),
       };
       if (
         result.task.length ||
         result.belonging.length ||
-        result.sections.length
+        result.sections.length ||
+        result.failures.length
       ) {
         return result;
       }

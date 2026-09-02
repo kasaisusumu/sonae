@@ -57,16 +57,17 @@ export function DictationInput({ eventId }: { eventId: string }) {
               🎤 話して作る（音声入力から自動で振り分け）
             </h3>
             <p className="text-[11px] text-muted">
-              スマホのキーボードの<strong>マイクキー</strong>で、準備することや持ち物を
-              思いつくまま話してください。「AIで振り分け」で
-              <strong>準備すること・持ち物・その他の枠</strong>に分けて追加します。
+              スマホのキーボードの<strong>マイクキー</strong>で、準備することや持ち物、
+              心配なうっかりを思いつくまま話してください。「AIで振り分け」で
+              <strong>準備すること・持ち物・その他の枠・考えられる失敗</strong>
+              に分けて追加します。
             </p>
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={5}
               placeholder={
-                "例: 明日の出張、着替えと充電器とお茶を持っていく。宿の予約を確認する。経費精算のことを忘れずメモ。あと駅で弁当を買う。"
+                "例: 明日の出張、着替えと充電器とお茶を持っていく。宿の予約を確認する。経費精算のことを忘れずメモ。あと駅で弁当を買う。前回は保険証を忘れた。"
               }
               className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
             />

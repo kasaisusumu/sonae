@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
+  clearEventFailureLogs,
   createFailureLog,
   deleteFailureLog,
   logRepeatedFailure,
@@ -304,6 +305,17 @@ export function FailureListEditor({
       <div className="mb-1.5 flex items-baseline gap-2">
         <h3 className="text-sm font-semibold text-foreground">{label}</h3>
         <span className="text-xs text-muted tabular-nums">{rows.length}</span>
+        {rows.length > 0 && (
+          <form action={clearEventFailureLogs} className="ml-auto">
+            <input type="hidden" name="eventId" value={eventId} />
+            <ConfirmButton
+              message="「考えられる失敗」をすべて削除します。よろしいですか？"
+              className="shrink-0 self-center rounded-md border border-border px-2 py-0.5 text-[11px] text-muted hover:border-warn hover:text-warn"
+            >
+              全部消す
+            </ConfirmButton>
+          </form>
+        )}
       </div>
 
       {rows.length > 0 && (
@@ -456,6 +468,10 @@ export function FailureListEditor({
           </>
         )}
       </div>
+
+      <p className="mt-1.5 text-[11px] text-muted">
+        文言・追加・削除は自動保存
+      </p>
 
       {pickOpen && (
         <div

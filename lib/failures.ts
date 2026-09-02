@@ -768,6 +768,8 @@ export async function ensureSuggestedFailures(
     },
   });
   if (!event) return;
+  // 終わった予定には提案を作らない（先回りの意味がないため）。
+  if (isPastEvent(event)) return;
 
   const suggestions = await suggestFailureLogsForEvent(eventId, 6);
   if (suggestions.length === 0) return;

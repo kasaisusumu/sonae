@@ -18,6 +18,7 @@ import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { InfoHint } from "@/app/components/info-hint";
 import { FailureQuickInput } from "./failure-quick-input";
+import { ReviewQueue, type RQLog } from "./review-queue";
 
 function todayValue(): string {
   return jstToday();
@@ -205,7 +206,7 @@ export default async function FailuresPage() {
   const now = new Date();
   const reviewable = (l: (typeof logs)[number]) =>
     !l.event || (l.event.endDatetime ?? l.event.eventDatetime) <= now;
-  const unreviewed = logs.filter((l) => !l.outcome && reviewable(l));
+  const reviewableLogs = logs.filter(reviewable);
   const pendingFuture = logs.filter((l) => !l.outcome && !reviewable(l));
   const reviewed = logs.filter((l) => l.outcome);
 
@@ -221,29 +222,8 @@ export default async function FailuresPage() {
         </p>
       </div>
 
-      {/* ── 結果記録待ち（振り返り）。溜まっていたら開いてすぐ見える位置に。 ── */}
-      {unreviewed.length > 0 && (
-        <section
-          id="review"
-          className="scroll-mt-4 space-y-2 rounded-2xl border border-foreground bg-surface p-4"
-        >
-          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            🤔 結果を記録しよう（{unreviewed.length}件）
-            <InfoHint>
-              終わった予定、どうでしたか？ ワンタップでOK。「防げた」にしたものだけが
-              <a href="/savings" className="underline">
-                節約額
-              </a>
-              に積み上がります。
-            </InfoHint>
-          </h2>
-          <ul className="space-y-2">
-            {unreviewed.map((l) => (
-              <FailureRow key={l.id} log={l} />
-            ))}
-          </ul>
-        </section>
-      )}
+      {/* ── 結果記録待ち（振り返り）。押しても離れるまで消えない。 ── */}
+      <ReviewQueue logs={reviewableLogs as RQLog[]} />
 
       {/* ── 記入：まずは「ひとこと」だけでOK ── */}
       <section

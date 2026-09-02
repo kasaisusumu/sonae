@@ -21,7 +21,6 @@ import {
 import { InfoHint } from "@/app/components/info-hint";
 import { ChecklistEditor } from "./checklist-editor";
 import { EventFailureLog } from "./event-failure-log";
-import { SuggestionList } from "./suggestion-list";
 import { WarningPanel } from "./warning-panel";
 import { ListReminderControl } from "./list-reminder-control";
 import { AddSectionButton } from "./section-manager";
@@ -64,25 +63,10 @@ function KindBlock({
   imagesBySlot: Map<string, ItemImg[]>;
 }) {
   const mine = rows.filter((r) => r.kind === kind);
-  const suggestions = mine.filter((r) => r.isSuggested);
   const normal = mine.filter((r) => !r.isSuggested);
 
   return (
     <div className="space-y-2">
-      {suggestions.length > 0 && (
-        <SuggestionList
-          suggestions={suggestions.map((s) => ({
-            id: s.id,
-            title: s.title,
-            suggestionType: s.suggestionType as
-              | "exclude"
-              | "add"
-              | "timing"
-              | null,
-            suggestionValue: s.suggestionValue,
-          }))}
-        />
-      )}
       <ChecklistEditor
         eventId={eventId}
         kind={kind}

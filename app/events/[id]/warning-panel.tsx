@@ -9,6 +9,7 @@ import {
 import { formatDateOnly, formatYen } from "@/lib/format";
 import { LEAD_PRESETS } from "@/lib/lead-time";
 import { SubmitButton } from "@/app/components/submit-button";
+import { ConfirmButton } from "@/app/components/confirm-button";
 import type { EventWarning } from "@/lib/failures";
 
 export function WarningPanel({ warning }: { warning: EventWarning }) {
@@ -133,12 +134,12 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                     <form action={undoPrevented}>
                       <input type="hidden" name="eventId" value={event.id} />
                       <input type="hidden" name="failureLogId" value={log.id} />
-                      <button
-                        type="submit"
+                      <ConfirmButton
+                        message="「防げた」の記録を取り消しますか？（節約額から外れます）"
                         className="text-xs text-muted underline hover:text-foreground"
                       >
                         取り消す
-                      </button>
+                      </ConfirmButton>
                     </form>
                   </div>
                 </>

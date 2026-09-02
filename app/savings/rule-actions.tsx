@@ -30,6 +30,9 @@ export function RuleActions({
         type="button"
         disabled={pending}
         onClick={() => {
+          if (!window.confirm("この学習内容をリセットしますか？（元に戻せません）")) {
+            return;
+          }
           setGone(true);
           startTransition(() => deleteLearnedRule(ruleId));
         }}

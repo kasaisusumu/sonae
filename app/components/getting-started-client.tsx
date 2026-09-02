@@ -49,9 +49,9 @@ export function GettingStartedClient({ step1, step2, step3, step5 }: Props) {
       detail: (
         <>
           <p>
-            「つなぐ」で Google のログイン画面がひらきます。
-            カレンダーの<strong>読み取りだけ</strong>を許可します（予定の書き換えは既定でしません）。
-            つなぐと、あなたの予定がこのアプリに並びます。
+            「つなぐ」で Google のログイン画面がひらきます。カレンダーの読み取りと、
+            <strong>予定の説明欄への準備リスト追記</strong>を許可します（日時・タイトルは
+            変えません／設定でオフにできます）。つなぐと、あなたの予定がこのアプリに並びます。
           </p>
           {!step1 && (
             <a

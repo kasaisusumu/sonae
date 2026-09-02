@@ -2,8 +2,10 @@ import crypto from "node:crypto";
 import { formatLead, parseLead } from "@/lib/lead-time";
 import { sectionKeyFromLabel, sectionLabel } from "@/lib/sections";
 
-const START = "--- 私のマネージャー ---";
-const START_ALT = "--- そなえ ---"; // 旧マーカー（互換のため除去対象に含める）
+const START = "--- 勝手に準備分解くん ---";
+// 旧マーカー（互換のため、除去・パース対象に含める）
+const LEGACY_MARKS = ["--- そなえ ---", "--- 私のマネージャー ---"];
+const ALL_MARKS = [START, ...LEGACY_MARKS];
 const END = "---";
 
 function escapeRe(s: string): string {
@@ -27,7 +29,7 @@ const COMMENT_INDENT = "    ";
 export function stripSonaeBlock(desc: string | null | undefined): string {
   if (!desc) return "";
   let out = desc.replace(/<br\s*\/?>/gi, "\n");
-  for (const mark of [START, START_ALT]) {
+  for (const mark of ALL_MARKS) {
     const re = new RegExp(
       `\\n*${escapeRe(mark)}[\\s\\S]*?\\n${escapeRe(END)}[ \\t]*(\\n|$)`,
       "g",
@@ -202,7 +204,7 @@ const DONE_MARK =
 const BOX_OR_BULLET =
   /^(?:[☐☑✅⬜◻◼■□▪▫✔✓]️?|\[[ xX]\]|[・*\-•‣▸▹])\s*/;
 
-/** 「私のマネージャー」ブロックを行ごとに読み、項目を復元する。ゆるくパースする。 */
+/** 「勝手に準備分解くん」ブロックを行ごとに読み、項目を復元する。ゆるくパースする。 */
 export function parseSonaeBlock(desc: string | null | undefined): {
   hasBlock: boolean;
   items: ParsedItem[];
@@ -211,7 +213,7 @@ export function parseSonaeBlock(desc: string | null | undefined): {
   const text = desc.replace(/<br\s*\/?>/gi, "\n");
 
   let body: string | null = null;
-  for (const mark of [START, START_ALT]) {
+  for (const mark of ALL_MARKS) {
     const re = new RegExp(
       `${escapeRe(mark)}\\n([\\s\\S]*?)\\n${escapeRe(END)}(?:\\n|$)`,
     );

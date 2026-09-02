@@ -92,7 +92,8 @@ export default async function EventsPage({
           </h1>
           <p className="mt-2 text-sm text-muted">
             つなぐと、予定を入れるだけで「準備すること」と「持ち物」が
-            自動で用意されます。カレンダーは読み取りのみ。
+            自動で用意されます。予定の説明欄にも準備リストを書き込みます
+            （日時・タイトルは変えません／設定でオフに）。
           </p>
           <a
             href="/api/auth/google"

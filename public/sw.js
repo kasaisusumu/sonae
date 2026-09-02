@@ -1,4 +1,4 @@
-/* 私のマネージャー Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v5 */
+/* 勝手に準備分解くん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v6 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -19,9 +19,12 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: "私のマネージャー", body: event.data ? event.data.text() : "" };
+    data = {
+      title: "勝手に準備分解くん",
+      body: event.data ? event.data.text() : "",
+    };
   }
-  const title = data.title || "私のマネージャー";
+  const title = data.title || "勝手に準備分解くん";
   const url = data.url || urlFromTag(data.tag) || "/";
   event.waitUntil(
     self.registration.showNotification(title, {

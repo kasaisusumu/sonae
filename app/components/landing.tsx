@@ -167,8 +167,9 @@ export function Landing({
           <div className="mx-auto mt-8 max-w-sm">
             <CtaButton loggedout={loggedout} />
             <p className="mt-2.5 text-xs leading-relaxed text-muted">
-              はじめての方も、使ったことがある方も、同じボタンでOK。
-              カレンダーは<strong className="text-foreground">読み取りのみ</strong>・無料の検証版。
+              はじめての方も、使ったことがある方も、同じボタンでOK。予定は読み取り、
+              <strong className="text-foreground">説明欄だけ</strong>更新します
+              （日時・タイトルは変えません）・無料の検証版。
             </p>
             <PrivateModeNotice />
           </div>
@@ -217,7 +218,7 @@ export function Landing({
           {[
             [
               "Google カレンダーとつなぐ",
-              "約30秒。読み取りだけなので、予定が書き換わることはありません。",
+              "約30秒。予定を読み取り、説明欄に準備リストを追記します。日時・タイトルは変えません（設定でオフに）。",
             ],
             [
               "いつも通り予定を入れる",
@@ -284,7 +285,7 @@ export function Landing({
           に同意したものとみなします。
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-muted">
-          途中で「このアプリは確認されていません」と出たら、「詳細」→「（アプリ名）に移動」で進めます。
+          途中で「このアプリは確認されていません」と出たら、「詳細」→「勝手に準備分解くん に移動」で進めます。
         </p>
         {devLogin && (
           <p className="mt-5 text-[11px] text-muted">

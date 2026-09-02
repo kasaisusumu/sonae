@@ -63,7 +63,7 @@ function Visual({ id }: { id: string }): ReactNode {
         <pre className="overflow-x-auto rounded-lg border border-border bg-background p-3 text-[10px] leading-relaxed text-muted">
           {`（元の予定メモ）
 
---- 私のマネージャー ---
+--- 勝手に準備分解くん ---
 準備リスト: https://…
 
 【予想される失敗】

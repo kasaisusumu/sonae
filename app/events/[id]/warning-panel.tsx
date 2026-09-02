@@ -3,13 +3,11 @@ import {
   addPreventionItem,
   logRepeatedFailure,
   markPrevented,
-  undoPrevented,
   updateFailureAmount,
 } from "@/app/actions";
 import { formatDateOnly, formatYen } from "@/lib/format";
 import { LEAD_PRESETS } from "@/lib/lead-time";
 import { SubmitButton } from "@/app/components/submit-button";
-import { ConfirmButton } from "@/app/components/confirm-button";
 import { RetroOutcomeSelect } from "./retro-outcome-select";
 import type { EventWarning } from "@/lib/failures";
 
@@ -102,48 +100,46 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
             {/* 振り返り：防げた？ */}
             <div className="mt-3 space-y-2">
               {log.prevented ? (
-                <>
+                <div className="space-y-1.5">
                   <p className="text-sm font-medium text-teal-dark">
                     ✓ 「防げた」で記録しました
                     {log.estimatedLossYen > 0
                       ? `（${formatYen(log.estimatedLossYen)}を節約に計上）`
                       : ""}
                   </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <form
-                      action={updateFailureAmount}
-                      className="flex items-center gap-1"
+                  {log.thisEventLogId && (
+                    <RetroOutcomeSelect
+                      logId={log.thisEventLogId}
+                      current="prevented"
+                    />
+                  )}
+                  <form
+                    action={updateFailureAmount}
+                    className="flex items-center gap-1"
+                  >
+                    <input
+                      type="hidden"
+                      name="failureLogId"
+                      value={log.thisEventLogId ?? log.id}
+                    />
+                    <span className="text-[11px] text-muted">金額</span>
+                    <input
+                      type="number"
+                      name="estimatedLossYen"
+                      min={0}
+                      step={100}
+                      defaultValue={log.estimatedLossYen || ""}
+                      placeholder="円"
+                      className="w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
                     >
-                      <input type="hidden" name="failureLogId" value={log.id} />
-                      <span className="text-[11px] text-muted">金額</span>
-                      <input
-                        type="number"
-                        name="estimatedLossYen"
-                        min={0}
-                        step={100}
-                        defaultValue={log.estimatedLossYen || ""}
-                        placeholder="円"
-                        className="w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground"
-                      />
-                      <button
-                        type="submit"
-                        className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
-                      >
-                        更新
-                      </button>
-                    </form>
-                    <form action={undoPrevented}>
-                      <input type="hidden" name="eventId" value={event.id} />
-                      <input type="hidden" name="failureLogId" value={log.id} />
-                      <ConfirmButton
-                        message="「防げた」の記録を取り消しますか？（節約額から外れます）"
-                        className="text-xs text-muted underline hover:text-foreground"
-                      >
-                        取り消す
-                      </ConfirmButton>
-                    </form>
-                  </div>
-                </>
+                      更新
+                    </button>
+                  </form>
+                </div>
               ) : log.loggedThisEventCount > 0 ? (
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium text-warn">

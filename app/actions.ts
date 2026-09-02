@@ -52,11 +52,19 @@ function parseYen(raw: FormDataEntryValue | null): number {
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
-/** アプリで能動的に触った予定は、以後の自動管理（説明欄同期）の対象にする。 */
-function markAutoManaged(eventId: string) {
-  return prisma.event.updateMany({
+/**
+ * アプリで能動的に触った予定は、以後の自動管理（説明欄同期）の対象にし、
+ * かつ「確認済み」扱いにする。編集した時点でリストには目を通しているので、
+ * 「確認しました」を押していなくても未確認表示（アプリ・カレンダー説明欄）を消す。
+ */
+async function markAutoManaged(eventId: string) {
+  await prisma.event.updateMany({
     where: { id: eventId, autoManaged: false },
     data: { autoManaged: true },
+  });
+  await prisma.event.updateMany({
+    where: { id: eventId, listReviewedAt: null },
+    data: { listReviewedAt: new Date() },
   });
 }
 
@@ -663,6 +671,48 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   revalidateAppViews(input.eventId);
 }
 
+/**
+ * 予定詳細ページの「リストごとに全部消す」。指定した枠（kind）の項目を一括削除する。
+ * 個別の ✕ 削除と違い、これは学習（除外ルール）には流さない — この予定のリストを
+ * まとめて空にするだけ。
+ */
+export async function clearChecklistSection(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  const kind = String(formData.get("kind") ?? "").trim();
+  if (!eventId || !kind) return;
+
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    select: { id: true },
+  });
+  if (!event) return;
+
+  await prisma.$transaction([
+    prisma.checklistItem.deleteMany({
+      where: { eventId, isSuggested: false, kind },
+    }),
+    prisma.checklistItemImage.deleteMany({ where: { eventId, kind } }),
+  ]);
+
+  const remaining = await prisma.checklistItem.count({
+    where: { eventId, isSuggested: false },
+  });
+  if (remaining === 0) {
+    await prisma.checklistItem.deleteMany({
+      where: { eventId, isSuggested: true },
+    });
+  }
+  await prisma.event.update({
+    where: { id: eventId },
+    data: { listCleared: remaining === 0 },
+  });
+
+  await markAutoManaged(eventId);
+  revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
+}
+
 // ── 準備リストの「枠」（セクション）を追加・改名・削除する ──────────
 //   組み込みの「準備すること」「持ち物」は改名・削除できない。
 //   枠を足す／消すと、説明欄の同期（after）と学習ページも即座に追随する。
@@ -973,11 +1023,12 @@ export async function createFailureLog(formData: FormData): Promise<void> {
     },
   });
 
-  revalidateAppViews(linkedEvent?.id);
   if (linkedEvent) {
     const eid = linkedEvent.id;
+    await markAutoManaged(eid);
     after(() => void syncEventDescription(eid));
   }
+  revalidateAppViews(linkedEvent?.id);
 }
 
 /**
@@ -1041,6 +1092,7 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
     });
   }
 
+  await markAutoManaged(eventId);
   revalidateAppViews(eventId);
   after(() => void syncEventDescription(eventId));
 }
@@ -1141,6 +1193,7 @@ export async function attachFailureToEvent(formData: FormData): Promise<void> {
     });
   }
 
+  await markAutoManaged(eventId);
   revalidateAppViews(eventId);
   after(() => void syncEventDescription(eventId));
 }
@@ -1172,6 +1225,7 @@ export async function deleteFailureLog(formData: FormData): Promise<void> {
   revalidateAppViews(log?.eventId ?? undefined);
   if (log?.eventId) {
     const eid = log.eventId;
+    await markAutoManaged(eid);
     after(() => void syncEventDescription(eid));
   }
 }
@@ -1258,6 +1312,7 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
   revalidateAppViews(log.eventId ?? undefined);
   if (log.eventId) {
     const eid = log.eventId;
+    await markAutoManaged(eid);
     after(() => void syncEventDescription(eid));
   }
 }
@@ -1290,6 +1345,7 @@ export async function updateFailureAmount(formData: FormData): Promise<void> {
   revalidateAppViews(log.eventId ?? undefined);
   if (log.eventId) {
     const eid = log.eventId;
+    await markAutoManaged(eid);
     after(() => void syncEventDescription(eid));
   }
 }
@@ -1348,6 +1404,7 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
 
   if (log.eventId) {
     const eid = log.eventId;
+    await markAutoManaged(eid);
     after(() => void syncEventDescription(eid));
   }
 
@@ -1397,6 +1454,7 @@ export async function markNoFailure(formData: FormData): Promise<void> {
     where: { id: eventId, userId },
     data: { noFailureAt: undo ? null : new Date() },
   });
+  await markAutoManaged(eventId);
   revalidateAppViews(eventId);
 }
 
@@ -1426,73 +1484,90 @@ export async function addPreventionItem(formData: FormData): Promise<void> {
     },
   });
 
+  await markAutoManaged(eventId);
   revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
 }
 
-/** 「これは防げた」と自己申告し、推定損失額を節約に計上する。 */
+/**
+ * 「これは防げた」と自己申告し、推定損失額を節約に計上する。
+ * 振り返りの結果は「この予定に紐づく失敗ログ」1件に集約する（なければ複製）ので、
+ * あとから RetroOutcomeSelect でその 1 件を選び直すだけで結果を変えられる。
+ */
 export async function markPrevented(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const eventId = String(formData.get("eventId") ?? "");
   const failureLogId = String(formData.get("failureLogId") ?? "");
   if (!eventId || !failureLogId) return;
 
-  const [event, log] = await Promise.all([
+  const [event, template] = await Promise.all([
     prisma.event.findFirst({ where: { id: eventId, userId } }),
     prisma.failureLog.findFirst({ where: { id: failureLogId, userId } }),
   ]);
-  if (!event || !log) return;
+  if (!event || !template) return;
 
   // 振り返りで金額を改めて入力できる（空欄なら既存のまま）。
   const rawAmount = formData.get("estimatedLossYen");
   const hasAmount = rawAmount !== null && String(rawAmount).trim() !== "";
-  const amount = hasAmount ? parseYen(rawAmount) : log.estimatedLossYen;
-  if (hasAmount) {
+  const amount = hasAmount ? parseYen(rawAmount) : template.estimatedLossYen;
+
+  // この予定に紐づく「今回の結果」ログを 1 件用意する。
+  const existing = await prisma.failureLog.findFirst({
+    where: { userId, eventId, description: template.description },
+    select: { id: true },
+  });
+  let targetId: string;
+  if (existing) {
+    targetId = existing.id;
     await prisma.failureLog.update({
-      where: { id: failureLogId },
-      data: { estimatedLossYen: amount },
+      where: { id: targetId },
+      data: {
+        outcome: "prevented",
+        ...(hasAmount ? { estimatedLossYen: amount } : {}),
+      },
     });
+  } else {
+    const featureSig = featureSignature(
+      extractEventFeature({
+        title: event.title,
+        memo: event.memo,
+        eventDatetime: event.eventDatetime,
+        endDatetime: event.endDatetime,
+      }),
+    );
+    const created = await prisma.failureLog.create({
+      data: {
+        userId,
+        categoryId: event.categoryId ?? template.categoryId ?? null,
+        eventId: event.id,
+        featureSignature: featureSig,
+        description: template.description,
+        estimatedLossYen: amount,
+        outcome: "prevented",
+        occurredAt: event.eventDatetime,
+      },
+      select: { id: true },
+    });
+    targetId = created.id;
   }
 
   await prisma.savingsEntry.upsert({
-    where: { eventId_failureLogId: { eventId, failureLogId } },
+    where: { eventId_failureLogId: { eventId, failureLogId: targetId } },
     update: { amountYen: amount, confirmedByUser: true },
     create: {
       userId,
       eventId,
-      failureLogId,
+      failureLogId: targetId,
       amountYen: amount,
       confirmedByUser: true,
     },
   });
-  await prisma.failureLog.updateMany({
-    where: { id: failureLogId, outcome: { not: "not_prevented" } },
-    data: { outcome: "prevented" },
-  });
 
+  await markAutoManaged(eventId);
   revalidateAppViews(eventId);
   after(() => void syncEventDescription(eventId));
 }
 
-/** 「防げた」の計上を取り消す。他に計上が残っていなければ振り返り結果も未選択に戻す。 */
-export async function undoPrevented(formData: FormData): Promise<void> {
-  const userId = await requireUserId();
-  const eventId = String(formData.get("eventId") ?? "");
-  const failureLogId = String(formData.get("failureLogId") ?? "");
-  await prisma.savingsEntry.deleteMany({
-    where: { userId, eventId, failureLogId },
-  });
-  const remaining = await prisma.savingsEntry.count({
-    where: { userId, failureLogId },
-  });
-  if (remaining === 0) {
-    await prisma.failureLog.updateMany({
-      where: { id: failureLogId, outcome: "prevented" },
-      data: { outcome: null },
-    });
-  }
-  revalidateAppViews(eventId);
-  after(() => void syncEventDescription(eventId));
-}
 
 // ─────────────────────────────────────────────
 // 通知（Web Push）購読の登録・解除
@@ -1544,7 +1619,7 @@ export async function sendTestPush(): Promise<TestPushResult> {
     return { configured, subscriptions, sent: 0, removed: 0 };
   }
   const { sent, removed } = await sendPushToUser(userId, {
-    title: "私のマネージャー：通知テスト",
+    title: "勝手に準備分解くん：通知テスト",
     body: "予定が追加されると、このように通知が届きます。",
     url: "/",
     tag: "test",

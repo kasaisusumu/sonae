@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   applyTemplateToEvent,
+  clearChecklistSection,
   copyListFromEvent,
   saveChecklist,
   saveListAsTemplate,
@@ -788,6 +789,25 @@ export function ChecklistEditor({
                   { label: "📋 テンプレから追加", on: () => setModal("apply") },
                   { label: "📆 他の予定からコピー", on: () => setModal("copy") },
                   { label: "⭐ 名前をつけて保存", on: () => setModal("save") },
+                  {
+                    label: `🗑 「${kindLabel}」を全部消す`,
+                    on: () => {
+                      if (
+                        !window.confirm(
+                          `「${kindLabel}」の項目をすべて削除します。よろしいですか？`,
+                        )
+                      )
+                        return;
+                      setItems([]);
+                      startTransition(async () => {
+                        const fd = new FormData();
+                        fd.set("eventId", eventId);
+                        fd.set("kind", kind);
+                        await clearChecklistSection(fd);
+                        router.refresh();
+                      });
+                    },
+                  },
                 ].map((m) => (
                   <button
                     key={m.label}

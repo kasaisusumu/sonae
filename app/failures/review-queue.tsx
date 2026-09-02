@@ -88,13 +88,19 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
           <li key={l.id} className="rounded-xl bg-surface p-4">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="whitespace-pre-wrap break-words text-sm">
+                <p className="text-xs font-semibold text-foreground">
+                  {l.event
+                    ? `📅 ${l.event.title}`
+                    : l.category
+                      ? `${l.category.name}（予定に紐づかない記録）`
+                      : "予定に紐づかない記録"}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap break-words text-sm">
                   {l.description}
                 </p>
                 <p className="mt-1 text-xs text-muted">
                   {formatDateOnly(l.occurredAt)}
-                  {l.category ? ` ・ ${l.category.name}` : ""}
-                  {l.event ? ` ・ 「${l.event.title}」` : ""}
+                  {l.category && l.event ? ` ・ ${l.category.name}` : ""}
                   {l.estimatedLossYen > 0
                     ? ` ・ 推定 ${formatYen(l.estimatedLossYen)}`
                     : ""}

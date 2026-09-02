@@ -202,9 +202,11 @@ function buildClusters(
     const loggedThisEventCount = thisEventMembers.filter(
       (x) => x.outcome === "not_prevented",
     ).length;
-    // 振り返りの結果を編集する対象（防げなかった行を優先、なければ先頭）。
+    // 振り返りの結果を編集する対象（結果が決まっている行を優先、なければ先頭）。
     const thisEventLogId =
-      thisEventMembers.find((x) => x.outcome === "not_prevented")?.id ??
+      thisEventMembers.find(
+        (x) => x.outcome === "not_prevented" || x.outcome === "prevented",
+      )?.id ??
       thisEventMembers[0]?.id ??
       null;
     // computeConfidence と同じ気持ち: 繰り返しで重く、経年で薄れる

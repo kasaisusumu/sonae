@@ -8,6 +8,7 @@ import type { TemplateDetail } from "@/lib/templates";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { TemplateEditor } from "./template-editor";
+import { CopyTemplateButton } from "./copy-template-button";
 
 const KIND_LABEL = { task: "準備すること", belonging: "持ち物" } as const;
 
@@ -43,13 +44,14 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
             名前を変更
           </button>
         </form>
+        <CopyTemplateButton text={t.items.map((i) => i.title).join("\n")} />
         <form action={duplicateListTemplate}>
           <input type="hidden" name="id" value={t.id} />
           <button
             type="submit"
             className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
           >
-            コピーを作る
+            複製する
           </button>
         </form>
         <form action={deleteListTemplate}>

@@ -384,6 +384,8 @@ export interface NameTreeLeaf {
   keywords: string[];
   sections: LeafSection[];
   failures: LeafFailure[];
+  /** この予定は準備リストを空にしている（「内容なし」として学習）。 */
+  cleared: boolean;
 }
 
 /** 樹形図の枝 = 予定名の語による分岐 */
@@ -448,6 +450,7 @@ interface RawLeaf {
   title: string;
   sig: string;
   customized: boolean; // 個別編集で同名グループから切り離されたか
+  cleared: boolean; // 準備リストを空にしている（「内容なし」）
   keywords: string[];
   sections: LeafSection[];
   failures: LeafFailure[];
@@ -469,9 +472,9 @@ function orderKeywords(kws: string[], freq: Map<string, number>): string[] {
 function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
   const groups = new Map<string, RawLeaf[]>();
   for (const l of raw) {
-    const key = l.customized
-      ? `${norm(l.title)}#${l.eventId}`
-      : `${norm(l.title)}#shared`;
+    // 「内容なし」の予定は、同じ名前で中身のある予定とは絶対にまとめない。
+    const base = l.cleared ? `${norm(l.title)}#cleared` : norm(l.title);
+    const key = l.customized ? `${base}#${l.eventId}` : `${base}#shared`;
     const arr = groups.get(key);
     if (arr) arr.push(l);
     else groups.set(key, [l]);
@@ -489,8 +492,11 @@ function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
         siblingEventIds: g.slice(1).map((x) => x.eventId),
         mergedCount: g.length,
         title: rep.title,
-        situationLabel:
-          g.length > 1
+        situationLabel: rep.cleared
+          ? g.length > 1
+            ? `内容なし（${g.length}件）`
+            : "内容なし"
+          : g.length > 1
             ? `同じ名前の未編集 ${g.length}件`
             : rep.customized
               ? `${describeSignature(rep.sig).text}（個別編集）`
@@ -498,6 +504,7 @@ function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
         keywords: rep.keywords,
         sections: rep.sections,
         failures,
+        cleared: rep.cleared,
       } satisfies NameTreeLeaf;
     })
     .sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
@@ -565,6 +572,8 @@ export async function getLearningNameTree(userId: string): Promise<{
                 },
               ],
             },
+            // 準備リストを空にした予定も「内容なし」として学習内容に出す。
+            { listCleared: true },
             { failureLogs: { some: {} } },
           ],
         },
@@ -574,6 +583,7 @@ export async function getLearningNameTree(userId: string): Promise<{
           id: true,
           title: true,
           listCustomized: true,
+          listCleared: true,
           sectionOrder: true,
           feature: {
             select: {
@@ -663,6 +673,7 @@ export async function getLearningNameTree(userId: string): Promise<{
           title: ev.title,
           sig: signatureFromFeatureRow(ev.feature ?? null),
           customized: ev.listCustomized,
+          cleared: ev.listCleared,
           keywords: evKw.get(ev.id) ?? [],
           sections,
           failures: ev.failureLogs.map((f) => ({

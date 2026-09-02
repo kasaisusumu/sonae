@@ -136,17 +136,24 @@ function EventLeaf({ leaf }: { leaf: NameTreeLeaf }) {
         </>
       }
     >
-      {leaf.mergedCount > 1 && (
+      {leaf.mergedCount > 1 && !leaf.cleared && (
         <p className="mb-2 text-[11px] text-muted">
           同じ名前の未編集の予定 {leaf.mergedCount} 件をまとめています。ここでの編集は
           その全部に反映され、別の 1 件を違う内容に編集するとそこで分かれます。
         </p>
       )}
-      <LeafBody
-        eventId={leaf.eventId}
-        compact={<CompactList sections={sections} />}
-        sections={sections}
-      />
+      {leaf.cleared ? (
+        <p className="rounded-lg bg-surface-muted p-3 text-xs text-muted">
+          この予定は準備リストを空にしています（内容なしとして学習）。
+          似た予定でも何も出しません。同じ名前でも、中身のある予定とは分けて覚えています。
+        </p>
+      ) : (
+        <LeafBody
+          eventId={leaf.eventId}
+          compact={<CompactList sections={sections} />}
+          sections={sections}
+        />
+      )}
       <FailureList failures={leaf.failures} />
     </LazyLeaf>
   );

@@ -39,14 +39,9 @@ const TOURS: Tour[] = [
     ],
   },
   {
-    key: "events_v2",
+    key: "events_v3",
     match: (p) => p === "/events",
     steps: [
-      {
-        sel: '[data-coach="cal-link-tip"]',
-        title: "目玉：説明欄のリンク",
-        body: "予定の説明欄にリンクを自動記入。カレンダーからタップで、その予定の準備リストが開きます。",
-      },
       {
         sel: '[data-coach="event-card"]',
         title: "予定のカード",
@@ -282,8 +277,13 @@ export function PageCoach() {
       if (el && r && (r.width > 0 || r.height > 0)) {
         if (!visible) {
           visible = true;
-          // 大きい要素を center で寄せると上端が画面外に出るため nearest。
-          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          // 背の高い対象は上端を画面上部へ寄せて、説明カードを下に置ける余白を作る。
+          // 小さい対象は動きすぎないよう nearest。
+          const tall = r.height > window.innerHeight * 0.5;
+          el.scrollIntoView({
+            block: tall ? "start" : "nearest",
+            behavior: "smooth",
+          });
         }
         const pad = 6;
         applyRect({
@@ -356,32 +356,39 @@ export function PageCoach() {
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const vw = typeof window !== "undefined" ? window.innerWidth : 400;
 
-  // ── 説明カードは必ず画面内に収める ──
-  // ハイライトが画面より大きい／上端が画面外でも、はじめから読める位置に置く。
+  // ── 説明カードは画面内に収め、かつハイライトと重ねない ──
   const M = 12; // 画面端の余白
+  const GAP = 10; // ハイライトとカードの間隔
   const tipW = Math.min(340, vw - M * 2);
-  const budget = Math.max(120, Math.min(300, vh - M * 2)); // カードに確保する高さ
+  const budget = Math.max(120, Math.min(300, vh - M * 2)); // 理想の高さ
 
   // 対象のうち「画面内に見えている範囲」を基準にする（rect.top が負でも安全）
   const visTop = Math.max(rect.top, M);
   const visBottom = Math.min(rect.top + rect.height, vh - M);
 
+  // ハイライトの上／下に空いている高さ
+  const gapBelow = Math.max(0, vh - M - visBottom - GAP);
+  const gapAbove = Math.max(0, visTop - M - GAP);
+  const MIN_CARD = 92;
+
   let tipTop: number;
-  if (vh - M - visBottom >= budget) {
-    tipTop = visBottom + M; // 対象の下に十分入る
-  } else if (visTop - M >= budget) {
-    tipTop = visTop - M - budget; // 対象の上に十分入る
+  let cardH: number;
+  if (gapBelow >= gapAbove) {
+    cardH = Math.max(MIN_CARD, Math.min(budget, gapBelow));
+    tipTop = visBottom + GAP;
   } else {
-    tipTop = vh - M - budget; // どちらも無理 → 画面下寄せ（対象に重なってよい）
+    cardH = Math.max(MIN_CARD, Math.min(budget, gapAbove));
+    tipTop = visTop - GAP - cardH;
   }
-  tipTop = Math.max(M, Math.min(tipTop, vh - M - budget));
+  // 画面内にクランプ（重なりを増やさない範囲で）
+  tipTop = Math.max(M, Math.min(tipTop, vh - M - cardH));
 
   const tipLeft = Math.max(M, Math.min(rect.left, vw - tipW - M));
   const tipStyle: CSSProperties = {
     top: tipTop,
     left: tipLeft,
     width: tipW,
-    maxHeight: budget,
+    maxHeight: cardH,
   };
 
   const last = idx === tour.steps.length - 1;

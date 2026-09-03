@@ -5,8 +5,8 @@ import { syncCalendar } from "@/app/actions";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
 import { formatDateShort, formatDateTime } from "@/lib/format";
 import { CategorySelect } from "./category-select";
-import { CalendarLinkTip } from "./calendar-link-tip";
 import { CardLink } from "@/app/components/card-link";
+import { InfoHint } from "@/app/components/info-hint";
 import { SubmitButton } from "@/app/components/submit-button";
 import { EventSearch, type SearchRow } from "./event-search";
 import { eventDateKey, eventDateLabel, eventHaystack } from "./haystack";
@@ -114,17 +114,47 @@ export default async function EventsPage({
         </p>
       )}
 
-      {/* 目玉: カレンダーの説明欄のリンクから準備リストへ飛べる、の説明（大きく・閉じられる） */}
-      <CalendarLinkTip
-        writeEnabled={account.writeDescriptionEnabled ?? false}
-      />
-
       {/* ── このページの主役: これからの予定 ── */}
       <section className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">
+            <h1 className="flex items-center gap-1.5 text-xl font-semibold tracking-tight">
               これからの予定
+              <InfoHint>
+                <span className="block font-semibold text-foreground">
+                  カレンダーの説明欄から、そのまま準備リストへ
+                </span>
+                <span className="mt-1.5 block">
+                  各予定の説明欄に「準備リスト」のリンクを自動で書き込みます。
+                  カレンダーでそのリンクをタップすると、その予定の準備リストが
+                  そのまま開きます。
+                </span>
+                <span className="mt-2 block rounded-lg border border-border bg-surface-muted p-2 text-[11px] leading-relaxed text-muted">
+                  <span className="block">（予定のメモ）</span>
+                  <span className="mt-1.5 block">--- 勝手に予定分解くん ---</span>
+                  <span className="block text-teal-dark underline">
+                    準備リスト: https://…/events/xxxx ← ここをタップ
+                  </span>
+                  <span className="mt-1 block">【準備すること】 1/3</span>
+                  <span className="block">☑ お茶を買う（1時間前）</span>
+                  <span className="block">☐ 集合時間を確認</span>
+                </span>
+                <span className="mt-2 block text-muted">
+                  連携より前の予定は、アプリで1回編集するか「確認しました」を
+                  押すまで書き込まれません（勝手に書き換えないため）。
+                  {account.writeDescriptionEnabled ? (
+                    "設定でオフにもできます。"
+                  ) : (
+                    <>
+                      いまは書き込みがオフです（
+                      <a href="/settings" className="underline">
+                        設定
+                      </a>
+                      でオンに）。
+                    </>
+                  )}
+                </span>
+              </InfoHint>
             </h1>
             <p className="mt-1 text-sm text-muted">
               カレンダーの予定と、その準備リストの一覧です。

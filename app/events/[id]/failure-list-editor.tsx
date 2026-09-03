@@ -12,6 +12,7 @@ import {
 import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
+import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 
 export type FLRow = {
   id: string;
@@ -42,15 +43,6 @@ function meta(o: string | null): { icon: string; label: string } {
   }
 }
 
-/** 保存中だけ右上に出る小さなスピナー（他の自動保存と同じ見た目）。 */
-function SavingPill() {
-  return (
-    <div className="fixed right-3 top-16 z-[70] flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-muted shadow-md">
-      <span className="h-3 w-3 animate-spin rounded-full border-2 border-border border-t-foreground" />
-      自動保存中…
-    </div>
-  );
-}
 
 /**
  * 1 行ぶんの編集フォーム（内容・結果・金額・日付）＋削除。両表示で共通。
@@ -93,7 +85,7 @@ function RowEditForms({ r, hideDate = false }: { r: FLRow; hideDate?: boolean })
 
   return (
     <>
-      {pending && <SavingPill />}
+      <AutosaveIndicator show={pending} />
       <div className="space-y-2">
         <textarea
           rows={2}

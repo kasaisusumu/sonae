@@ -13,6 +13,7 @@ import {
 } from "@/app/actions";
 import { LEAD_PRESETS, formatLead, isLeadPreset } from "@/lib/lead-time";
 import { InfoHint } from "@/app/components/info-hint";
+import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { ItemImages, Linkify, type ItemImage } from "./item-media";
 
 interface Item {
@@ -498,13 +499,8 @@ export function ChecklistEditor({
 
   return (
     <div className="rounded-2xl bg-surface p-3">
-      {/* 保存中だけ、右上に小さく出す（スクロール追従・ヘッダーの下・邪魔にならない大きさ）。 */}
-      {pending && (
-        <div className="fixed right-3 top-16 z-[70] flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-muted shadow-md">
-          <span className="h-3 w-3 animate-spin rounded-full border-2 border-border border-t-foreground" />
-          自動保存中…
-        </div>
-      )}
+      {/* 保存中だけ、右下（キーボードに隠れない位置）に黒地で目立たせる。 */}
+      <AutosaveIndicator show={pending} />
       <div className="mb-1.5 flex items-baseline gap-2">
         <h3 className="text-sm font-semibold text-foreground">{kindLabel}</h3>
         <span className="text-xs text-muted tabular-nums">

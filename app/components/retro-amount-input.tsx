@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { updateFailureAmount } from "@/app/actions";
+import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 
 /**
  * 振り返りの「金額」入力。更新ボタンはなく、打ち終わって少ししたら自動保存する
@@ -46,9 +47,8 @@ export function RetroAmountInput({
         placeholder="円"
         className="w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground"
       />
-      <span className="text-[11px] text-muted">
-        {pending ? "保存中…" : "自動保存"}
-      </span>
+      <span className="text-[11px] text-muted">自動保存</span>
+      <AutosaveIndicator show={pending} />
     </label>
   );
 }

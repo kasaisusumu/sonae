@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { setFailureOutcome } from "@/app/actions";
+import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 
 const OPTS: { v: string; label: string }[] = [
   { v: "not_prevented", label: "😓 防げなかった" },
@@ -47,7 +48,7 @@ export function RetroOutcomeSelect({
           </option>
         ))}
       </select>
-      {pending && <span>保存中…</span>}
+      <AutosaveIndicator show={pending} />
     </label>
   );
 }

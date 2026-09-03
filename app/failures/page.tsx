@@ -74,6 +74,8 @@ export default async function FailuresPage() {
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
   );
   const now = new Date();
+  // 「予定が終わっている」の判定。lib/failures.ts の eventEndedWhere（ナビのドットが
+  // 使う Prisma 条件）と必ず同じ意味に保つこと（= (endDatetime ?? eventDatetime) <= now）。
   const eventEnded = (l: (typeof logs)[number]) =>
     !!l.event && (l.event.endDatetime ?? l.event.eventDatetime) <= now;
 

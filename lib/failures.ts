@@ -1,8 +1,41 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma";
 import { sendPushToUser } from "@/lib/push";
 import { extractEventFeature, type EventFeatureData } from "@/lib/features";
 import { featureSignature, signatureMatches } from "@/lib/signature";
 import { decayMultiplier } from "@/lib/learning";
+
+/**
+ * 「予定が終わっている」の Prisma 条件 = (endDatetime ?? eventDatetime) <= now。
+ * /failures ページの `eventEnded`（JS 側）と必ず同じ意味にすること。
+ */
+export function eventEndedWhere(now: Date = new Date()): Prisma.EventWhereInput {
+  return {
+    OR: [
+      { endDatetime: { lte: now } },
+      { endDatetime: null, eventDatetime: { lte: now } },
+    ],
+  };
+}
+
+/**
+ * 「結果を記録しよう」（確認コーナー）に出す失敗ログの条件。
+ * ナビのドット（`app/layout.tsx` の count）と /failures の `ReviewQueue` は
+ * これを共有し、「ドットは出るのに操作する対象が無い」ズレを防ぐ。
+ * 条件: その予定に採用（`outcome:"linked"`）されていて、予定が終わっていて、
+ * まだ結果（防げた／防げなかった…）が入力されていないもの。
+ */
+export function reviewPendingFailureWhere(
+  userId: string,
+  now: Date = new Date(),
+): Prisma.FailureLogWhereInput {
+  return {
+    userId,
+    outcome: "linked",
+    eventId: { not: null },
+    event: eventEndedWhere(now),
+  };
+}
 
 /**
  * 失敗ログの「学習」は、チェックリスト学習（spec 9.2）と同じ要領・速度・タイミングで動く:

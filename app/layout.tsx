@@ -4,6 +4,7 @@ import Link from "next/link";
 import "./globals.css";
 import { getSessionUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { reviewPendingFailureWhere } from "@/lib/failures";
 import { FeedbackWidget } from "@/app/components/feedback-widget";
 import { LogoutButton } from "@/app/components/logout-button";
 import { SwRegister } from "@/app/components/sw-register";
@@ -57,16 +58,11 @@ export default async function RootLayout({
   let hasPushSubscription = false;
   if (uid) {
     const [count, me, pushCount] = await Promise.all([
-      // 「結果を記録しよう」に出るのと同じ条件:
-      // その予定に採用（linked）されていて、予定が過ぎていて、結果が未入力のものだけ。
-      prisma.failureLog.count({
-        where: {
-          userId: uid,
-          outcome: "linked",
-          eventId: { not: null },
-          event: { eventDatetime: { lte: new Date() } },
-        },
-      }),
+      // 「結果を記録しよう」(確認コーナー) に実際に出るものと同じ条件を共有する。
+      // 予定が「終わっている」= (endDatetime ?? eventDatetime) <= now。
+      // 以前は eventDatetime だけで判定していたため、開始済みだが未終了の予定
+      // （長い予定・終日予定など）で「ドットは出るのに操作対象が無い」状態になっていた。
+      prisma.failureLog.count({ where: reviewPendingFailureWhere(uid) }),
       prisma.user.findUnique({
         where: { id: uid },
         select: { tutorialSeenAt: true },

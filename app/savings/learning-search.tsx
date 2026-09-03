@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 
 export interface SearchEntry {
   kind: "event" | "template";
-  /** テンプレートのとき、どちらのタブか */
+  /** マニュアルのとき、どちらのタブか */
   tplKind?: "task" | "belonging";
   anchor: string; // スクロール先の DOM id（"ev-<id>" | "tpl-<id>"）
   title: string;
@@ -122,7 +122,7 @@ export function LearningSearch({
         <span className="font-medium">
           {r.e.kind === "template" && (
             <span className="mr-1 rounded bg-accent-soft px-1 text-[10px] text-teal-dark">
-              テンプレ
+              マニュアル
             </span>
           )}
           {r.e.title}
@@ -140,7 +140,7 @@ export function LearningSearch({
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="予定名・テンプレ名・リストの中身で検索"
+        placeholder="予定名・マニュアル名・リストの中身で検索"
         className="w-full rounded-lg border bg-surface px-3 py-2 text-sm"
       />
 

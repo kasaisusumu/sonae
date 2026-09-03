@@ -168,7 +168,7 @@ function Visual({ id }: { id: string }): ReactNode {
       return (
         <div className="flex flex-wrap gap-1.5 text-[11px]">
           <span className="rounded-md border border-dashed border-border px-2 py-1 text-muted">
-            📋 テンプレから
+            📋 マニュアルから
           </span>
           <span className="rounded-md border border-dashed border-border px-2 py-1 text-muted">
             📆 他の予定から

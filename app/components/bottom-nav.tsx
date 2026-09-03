@@ -7,7 +7,7 @@ const TABS = [
   { href: "/", label: "ホーム" },
   { href: "/events", label: "予定" },
   { href: "/failures", label: "失敗ログ" },
-  { href: "/savings", label: "学習" },
+  { href: "/savings", label: "マニュアル" },
   { href: "/settings", label: "設定" },
 ];
 

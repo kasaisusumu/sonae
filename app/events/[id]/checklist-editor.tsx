@@ -431,7 +431,7 @@ export function ChecklistEditor({
         { title: "集合時間を確認する", lead: "" },
       ];
 
-  // ── テンプレート／他の予定 のポップアップ ──
+  // ── マニュアル／他の予定 のポップアップ ──
   const [modal, setModal] = useState<null | "save" | "apply" | "copy">(null);
   // 「＋ 追加」以外の操作は「その他」メニューに畳む（ボタンの氾濫を防ぐ）。
   const [moreOpen, setMoreOpen] = useState(false);
@@ -794,7 +794,7 @@ export function ChecklistEditor({
                       setBulkNote(null);
                     },
                   },
-                  { label: "📋 テンプレから追加", on: () => setModal("apply") },
+                  { label: "📋 マニュアルから追加", on: () => setModal("apply") },
                   { label: "📆 他の予定からコピー", on: () => setModal("copy") },
                   { label: "⭐ 名前をつけて保存", on: () => setModal("save") },
                 ].map((m) => (
@@ -902,7 +902,7 @@ export function ChecklistEditor({
                   ⭐ この{kindLabel}リストを保存
                 </h3>
                 <p className="text-[11px] text-muted">
-                  名前を付けて保存すると、どの予定でも「📋 テンプレから」で追加できます。同じ名前は上書きします。
+                  名前を付けて保存すると、どの予定でも「📋 マニュアルから」で追加できます。同じ名前は上書きします。
                 </p>
                 <input
                   value={tplName}
@@ -936,11 +936,11 @@ export function ChecklistEditor({
             {modal === "apply" && (
               <>
                 <h3 className="text-sm font-semibold text-foreground">
-                  📋 テンプレから{kindLabel}を追加
+                  📋 マニュアルから{kindLabel}を追加
                 </h3>
                 {templates.length === 0 ? (
                   <p className="text-xs text-muted">
-                    まだ{kindLabel}のテンプレートはありません。「⭐ 名前をつけて保存」か、学習ページで作成できます。
+                    まだ{kindLabel}のマニュアルはありません。「⭐ 名前をつけて保存」か、マニュアルページで作成できます。
                   </p>
                 ) : (
                   <>
@@ -949,7 +949,7 @@ export function ChecklistEditor({
                       onChange={(e) => setApplyId(e.target.value)}
                       className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
                     >
-                      <option value="">テンプレートを選ぶ</option>
+                      <option value="">マニュアルを選ぶ</option>
                       {templates.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.name}

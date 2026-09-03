@@ -83,7 +83,7 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
         <form action={deleteListTemplate}>
           <input type="hidden" name="id" value={t.id} />
           <ConfirmButton
-            message={`テンプレート「${t.name}」を削除しますか？`}
+            message={`マニュアル「${t.name}」を削除しますか？`}
             className="text-[11px] text-muted underline hover:text-warn"
           >
             削除
@@ -102,13 +102,13 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
   );
 }
 
-/** 名前付きテンプレート。準備すること／持ち物をまとめて 1 リストで表示する。 */
+/** 名前付きマニュアル。準備すること／持ち物をまとめて 1 リストで表示する。 */
 export function TemplatesGroup({ templates }: { templates: TemplateDetail[] }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted">
         よく使う準備すること・持ち物に名前を付けて保存。予定ページの
-        「📋 テンプレート・他の予定から」でどの予定にも追加できます。名前の横の
+        「📋 マニュアル・他の予定から」でどの予定にも追加できます。名前の横の
         （　）は、その予定でどの枠に入るかです。
       </p>
 

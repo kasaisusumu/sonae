@@ -101,7 +101,7 @@ export default async function RootLayout({
                 {[
                   ["/events", "予定"],
                   ["/failures", "失敗ログ"],
-                  ["/savings", "学習"],
+                  ["/savings", "マニュアル"],
                   ["/settings", "設定"],
                 ].map(([href, label]) => (
                   <Link

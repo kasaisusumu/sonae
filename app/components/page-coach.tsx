@@ -98,11 +98,11 @@ const TOURS: Tour[] = [
       {
         sel: '[data-coach="learning-search"]',
         title: "横断検索",
-        body: "自動で覚えた内容と、名前を付けたテンプレートを、まとめて探せます。",
+        body: "自動で覚えた内容と、名前を付けたマニュアルを、まとめて探せます。",
       },
       {
         sel: '[data-coach="learning-tabs"]',
-        title: "学習内容 / テンプレート",
+        title: "学習内容 / マニュアル",
         body: "左：自動で覚えたこと。右：あなたが名前を付けて保存したセット。",
       },
       {

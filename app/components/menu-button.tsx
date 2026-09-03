@@ -9,7 +9,7 @@ const NAV: [string, string][] = [
   ["/", "ホーム"],
   ["/events", "予定"],
   ["/failures", "失敗ログ"],
-  ["/savings", "学習"],
+  ["/savings", "マニュアル"],
   ["/settings", "設定"],
 ];
 

@@ -43,10 +43,10 @@ function Seg({
 }
 
 /**
- * 学習内容ページの中身。
- * - 一番上に横断検索（学習内容＋名前付きテンプレートの両方を検索）
- * - その下に「学習内容 / 名前付きテンプレート」の切り替え
- * - テンプレート側はさらに「準備すること / 持ち物」の切り替え
+ * 学習されたマニュアルページの中身。
+ * - 一番上に横断検索（学習内容＋名前付きマニュアルの両方を検索）
+ * - その下に「学習内容 / 名前付きマニュアル」の切り替え
+ * - マニュアル側はさらに「準備すること / 持ち物」の切り替え
  */
 export function LearningExplorer({
   entries,
@@ -77,7 +77,7 @@ export function LearningExplorer({
         <LearningSearch entries={entries} onPick={handlePick} />
       </div>
 
-      {/* 学習内容 / 名前付きテンプレート（画面幅を半分ずつ） */}
+      {/* 学習内容 / 名前付きマニュアル（画面幅を半分ずつ） */}
       <div
         data-coach="learning-tabs"
         className="flex w-full gap-1 rounded-xl bg-surface p-1"
@@ -86,7 +86,7 @@ export function LearningExplorer({
           学習内容
         </Seg>
         <Seg active={view === "templates"} onClick={() => setView("templates")}>
-          名前付きテンプレート（{templateCount}）
+          名前付きマニュアル（{templateCount}）
         </Seg>
       </div>
 
@@ -103,7 +103,7 @@ export function LearningExplorer({
         )}
       </div>
 
-      {/* 名前付きテンプレート */}
+      {/* 名前付きマニュアル */}
       <div hidden={view !== "templates"}>{templates}</div>
     </div>
   );

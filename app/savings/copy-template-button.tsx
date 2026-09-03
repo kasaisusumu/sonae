@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-/** テンプレートの項目一覧を、1 行 1 項目でクリップボードにコピーする。 */
+/** マニュアルの項目一覧を、1 行 1 項目でクリップボードにコピーする。 */
 export function CopyTemplateButton({ text }: { text: string }) {
   const [done, setDone] = useState(false);
 

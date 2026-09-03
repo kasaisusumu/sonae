@@ -207,7 +207,7 @@ export default async function LearningTreePage() {
       kind: "template" as const,
       anchor: `tpl-${t.id}`,
       title: t.name,
-      crumb: `テンプレート › ${sectionLabel(t.kind)}`,
+      crumb: `マニュアル › ${sectionLabel(t.kind)}`,
       keywords: [],
       items: t.items.map((i) => i.title),
     })),
@@ -243,9 +243,9 @@ export default async function LearningTreePage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">学習内容</h1>
+        <h1 className="text-xl font-semibold">学習されたマニュアル</h1>
         <p className="mt-1 text-sm text-muted">
-          予定ごとに覚えた準備リストと、保存したテンプレートを確認・編集できます。
+          予定ごとに覚えた準備リストと、保存したマニュアルを確認・編集できます。
           <InfoHint>
             自動で覚えた「どの予定でどんなリストになるか」と、名前を付けて保存した
             セットの両方。上の検索はまとめて探します。

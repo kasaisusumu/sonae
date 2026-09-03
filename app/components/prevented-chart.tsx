@@ -2,9 +2,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { SavingsSeries, SeriesItem } from "@/lib/savings";
-import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
-import { updateFailureLog } from "@/app/actions";
-import { SubmitButton } from "@/app/components/submit-button";
+import { formatYen } from "@/lib/format";
+import {
+  FailureReviewRow,
+  type FRRow,
+} from "@/app/components/failure-review-row";
+
+const toFR = (it: SeriesItem): FRRow => ({
+  id: it.id,
+  description: it.description,
+  occurredAt: it.occurredAt,
+  estimatedLossYen: it.amountYen,
+  outcome: it.outcome,
+  categoryName: it.categoryName,
+  eventTitle: it.eventTitle,
+});
 
 type Grain = "month" | "week" | "day";
 const KEY = "mm_savings_grain_v1";
@@ -192,10 +204,10 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
           onClick={() => setOpenIdx(null)}
         >
           <div
-            className="flex max-h-[80vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl bg-surface shadow-xl"
+            className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl bg-background text-foreground shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between gap-3 border-b border-border p-4">
+            <div className="flex items-start justify-between gap-3 border-b border-border bg-surface p-4">
               <div>
                 <p className="text-sm font-semibold text-foreground">
                   {data[openIdx].label} に防げた失敗
@@ -213,109 +225,18 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
                 ✕
               </button>
             </div>
-            <ul className="divide-y divide-border overflow-y-auto p-4">
-              {data[openIdx].items.length === 0 ? (
-                <li className="text-xs text-muted">内訳がありません。</li>
-              ) : (
-                data[openIdx].items.map((it, k) => (
-                  <PreventedItemRow key={it.id || `x${k}`} it={it} />
-                ))
-              )}
-            </ul>
+            {data[openIdx].items.length === 0 ? (
+              <p className="p-4 text-xs text-muted">内訳がありません。</p>
+            ) : (
+              <ul className="space-y-2 overflow-y-auto p-3">
+                {data[openIdx].items.map((it, k) => (
+                  <FailureReviewRow key={it.id || `x${k}`} log={toFR(it)} />
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
     </div>
-  );
-}
-
-/** ポップアップ内の 1 件。「編集」を開くと内容・結果・金額・日付をその場で直せる。 */
-function PreventedItemRow({ it }: { it: SeriesItem }) {
-  const [editing, setEditing] = useState(false);
-  return (
-    <li className="py-2 first:pt-0 last:pb-0">
-      <div className="flex items-start justify-between gap-3">
-        <p className="min-w-0 whitespace-pre-wrap break-words text-sm">
-          {it.description}
-        </p>
-        <span className="shrink-0 text-xs tabular-nums text-teal-dark">
-          {it.amountYen > 0 ? formatYen(it.amountYen) : "±0"}
-        </span>
-      </div>
-      <div className="mt-0.5 flex items-center justify-between gap-2">
-        <p className="text-[11px] text-muted">
-          {formatDateOnly(it.occurredAt)}
-          {it.eventTitle ? ` ・ 「${it.eventTitle}」` : ""}
-        </p>
-        {it.id && (
-          <button
-            type="button"
-            onClick={() => setEditing((v) => !v)}
-            className="shrink-0 text-[11px] text-teal-dark underline hover:text-foreground"
-          >
-            {editing ? "閉じる" : "編集"}
-          </button>
-        )}
-      </div>
-
-      {editing && (
-        <form
-          action={updateFailureLog}
-          className="mt-2 space-y-2 rounded-lg bg-surface-muted p-2"
-        >
-          <input type="hidden" name="id" value={it.id} />
-          <label className="block text-[11px] text-muted">
-            内容
-            <textarea
-              name="description"
-              required
-              rows={2}
-              defaultValue={it.description}
-              className="mt-0.5 w-full rounded-md border bg-background px-2 py-1 text-sm text-foreground"
-            />
-          </label>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-[11px] text-muted">
-              結果
-              <select
-                name="outcome"
-                defaultValue={it.outcome ?? "prevented"}
-                className="ml-1 rounded-md border bg-background px-2 py-1 text-sm text-foreground"
-              >
-                <option value="">未選択</option>
-                <option value="prevented">防げた</option>
-                <option value="not_prevented">防げなかった</option>
-                <option value="irrelevant">今回は関係ない</option>
-              </select>
-            </label>
-            <label className="text-[11px] text-muted">
-              金額（円）
-              <input
-                type="number"
-                name="estimatedLossYen"
-                min={0}
-                step={100}
-                defaultValue={it.amountYen || ""}
-                placeholder="任意"
-                className="ml-1 w-24 rounded-md border bg-background px-2 py-1 text-sm"
-              />
-            </label>
-            <label className="text-[11px] text-muted">
-              日付
-              <input
-                type="date"
-                name="occurredAt"
-                defaultValue={toDateInputValue(it.occurredAt)}
-                className="ml-1 rounded-md border bg-background px-2 py-1 text-sm"
-              />
-            </label>
-            <SubmitButton variant="ghost">更新</SubmitButton>
-          </div>
-          <p className="text-[10px] text-muted">
-            「防げた」以外にすると、このグラフ・節約額から外れます。
-          </p>
-        </form>
-      )}
-    </li>
   );
 }

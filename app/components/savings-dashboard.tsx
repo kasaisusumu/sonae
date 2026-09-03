@@ -1,18 +1,56 @@
 import Link from "next/link";
+import { prisma } from "@/lib/prisma";
 import { getSavingsSummary, getFailureRetrospective } from "@/lib/savings";
 import { formatDateOnly, formatYen } from "@/lib/format";
 import { setFailureOutcome, updateFailureAmount } from "@/app/actions";
 import { PreventedChart } from "@/app/components/prevented-chart";
 import { MonthlyPreventedPopup } from "@/app/components/monthly-prevented-popup";
+import { type FRRow } from "@/app/components/failure-review-row";
 import { ConfirmButton } from "@/app/components/confirm-button";
+
+/** その Date が（JST 暦で）今月かどうか。 */
+function isThisJstMonth(d: Date, now: Date): boolean {
+  const f = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "2-digit",
+  });
+  return f.format(d) === f.format(now);
+}
 
 /** ホームに表示する節約額ダッシュボード。防げたことも並べる。 */
 export async function SavingsDashboard({ userId }: { userId: string }) {
-  const [s, retro] = await Promise.all([
+  const [s, retro, preventedLogs] = await Promise.all([
     getSavingsSummary(userId),
     getFailureRetrospective(userId),
+    prisma.failureLog.findMany({
+      where: { userId, outcome: "prevented" },
+      orderBy: { occurredAt: "desc" },
+      select: {
+        id: true,
+        description: true,
+        occurredAt: true,
+        estimatedLossYen: true,
+        outcome: true,
+        category: { select: { name: true } },
+        event: { select: { title: true } },
+      },
+    }),
   ]);
   const maxCategory = Math.max(1, ...s.byCategory.map((c) => c.amountYen));
+
+  const now = new Date();
+  const thisMonthRows: FRRow[] = preventedLogs
+    .filter((l) => isThisJstMonth(l.occurredAt, now))
+    .map((l) => ({
+      id: l.id,
+      description: l.description,
+      occurredAt: l.occurredAt,
+      estimatedLossYen: l.estimatedLossYen,
+      outcome: l.outcome,
+      categoryName: l.category?.name ?? null,
+      eventTitle: l.event?.title ?? null,
+    }));
 
   // まだ「防げた」記録が無いあいだは、金額欄に「例」を出す。
   // 本物の記録が1件でも入ったら hasAny が true になり、例は自動で消える。
@@ -71,7 +109,9 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
           </li>
         </ol>
 
-        {hasAny && <MonthlyPreventedPopup items={s.thisMonthItems} />}
+        {hasAny && thisMonthRows.length > 0 && (
+          <MonthlyPreventedPopup rows={thisMonthRows} />
+        )}
 
         <Link
           href="/failures"

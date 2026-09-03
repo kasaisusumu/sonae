@@ -1,22 +1,15 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import {
-  createFailureLog,
-  deleteFailureLog,
-  setFailureOutcome,
-  updateFailureLog,
-} from "@/app/actions";
+import { createFailureLog } from "@/app/actions";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
-import {
-  formatDateOnly,
-  formatYen,
-  jstToday,
-  toDateInputValue,
-} from "@/lib/format";
+import { formatDateOnly, jstToday } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
-import { ConfirmButton } from "@/app/components/confirm-button";
 import { InfoHint } from "@/app/components/info-hint";
+import {
+  FailureReviewRow,
+  type FRRow,
+} from "@/app/components/failure-review-row";
 import { FailureQuickInput } from "./failure-quick-input";
 import { ReviewQueue, type RQLog } from "./review-queue";
 
@@ -38,138 +31,15 @@ type LogRow = {
   } | null;
 };
 
-function OutcomeButton({
-  logId,
-  target,
-  active,
-  label,
-}: {
-  logId: string;
-  target: "prevented" | "not_prevented" | "irrelevant";
-  active: boolean;
-  label: string;
-}) {
-  const base =
-    "rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors";
-  // 白黒ベース。選択中＝前景色ベタ、未選択＝枠線のみ。意味は絵文字と✓で示す。
-  const cls = active
-    ? "bg-foreground text-surface"
-    : "border border-border bg-surface text-muted hover:border-foreground/40 hover:text-foreground";
-  return (
-    <form action={setFailureOutcome}>
-      <input type="hidden" name="failureLogId" value={logId} />
-      <input
-        type="hidden"
-        name="outcome"
-        value={active ? "unset" : target}
-      />
-      <button type="submit" className={`${base} ${cls}`}>
-        {active ? `✓ ${label}` : label}
-      </button>
-    </form>
-  );
-}
-
-function FailureRow({
-  log: l,
-  reviewable = true,
-}: {
-  log: LogRow;
-  reviewable?: boolean;
-}) {
-  return (
-    <li className="rounded-xl bg-surface p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="whitespace-pre-wrap text-sm">{l.description}</p>
-          <p className="mt-1 text-xs text-muted">
-            {formatDateOnly(l.occurredAt)}
-            {l.category ? ` ・ ${l.category.name}` : " ・ カテゴリなし"}
-            {l.event ? ` ・ 「${l.event.title}」` : ""}
-            {l.estimatedLossYen > 0
-              ? ` ・ 推定 ${formatYen(l.estimatedLossYen)}`
-              : ""}
-          </p>
-        </div>
-        <form action={deleteFailureLog}>
-          <input type="hidden" name="id" value={l.id} />
-          <ConfirmButton
-            message="この失敗ログを削除しますか？"
-            className="shrink-0 rounded px-2 py-1 text-xs text-muted hover:bg-warn-soft hover:text-warn"
-          >
-            削除
-          </ConfirmButton>
-        </form>
-      </div>
-      {reviewable ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <OutcomeButton
-            logId={l.id}
-            target="prevented"
-            active={l.outcome === "prevented"}
-            label="🛡️ 防げた"
-          />
-          <OutcomeButton
-            logId={l.id}
-            target="not_prevented"
-            active={l.outcome === "not_prevented"}
-            label="😓 防げなかった"
-          />
-          <OutcomeButton
-            logId={l.id}
-            target="irrelevant"
-            active={l.outcome === "irrelevant"}
-            label="今回は関係ない"
-          />
-        </div>
-      ) : (
-        <p className="mt-2 text-[11px] text-muted">
-          この予定が終わってから振り返れます。
-        </p>
-      )}
-
-      <details className="mt-2 [&_summary::-webkit-details-marker]:hidden">
-        <summary className="cursor-pointer list-none text-[11px] text-teal-dark">
-          ✏️ 内容・金額・日付を直す
-        </summary>
-        <form action={updateFailureLog} className="mt-2 space-y-2">
-          <input type="hidden" name="id" value={l.id} />
-          <textarea
-            name="description"
-            required
-            rows={2}
-            defaultValue={l.description}
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
-          />
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="block text-xs text-muted">
-              金額（円）
-              <input
-                type="number"
-                name="estimatedLossYen"
-                min={0}
-                step={100}
-                defaultValue={l.estimatedLossYen || ""}
-                placeholder="任意"
-                className="mt-0.5 w-full rounded-md border bg-background px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="block text-xs text-muted">
-              日付
-              <input
-                type="date"
-                name="occurredAt"
-                defaultValue={toDateInputValue(l.occurredAt)}
-                className="mt-0.5 w-full rounded-md border bg-background px-3 py-2 text-sm"
-              />
-            </label>
-          </div>
-          <SubmitButton variant="ghost">更新</SubmitButton>
-        </form>
-      </details>
-    </li>
-  );
-}
+const toFR = (l: LogRow): FRRow => ({
+  id: l.id,
+  description: l.description,
+  occurredAt: l.occurredAt,
+  estimatedLossYen: l.estimatedLossYen,
+  outcome: l.outcome,
+  categoryName: l.category?.name ?? null,
+  eventTitle: l.event?.title ?? null,
+});
 
 export default async function FailuresPage() {
   const user = await getCurrentUser();
@@ -332,7 +202,11 @@ export default async function FailuresPage() {
                 </summary>
                 <ul className="mt-2 space-y-2">
                   {upcomingPredictions.map((l) => (
-                    <FailureRow key={l.id} log={l} reviewable={false} />
+                    <FailureReviewRow
+                      key={l.id}
+                      log={toFR(l)}
+                      reviewable={false}
+                    />
                   ))}
                 </ul>
               </details>
@@ -345,7 +219,7 @@ export default async function FailuresPage() {
                 </summary>
                 <ul className="mt-2 space-y-2">
                   {pastReviewed.map((l) => (
-                    <FailureRow key={l.id} log={l} />
+                    <FailureReviewRow key={l.id} log={toFR(l)} />
                   ))}
                 </ul>
               </details>

@@ -24,6 +24,7 @@ export interface SeriesItem {
   id: string; // failureLog の id（ポップアップから編集するため）
   description: string;
   eventTitle: string | null;
+  categoryName: string | null;
   amountYen: number;
   occurredAt: Date;
   outcome: string | null; // ここに出るものは基本 "prevented"
@@ -233,6 +234,7 @@ function buildSeries(rows: SeriesRow[]): SavingsSeries {
       id: r.id,
       description: r.description,
       eventTitle: r.eventTitle,
+      categoryName: r.categoryName,
       amountYen: r.amountYen,
       occurredAt: r.occurredAt,
       outcome: r.outcome,
@@ -319,6 +321,8 @@ export async function getSavingsSummary(userId: string): Promise<SavingsSummary>
         amountYen: e.amountYen,
         description: e.failureLog?.description ?? "（失敗ログ削除済み）",
         eventTitle: e.event?.title ?? null,
+        categoryName:
+          e.failureLog?.category?.name ?? e.event?.category?.name ?? null,
         occurredAt: e.failureLog?.occurredAt ?? e.createdAt,
         outcome: e.failureLog?.outcome ?? "prevented",
       })),

@@ -295,7 +295,7 @@ export function FailureListEditor({
   const rows = initial.filter((r) => !hiddenAtMount.has(r.id));
   const hasSuggestion = rows.some((r) => r.outcome === null);
   return (
-    <div className="rounded-2xl bg-surface p-3">
+    <div className="rounded-2xl border border-warn/30 bg-warn-soft p-3">
       {hasSuggestion && (
         <FirstSeen
           id="failure_suggestions"
@@ -314,8 +314,8 @@ export function FailureListEditor({
         </FirstSeen>
       )}
       <div className="mb-1.5 flex items-baseline gap-2">
-        <h3 className="text-sm font-semibold text-foreground">{label}</h3>
-        <span className="text-xs text-muted tabular-nums">{rows.length}</span>
+        <h3 className="text-sm font-semibold text-warn">{label}</h3>
+        <span className="text-xs text-warn/70 tabular-nums">{rows.length}</span>
         {rows.length > 0 && (
           <form action={clearEventFailureLogs} className="ml-auto">
             <input type="hidden" name="eventId" value={eventId} />
@@ -341,8 +341,8 @@ export function FailureListEditor({
                 key={r.id}
                 className={`px-2 py-1.5 ${
                   suggested && !open
-                    ? "rounded-lg bg-warn-soft"
-                    : "border-b border-border/70 last:border-0"
+                    ? "rounded-lg border border-warn/40 bg-warn/10"
+                    : "rounded-lg bg-surface"
                 }`}
               >
                 <div className="flex items-start gap-2">

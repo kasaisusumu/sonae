@@ -11,12 +11,26 @@ const TUTORIAL_KEY = "mm_tutorial_v3";
  * 通知がオフのままの人に、ポップアップで「オンにして」と促す。
  * ポップアップの中の <NotifyEnableButton> からその場でオンにできる。
  *
+ * - **ホーム画面に追加した状態（standalone）でのみ出す。** ふつうのブラウザ
+ *   タブでは出さない（先に「ホーム画面に追加」が必要で、iPhone では特に
+ *   ブラウザだと通知自体が使えないため）。
  * - サーバー側に購読があれば（`hasSubscription`）そもそも出さない。
  * - 端末側に購読があるときも出さない。
  * - 導入チュートリアルが終わるまで、また他のオンボーディング系ポップアップが
  *   出ている間は待つ（ポップアップを重ねない）。
  * - 「あとで」= その訪問（セッション）中は再表示しない。次回アクセスでまた促す。
  */
+
+/** ホーム画面に追加したアイコンから開いているか（PWA standalone）。 */
+function isStandalone(): boolean {
+  if (typeof window === "undefined") return false;
+  const mm = window.matchMedia?.("(display-mode: standalone)")?.matches;
+  // iOS Safari は display-mode を返さないので navigator.standalone を見る
+  const iosStandalone = (
+    navigator as Navigator & { standalone?: boolean }
+  ).standalone;
+  return Boolean(mm || iosStandalone);
+}
 export function NotifyNag({
   publicKey,
   hasSubscription,
@@ -41,6 +55,7 @@ export function NotifyNag({
       } catch {
         return; // sessionStorage 不可の環境では出さない
       }
+      if (!isStandalone()) return; // ブラウザタブでは出さない（要ホーム画面追加）
       if (!pushSupported()) return; // 非対応端末は「はじめかた」の導線に任せる
       try {
         // 導入チュートリアルが終わってから（未完ならそちらが先）

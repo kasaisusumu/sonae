@@ -212,13 +212,15 @@ export default async function FailuresPage() {
     !!l.event && l.outcome === null;
 
   const reviewableLogs = logs.filter((l) => !isUnadopted(l) && eventEnded(l));
-  const pendingFuture = logs.filter(
-    (l) => l.outcome === "linked" && !eventEnded(l),
+  // これまでの記録は 2 つだけ:
+  //  - これからの失敗予測 = 採用済みで、予定がまだ先のもの
+  //  - 過去の失敗予測の振り返り = 予定が終わっていて、結果が決まっているもの
+  const upcomingPredictions = logs.filter(
+    (l) => !isUnadopted(l) && !!l.event && !eventEnded(l),
   );
-  const reviewed = logs.filter((l) => !!l.outcome);
-  // ふりかえり済みも「過去の予定」と「これからの予定」で分ける。
-  const reviewedPast = reviewed.filter((l) => eventEnded(l));
-  const reviewedFuture = reviewed.filter((l) => !eventEnded(l));
+  const pastReviewed = logs.filter(
+    (l) => !isUnadopted(l) && eventEnded(l) && !!l.outcome,
+  );
 
   return (
     <div className="space-y-8">
@@ -323,46 +325,33 @@ export default async function FailuresPage() {
           </p>
         ) : (
           <>
-            {pendingFuture.length > 0 && (
+            {upcomingPredictions.length > 0 && (
               <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
                 <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
-                  ▸ まだ先の予定の記録を見る（{pendingFuture.length}件）
+                  ▸ これからの失敗予測を見る（{upcomingPredictions.length}件）
                 </summary>
                 <ul className="mt-2 space-y-2">
-                  {pendingFuture.map((l) => (
+                  {upcomingPredictions.map((l) => (
                     <FailureRow key={l.id} log={l} reviewable={false} />
                   ))}
                 </ul>
               </details>
             )}
 
-            {reviewedPast.length > 0 && (
+            {pastReviewed.length > 0 && (
               <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
                 <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
-                  ▸ 過去の予定のふりかえりを見る（{reviewedPast.length}件）
+                  ▸ 過去の失敗予測の振り返りを見る（{pastReviewed.length}件）
                 </summary>
                 <ul className="mt-2 space-y-2">
-                  {reviewedPast.map((l) => (
+                  {pastReviewed.map((l) => (
                     <FailureRow key={l.id} log={l} />
                   ))}
                 </ul>
               </details>
             )}
 
-            {reviewedFuture.length > 0 && (
-              <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
-                <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
-                  ▸ これからの予定のふりかえりを見る（{reviewedFuture.length}件）
-                </summary>
-                <ul className="mt-2 space-y-2">
-                  {reviewedFuture.map((l) => (
-                    <FailureRow key={l.id} log={l} reviewable={false} />
-                  ))}
-                </ul>
-              </details>
-            )}
-
-            {pendingFuture.length === 0 && reviewed.length === 0 && (
+            {upcomingPredictions.length === 0 && pastReviewed.length === 0 && (
               <p className="rounded-2xl bg-surface px-4 py-6 text-center text-sm text-muted">
                 済んだ記録はまだありません。
               </p>

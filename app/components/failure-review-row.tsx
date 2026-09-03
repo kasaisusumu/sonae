@@ -20,28 +20,51 @@ export type FRRow = {
   eventTitle: string | null;
 };
 
+export type OutcomeTarget =
+  | "prevented"
+  | "not_prevented"
+  | "irrelevant"
+  | "unset";
+
 function OutcomeButton({
   logId,
   target,
   active,
   label,
+  onOutcome,
 }: {
   logId: string;
   target: "prevented" | "not_prevented" | "irrelevant";
   active: boolean;
   label: string;
+  onOutcome?: (t: OutcomeTarget) => void;
 }) {
   const base =
     "rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors";
   const cls = active
     ? "bg-foreground text-surface"
     : "border border-border bg-surface text-muted hover:border-foreground/40 hover:text-foreground";
+  const next: OutcomeTarget = active ? "unset" : target;
+  const text = active ? `✓ ${label}` : label;
+
+  // onOutcome あり＝親が楽観的に状態を持つ（結果を変えても行が消えない）。
+  if (onOutcome) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOutcome(next)}
+        className={`${base} ${cls}`}
+      >
+        {text}
+      </button>
+    );
+  }
   return (
     <form action={setFailureOutcome}>
       <input type="hidden" name="failureLogId" value={logId} />
-      <input type="hidden" name="outcome" value={active ? "unset" : target} />
+      <input type="hidden" name="outcome" value={next} />
       <button type="submit" className={`${base} ${cls}`}>
-        {active ? `✓ ${label}` : label}
+        {text}
       </button>
     </form>
   );
@@ -51,13 +74,17 @@ function OutcomeButton({
  * 失敗ログページの「過去の失敗予測の振り返りを見る」の 1 行。
  * ホームの「防げたこと」ポップアップからも同じ形式で使う。
  * id が空（＝元の失敗ログが消えている）のときは、内容と日付だけの読み取り表示にする。
+ * onOutcome を渡すと、結果ボタンはフォーム送信ではなくコールバックになる
+ * （親が楽観的に状態を保持して、結果を変えても行を消さないため）。
  */
 export function FailureReviewRow({
   log: l,
   reviewable = true,
+  onOutcome,
 }: {
   log: FRRow;
   reviewable?: boolean;
+  onOutcome?: (t: OutcomeTarget) => void;
 }) {
   const meta = (
     <p className="mt-1 text-xs text-muted">
@@ -102,18 +129,21 @@ export function FailureReviewRow({
             target="prevented"
             active={l.outcome === "prevented"}
             label="🛡️ 防げた"
+            onOutcome={onOutcome}
           />
           <OutcomeButton
             logId={l.id}
             target="not_prevented"
             active={l.outcome === "not_prevented"}
             label="😓 防げなかった"
+            onOutcome={onOutcome}
           />
           <OutcomeButton
             logId={l.id}
             target="irrelevant"
             active={l.outcome === "irrelevant"}
             label="今回は関係ない"
+            onOutcome={onOutcome}
           />
         </div>
       ) : (

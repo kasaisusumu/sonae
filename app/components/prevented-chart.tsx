@@ -3,10 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { SavingsSeries, SeriesItem } from "@/lib/savings";
 import { formatYen } from "@/lib/format";
-import {
-  FailureReviewRow,
-  type FRRow,
-} from "@/app/components/failure-review-row";
+import { type FRRow } from "@/app/components/failure-review-row";
+import { StickyReviewRows } from "@/app/components/sticky-review-rows";
 
 const toFR = (it: SeriesItem): FRRow => ({
   id: it.id,
@@ -225,15 +223,11 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
                 ✕
               </button>
             </div>
-            {data[openIdx].items.length === 0 ? (
-              <p className="p-4 text-xs text-muted">内訳がありません。</p>
-            ) : (
-              <ul className="space-y-2 overflow-y-auto p-3">
-                {data[openIdx].items.map((it, k) => (
-                  <FailureReviewRow key={it.id || `x${k}`} log={toFR(it)} />
-                ))}
-              </ul>
-            )}
+            <StickyReviewRows
+              key={openIdx}
+              rows={data[openIdx].items.map(toFR)}
+              className="space-y-2 overflow-y-auto p-3"
+            />
           </div>
         </div>
       )}

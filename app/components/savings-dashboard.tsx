@@ -20,12 +20,15 @@ function isThisJstMonth(d: Date, now: Date): boolean {
 
 /** ホームに表示する節約額ダッシュボード。防げたことも並べる。 */
 export async function SavingsDashboard({ userId }: { userId: string }) {
-  const [s, retro, preventedLogs] = await Promise.all([
+  const [s, retro, recentLogs] = await Promise.all([
     getSavingsSummary(userId),
     getFailureRetrospective(userId),
+    // ポップアップを「結果を変えても消えない」ようにするため、今月ぶんは結果に
+    // かかわらず渡す（新しい順）。件数は多くならない想定なので take で軽く上限。
     prisma.failureLog.findMany({
-      where: { userId, outcome: "prevented" },
+      where: { userId },
       orderBy: { occurredAt: "desc" },
+      take: 300,
       select: {
         id: true,
         description: true,
@@ -40,7 +43,7 @@ export async function SavingsDashboard({ userId }: { userId: string }) {
   const maxCategory = Math.max(1, ...s.byCategory.map((c) => c.amountYen));
 
   const now = new Date();
-  const thisMonthRows: FRRow[] = preventedLogs
+  const thisMonthRows: FRRow[] = recentLogs
     .filter((l) => isThisJstMonth(l.occurredAt, now))
     .map((l) => ({
       id: l.id,

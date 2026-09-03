@@ -10,6 +10,7 @@ import {
   FailureReviewRow,
   type FRRow,
 } from "@/app/components/failure-review-row";
+import { StickyReviewRows } from "@/app/components/sticky-review-rows";
 import { FailureQuickInput } from "./failure-quick-input";
 import { ReviewQueue, type RQLog } from "./review-queue";
 
@@ -217,11 +218,12 @@ export default async function FailuresPage() {
                 <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
                   ▸ 過去の失敗予測の振り返りを見る（{pastReviewed.length}件）
                 </summary>
-                <ul className="mt-2 space-y-2">
-                  {pastReviewed.map((l) => (
-                    <FailureReviewRow key={l.id} log={toFR(l)} />
-                  ))}
-                </ul>
+                {/* 新しい順。結果を変えても並びは変わらず、行も消えない
+                    （このページを離れて戻ると片付く）。 */}
+                <StickyReviewRows
+                  className="mt-2 space-y-2"
+                  rows={pastReviewed.map(toFR)}
+                />
               </details>
             )}
 

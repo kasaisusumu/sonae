@@ -394,7 +394,7 @@ export function PageCoach() {
   const last = idx === tour.steps.length - 1;
 
   return (
-    <div className="fixed inset-0 z-[55]" aria-live="polite">
+    <div data-mm-coach className="fixed inset-0 z-[55]" aria-live="polite">
       {/* クリックを吸収する層（どこを押しても次へ） */}
       <div className="absolute inset-0" onClick={next} />
 

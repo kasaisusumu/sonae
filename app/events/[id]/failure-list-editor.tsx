@@ -13,6 +13,7 @@ import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
+import { FirstSeen } from "@/app/components/first-seen";
 
 export type FLRow = {
   id: string;
@@ -292,8 +293,26 @@ export function FailureListEditor({
   // ── 予定詳細ページ用：準備リストの枠と同じフル機能。 ──
   // 「今回は関係ない」で外したものは（次にこの画面へ来たときに）並びから消える。
   const rows = initial.filter((r) => !hiddenAtMount.has(r.id));
+  const hasSuggestion = rows.some((r) => r.outcome === null);
   return (
     <div className="rounded-2xl bg-surface p-3">
+      {hasSuggestion && (
+        <FirstSeen
+          id="failure_suggestions"
+          title="「考えられる失敗」を先回りで出しています"
+        >
+          <p>
+            似た予定でよくあった失敗を、
+            <strong className="text-foreground">赤い未確認</strong>
+            の行として自動で並べています。
+          </p>
+          <p className="mt-1.5">
+            この予定でも気をつけたいなら<strong>「採用」</strong>、
+            関係なければ<strong>「削除」</strong>を押してください。
+            採用も削除もしなければ、ただの参考として残ります。
+          </p>
+        </FirstSeen>
+      )}
       <div className="mb-1.5 flex items-baseline gap-2">
         <h3 className="text-sm font-semibold text-foreground">{label}</h3>
         <span className="text-xs text-muted tabular-nums">{rows.length}</span>

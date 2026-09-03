@@ -179,7 +179,10 @@ export function GuidedSetup({
   const cur = steps[currentIndex];
 
   return (
-    <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40 p-4 sm:items-center">
+    <div
+      data-mm-guided
+      className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40 p-4 sm:items-center"
+    >
       <div className="max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-surface p-5 shadow-2xl">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">

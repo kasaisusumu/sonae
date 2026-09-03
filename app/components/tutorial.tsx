@@ -207,7 +207,11 @@ export function Tutorial() {
     };
     window.addEventListener(EVENT, show);
     try {
-      if (!localStorage.getItem(KEY)) queueMicrotask(show);
+      // 「防ぎたい失敗」の初回プロンプトが先。それが終わってから自動表示する
+      //（終了時に mm:open-tutorial を投げてくれる）。手動再生は EVENT で常に可能。
+      if (!localStorage.getItem(KEY) && localStorage.getItem("mm_prevent_goals_v1")) {
+        queueMicrotask(show);
+      }
     } catch {
       /* localStorage 不可の環境では出さない */
     }

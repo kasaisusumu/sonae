@@ -9,6 +9,7 @@ import { LogoutButton } from "@/app/components/logout-button";
 import { SwRegister } from "@/app/components/sw-register";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { LiveSync } from "@/app/components/live-sync";
+import { PreventGoals } from "@/app/components/prevent-goals";
 import { Tutorial } from "@/app/components/tutorial";
 import { PageCoach } from "@/app/components/page-coach";
 import { MenuButton } from "@/app/components/menu-button";
@@ -64,6 +65,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <SwRegister />
         {isLoggedIn ? <LiveSync /> : null}
+        {isLoggedIn ? <PreventGoals /> : null}
         {isLoggedIn ? <Tutorial /> : null}
         {isLoggedIn ? <PageCoach /> : null}
 

@@ -1008,6 +1008,52 @@ export async function deleteLearnedRule(ruleId: string): Promise<void> {
 // P1: 失敗ログ & 再発防止
 // ─────────────────────────────────────────────
 
+const PREVENT_GOAL_LABELS = [
+  "寝坊",
+  "スマホを触ってて遅刻",
+  "予約、連絡忘れ",
+  "忘れ物",
+  "バス・電車の乗り過ごし",
+] as const;
+
+/**
+ * 初回オンボーディングの「防ぎたい失敗はなんですか?」で選ばれたものを、
+ * カテゴリ全体の失敗ログとして初めから登録する。金額・予定紐付けはしない
+ * （振り返りのときに金額を入れてもらう）。
+ */
+export async function seedFailureGoals(labels: string[]): Promise<void> {
+  const userId = await requireUserId();
+  const allow = new Set<string>(PREVENT_GOAL_LABELS);
+  const picked = [...new Set(labels)].filter((l) => allow.has(l));
+  if (picked.length === 0) return;
+
+  const existing = await prisma.failureLog.findMany({
+    where: { userId, eventId: null },
+    select: { description: true },
+  });
+  const have = new Set(existing.map((e) => e.description.trim()));
+  const fresh = picked.filter((l) => !have.has(l));
+  if (fresh.length === 0) return;
+
+  await prisma.$transaction(
+    fresh.map((description) =>
+      prisma.failureLog.create({
+        data: {
+          userId,
+          categoryId: null,
+          eventId: null,
+          featureSignature: "{}",
+          description,
+          estimatedLossYen: 0,
+          outcome: null,
+          occurredAt: new Date(),
+        },
+      }),
+    ),
+  );
+  revalidateAppViews();
+}
+
 /** 「うっかり失敗」を記録する。金額は任意。特定の予定に紐づけられる。 */
 export async function createFailureLog(formData: FormData): Promise<void> {
   const userId = await requireUserId();

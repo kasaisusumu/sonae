@@ -38,6 +38,7 @@ export function DictationInput({ eventId }: { eventId: string }) {
     <>
       <button
         type="button"
+        data-coach="dictation"
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground hover:bg-surface-muted"
       >

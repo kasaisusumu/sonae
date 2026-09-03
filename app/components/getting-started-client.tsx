@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { syncCalendar } from "@/app/actions";
 import { SubmitButton } from "@/app/components/submit-button";
+import { NotifyEnableButton } from "@/app/components/push-controls";
 
 const HOME_KEY = "mm_added_to_home_v1";
 
@@ -12,11 +14,20 @@ type Props = {
   step2: boolean; // 予定がある
   step3: boolean; // 準備リストができている
   step5: boolean; // 通知オン（Push 購読あり）
+  vapidPublicKey: string | null;
 };
 
-export function GettingStartedClient({ step1, step2, step3, step5 }: Props) {
+export function GettingStartedClient({
+  step1,
+  step2,
+  step3,
+  step5,
+  vapidPublicKey,
+}: Props) {
+  const router = useRouter();
   // ホーム画面への追加はブラウザ側の操作で検知できないので、自己申告で覚える。
   const [step4, setStep4] = useState(false);
+  const [notifyDone, setNotifyDone] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [open, setOpen] = useState<number | null>(null);
 
@@ -70,10 +81,17 @@ export function GettingStartedClient({ step1, step2, step3, step5 }: Props) {
       detail: (
         <>
           <p>
-            ブラウザの共有・メニューから「ホーム画面に追加」。
-            アプリのように1タップでひらけて、通知も受け取りやすくなります。
-            iPhone は Safari の共有ボタン、Android は Chrome のメニュー（︙）からどうぞ。
+            アプリのように1タップで開けて、通知も届きやすくなります。次の「通知をオン」の前に、まずこれを。
           </p>
+          <ol className="mt-2 space-y-1 rounded-lg bg-surface-muted p-2.5 text-[13px] text-foreground">
+            <li>
+              1. iPhone（Safari）: 画面下の共有ボタン（□に↑）→「ホーム画面に追加」→「追加」
+            </li>
+            <li>
+              2. Android（Chrome）: 右上のメニュー（︙）→「アプリをインストール」／「ホーム画面に追加」
+            </li>
+            <li>3. 追加したアイコンから開き直す（以降はそのアイコンで使う）</li>
+          </ol>
           {!step4 && (
             <button
               type="button"
@@ -87,20 +105,30 @@ export function GettingStartedClient({ step1, step2, step3, step5 }: Props) {
       ),
     },
     {
-      done: step5,
+      done: step5 || notifyDone,
       title: "通知をオンにする",
       detail: (
         <>
           <p>
-            新しい予定が入ったとき、準備のタイミング、予定のあとの「失敗はあった？」など、
-            必要なときだけお知らせします。設定ページの「通知」からオンにできます。
+            新しい予定・準備のタイミング・予定のあとの振り返りだけ、必要なときにお知らせします。
+            下のボタンでそのままオンにできます。
           </p>
-          <Link
-            href="/settings"
-            className="mt-2 inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface no-underline hover:opacity-90"
-          >
-            設定をひらく
-          </Link>
+          <ol className="mt-2 space-y-1 rounded-lg bg-surface-muted p-2.5 text-[13px] text-foreground">
+            <li>1. 下の「通知をオンにする」を押す</li>
+            <li>2. ブラウザの確認が出たら「許可」を選ぶ</li>
+            <li>
+              3. iPhone は先に「ホーム画面に追加」を済ませ、追加したアイコンから開いていることが必要です
+            </li>
+          </ol>
+          <div className="mt-2">
+            <NotifyEnableButton
+              publicKey={vapidPublicKey}
+              onEnabled={() => {
+                setNotifyDone(true);
+                router.refresh();
+              }}
+            />
+          </div>
         </>
       ),
     },

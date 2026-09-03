@@ -24,13 +24,14 @@ export async function GettingStarted({ userId }: { userId: string }) {
     step3: itemCount > 0,
     step5: pushCount > 0,
   };
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
 
   return (
     <>
       {/* ログインしたては、1工程ずつポップアップで手取り足取り誘導する。 */}
-      <GuidedSetup {...flags} />
+      <GuidedSetup {...flags} vapidPublicKey={vapidPublicKey} />
       {/* 据え置きの進捗カード（一覧・いつでも見返せる）。 */}
-      <GettingStartedClient {...flags} />
+      <GettingStartedClient {...flags} vapidPublicKey={vapidPublicKey} />
     </>
   );
 }

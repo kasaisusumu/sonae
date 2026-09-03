@@ -14,6 +14,120 @@ import {
 
 type Status = "loading" | "unsupported" | "denied" | "off" | "on";
 
+/**
+ * 「通知をオンにする」だけの小さなボタン。オンボーディングのポップアップや
+ * はじめかたカードから、その場でブラウザ許可 → 購読 → サーバー登録まで行う。
+ */
+export function NotifyEnableButton({
+  publicKey,
+  onEnabled,
+  className,
+}: {
+  publicKey: string | null;
+  onEnabled?: () => void;
+  className?: string;
+}) {
+  const [state, setState] = useState<
+    "idle" | "busy" | "on" | "denied" | "unsupported" | "error"
+  >("idle");
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const decide = async (): Promise<typeof state> => {
+      if (!publicKey || !pushSupported()) return "unsupported";
+      if (Notification.permission === "denied") return "denied";
+      try {
+        const reg = await registerServiceWorker();
+        const sub = await reg.pushManager.getSubscription();
+        return sub ? "on" : "idle";
+      } catch {
+        return "idle";
+      }
+    };
+    decide().then((s) => {
+      if (!cancelled) setState(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [publicKey]);
+
+  async function enable() {
+    if (!publicKey) return;
+    setState("busy");
+    setNote(null);
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") {
+        setState(perm === "denied" ? "denied" : "idle");
+        if (perm !== "denied")
+          setNote("許可されませんでした。もう一度お試しください。");
+        return;
+      }
+      const reg = await registerServiceWorker();
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+      const json = sub.toJSON();
+      await savePushSubscription({
+        endpoint: sub.endpoint,
+        p256dh: json.keys?.p256dh ?? "",
+        auth: json.keys?.auth ?? "",
+        userAgent:
+          typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+      });
+      setState("on");
+      setNote("通知をオンにしました。");
+      onEnabled?.();
+    } catch (e) {
+      console.error(e);
+      setState("error");
+      setNote("通知の登録に失敗しました。時間をおいて再度お試しください。");
+    }
+  }
+
+  if (state === "on") {
+    return (
+      <p className="text-sm font-medium text-teal-dark">✓ 通知はオンです</p>
+    );
+  }
+  if (state === "unsupported") {
+    return (
+      <p className="text-xs text-muted">
+        この端末では、先に「ホーム画面に追加」して、追加したアイコンから開くと
+        通知をオンにできます（iPhone は特にこの順番が必要です）。
+      </p>
+    );
+  }
+  if (state === "denied") {
+    return (
+      <p className="text-xs text-warn">
+        ブラウザで通知がブロックされています。サイトの設定から通知を「許可」に
+        変更してください。
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      <button
+        type="button"
+        onClick={enable}
+        disabled={state === "busy"}
+        className={
+          className ??
+          "inline-flex items-center justify-center rounded-lg bg-foreground px-5 py-2.5 text-sm font-semibold text-surface hover:opacity-90 disabled:opacity-60"
+        }
+      >
+        {state === "busy" ? "処理中…" : "通知をオンにする"}
+      </button>
+      {note && <p className="text-xs text-muted">{note}</p>}
+    </div>
+  );
+}
+
 export function PushControls({ publicKey }: { publicKey: string | null }) {
   const [status, setStatus] = useState<Status>("loading");
   const [busy, setBusy] = useState(false);

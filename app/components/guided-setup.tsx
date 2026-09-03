@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { syncCalendar } from "@/app/actions";
 import { SubmitButton } from "@/app/components/submit-button";
+import { NotifyEnableButton } from "@/app/components/push-controls";
 
 const HOME_KEY = "mm_added_to_home_v1";
 const DISMISS_KEY = "mm_guided_setup_hidden_v1"; // このセッションは出さない
@@ -19,6 +21,7 @@ type Props = {
   step2: boolean; // 予定がある
   step3: boolean; // 準備リストができている
   step5: boolean; // 通知オン
+  vapidPublicKey: string | null;
 };
 
 /**
@@ -26,11 +29,21 @@ type Props = {
  * ・出すのは未完了の先頭ステップだけ。終わったステップは自動で次へ進む。
  * ・「あとで」でそのセッションは閉じる。全ステップ完了で二度と出ない。
  * ・概念チュートリアル（Tutorial）が終わるまでは出さない（順番に案内する）。
+ * ・「ホーム画面に追加」「通知をオン」は特に重要なので、手順を明記し、通知は
+ *   このポップアップからそのままオンにできる。
  * 下部の据え置きカード（GettingStartedClient）は進捗の一覧として残す。
  */
-export function GuidedSetup({ step1, step2, step3, step5 }: Props) {
+export function GuidedSetup({
+  step1,
+  step2,
+  step3,
+  step5,
+  vapidPublicKey,
+}: Props) {
+  const router = useRouter();
   const [ready, setReady] = useState(false);
   const [homeDone, setHomeDone] = useState(false);
+  const [notifyDone, setNotifyDone] = useState(false);
   const [hidden, setHidden] = useState(true);
 
   useEffect(() => {
@@ -73,13 +86,14 @@ export function GuidedSetup({ step1, step2, step3, step5 }: Props) {
     key: string;
     title: string;
     lead: string;
+    how?: string[];
     done: boolean;
     action: React.ReactNode;
   }[] = [
     {
       key: "connect",
-      title: "Google カレンダーとつなぐ",
-      lead: "予定を読み取り、説明欄に準備リストを書き込みます（日時・タイトルは変えません）。約30秒で終わります。",
+      title: "① Google カレンダーとつなぐ",
+      lead: "予定を読み取り、説明欄に準備リストを書き込みます（日時・タイトルは変えません）。約30秒。",
       done: step1,
       action: (
         <a href="/api/auth/google" className={BTN}>
@@ -89,8 +103,13 @@ export function GuidedSetup({ step1, step2, step3, step5 }: Props) {
     },
     {
       key: "home",
-      title: "ホーム画面に追加する",
-      lead: "iPhone は Safari の共有ボタン、Android は Chrome のメニュー（︙）から「ホーム画面に追加」。アプリのように1タップでひらけます。",
+      title: "② ホーム画面に追加する",
+      lead: "アプリのように1タップで開けて、通知も届きやすくなります。次の通知オンの前に、まずこれ。",
+      how: [
+        "iPhone（Safari）: 画面下の共有ボタン（□に↑）→「ホーム画面に追加」→「追加」",
+        "Android（Chrome）: 右上のメニュー（︙）→「アプリをインストール」または「ホーム画面に追加」",
+        "追加されたアイコンから開き直す（以降はそのアイコンで使う）",
+      ],
       done: homeDone,
       action: (
         <button type="button" onClick={markHome} className={BTN_OUTLINE}>
@@ -100,18 +119,27 @@ export function GuidedSetup({ step1, step2, step3, step5 }: Props) {
     },
     {
       key: "notify",
-      title: "通知をオンにする",
-      lead: "新しい予定・準備のタイミング・予定のあとの振り返りだけ、必要なときにお知らせします。",
-      done: step5,
+      title: "③ 通知をオンにする",
+      lead: "新しい予定・準備のタイミング・予定のあとの振り返りだけ、必要なときにお知らせします。下のボタンでそのままオンにできます。",
+      how: [
+        "下の「通知をオンにする」を押す",
+        "ブラウザの確認が出たら「許可」を選ぶ",
+        "iPhone は先に②を済ませ、追加したアイコンから開いていることが必要です",
+      ],
+      done: step5 || notifyDone,
       action: (
-        <Link href="/settings" className={BTN}>
-          設定をひらく
-        </Link>
+        <NotifyEnableButton
+          publicKey={vapidPublicKey}
+          onEnabled={() => {
+            setNotifyDone(true);
+            router.refresh();
+          }}
+        />
       ),
     },
     {
       key: "events",
-      title: "予定を用意する",
+      title: "④ 予定を用意する",
       lead: "Google カレンダーにいつも通り予定を入れるだけ。数分でこのアプリに取り込まれます。今すぐ反映するには下のボタン。",
       done: step2,
       action: step1 ? (
@@ -120,13 +148,13 @@ export function GuidedSetup({ step1, step2, step3, step5 }: Props) {
         </form>
       ) : (
         <p className="text-xs text-muted">
-          先に「Google カレンダーとつなぐ」を済ませてください。
+          先に「① Google カレンダーとつなぐ」を済ませてください。
         </p>
       ),
     },
     {
       key: "list",
-      title: "準備リストを1つ見てみる",
+      title: "⑤ 準備リストを1つ見てみる",
       lead: "予定を1つひらくと「準備すること」「持ち物」が用意されています。いる／いらないを直すと、次の似た予定から精度が上がります。",
       done: step3,
       action: step2 ? (
@@ -135,7 +163,7 @@ export function GuidedSetup({ step1, step2, step3, step5 }: Props) {
         </Link>
       ) : (
         <p className="text-xs text-muted">
-          先に「予定を用意する」を済ませてください。
+          先に「④ 予定を用意する」を済ませてください。
         </p>
       ),
     },
@@ -152,7 +180,7 @@ export function GuidedSetup({ step1, step2, step3, step5 }: Props) {
 
   return (
     <div className="fixed inset-0 z-[55] flex items-end justify-center bg-black/40 p-4 sm:items-center">
-      <div className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-2xl">
+      <div className="max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-surface p-5 shadow-2xl">
         <div className="flex items-center justify-between">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
             はじめかた ステップ {currentIndex + 1} / {total}
@@ -170,6 +198,19 @@ export function GuidedSetup({ step1, step2, step3, step5 }: Props) {
           {cur.title}
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-muted">{cur.lead}</p>
+
+        {cur.how && (
+          <ol className="mt-3 space-y-1.5 rounded-xl bg-surface-muted p-3 text-[13px] leading-relaxed text-foreground">
+            {cur.how.map((h, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="shrink-0 font-semibold text-muted">
+                  {i + 1}.
+                </span>
+                <span>{h}</span>
+              </li>
+            ))}
+          </ol>
+        )}
 
         <div className="mt-4">{cur.action}</div>
 

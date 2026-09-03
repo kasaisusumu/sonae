@@ -73,25 +73,29 @@ export default async function FailuresPage() {
   const categoryNames = Array.from(
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
   );
-  // 予定に紐づく記録は、その予定が終わってから振り返る。
   const now = new Date();
   const eventEnded = (l: (typeof logs)[number]) =>
-    !l.event || (l.event.endDatetime ?? l.event.eventDatetime) <= now;
-  // アプリが提案しただけで、その予定に採用（linked）されなかった失敗は「記録」では
-  // ない。結果の確認はしない（一覧の各セクションにも出さない）。
-  const isUnadopted = (l: (typeof logs)[number]) =>
-    !!l.event && l.outcome === null;
+    !!l.event && (l.event.endDatetime ?? l.event.eventDatetime) <= now;
 
-  const reviewableLogs = logs.filter((l) => !isUnadopted(l) && eventEnded(l));
-  // これまでの記録は 2 つだけ:
-  //  - これからの失敗予測 = 採用済みで、予定がまだ先のもの
-  //  - 過去の失敗予測の振り返り = 予定が終わっていて、結果が決まっているもの
+  // 「結果を記録しよう」に出すのは、本当にその予定に採用（linked）されていて、
+  // その予定が過ぎていて、まだ結果が入力されていないものだけ。予定に紐づかない
+  // 記録や、採用されなかった提案（outcome=null）は出さない。
+  //（決着済み行も渡してスナップショット表示を続ける＝離脱まで消えない）
+  const reviewableLogs = logs.filter(
+    (l) => !!l.event && eventEnded(l) && l.outcome !== null,
+  );
+  // 「これまでの記録」の折りたたみ:
   const upcomingPredictions = logs.filter(
-    (l) => !isUnadopted(l) && !!l.event && !eventEnded(l),
-  );
+    (l) => !!l.event && !eventEnded(l) && l.outcome !== null,
+  ); // 採用済み・予定が先
   const pastReviewed = logs.filter(
-    (l) => !isUnadopted(l) && eventEnded(l) && !!l.outcome,
-  );
+    (l) =>
+      !!l.event &&
+      eventEnded(l) &&
+      l.outcome !== null &&
+      l.outcome !== "linked",
+  ); // 予定が終わって結果も決まっている
+  const unlinkedLogs = logs.filter((l) => !l.event); // 予定に紐づかない記録（状態問わず）
 
   return (
     <div className="space-y-8">
@@ -227,11 +231,26 @@ export default async function FailuresPage() {
               </details>
             )}
 
-            {upcomingPredictions.length === 0 && pastReviewed.length === 0 && (
-              <p className="rounded-2xl bg-surface px-4 py-6 text-center text-sm text-muted">
-                済んだ記録はまだありません。
-              </p>
+            {unlinkedLogs.length > 0 && (
+              <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
+                <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
+                  ▸ 予定に紐づかない記録を見る（{unlinkedLogs.length}件）
+                </summary>
+                {/* カテゴリ全体の記録。ここでも結果を選べるが、確認コーナーには出さない。 */}
+                <StickyReviewRows
+                  className="mt-2 space-y-2"
+                  rows={unlinkedLogs.map(toFR)}
+                />
+              </details>
             )}
+
+            {upcomingPredictions.length === 0 &&
+              pastReviewed.length === 0 &&
+              unlinkedLogs.length === 0 && (
+                <p className="rounded-2xl bg-surface px-4 py-6 text-center text-sm text-muted">
+                  済んだ記録はまだありません。
+                </p>
+              )}
           </>
         )}
       </section>

@@ -100,9 +100,14 @@ function PendingChoice({ log }: { log: RQLog }) {
  * 他ページへ移動して戻る＝再マウントで、片付いたものは外れる。
  * 形式は予定詳細ページの振り返り（WarningPanel）と同じ。金額・結果は自動保存。
  */
+// 「まだ結果が入力されていない」＝採用済み（linked）で結果が決まっていない。
+const isPending = (l: RQLog) => l.outcome === "linked";
+// 結果が決まった（＝片付いた）。
+const isSettled = (l: RQLog) => !!l.outcome && l.outcome !== "linked";
+
 export function ReviewQueue({ logs }: { logs: RQLog[] }) {
   const [pendingIds] = useState(
-    () => new Set(logs.filter((l) => !l.outcome).map((l) => l.id)),
+    () => new Set(logs.filter(isPending).map((l) => l.id)),
   );
 
   const byId = new Map(logs.map((l) => [l.id, l]));
@@ -111,7 +116,7 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
     .filter((l): l is RQLog => !!l);
 
   if (rows.length === 0) return null;
-  const remaining = rows.filter((r) => !r.outcome).length;
+  const remaining = rows.filter(isPending).length;
 
   return (
     <section id="review" className="scroll-mt-4 space-y-3">
@@ -124,7 +129,7 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
       </h2>
 
       {rows.map((l) => {
-        const settled = !!l.outcome;
+        const settled = isSettled(l);
         return (
           <div
             key={l.id}

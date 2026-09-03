@@ -1342,9 +1342,11 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
       : "unset";
   if (!failureLogId) return;
 
-  // 振り返り時に金額を改めて入力・修正できる（空欄なら既存のまま）。
+  // 振り返り時に金額を改めて入力・修正できる。金額フィールドが送られてきたら
+  // その値を採用する（空欄は 0）。フィールド自体が無いとき（結果だけ変える
+  // RetroOutcomeSelect など）だけ、既存の金額を保つ。
   const rawAmount = formData.get("estimatedLossYen");
-  const hasAmount = rawAmount !== null && String(rawAmount).trim() !== "";
+  const hasAmount = rawAmount !== null;
   const newAmount = hasAmount ? parseYen(rawAmount) : null;
 
   const log = await prisma.failureLog.findFirst({
@@ -1458,8 +1460,9 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
   if (!log) return;
 
   const description = String(formData.get("description") ?? "").trim();
+  // 金額フィールドが送られてきたら採用（空欄は 0）。フィールドが無いときだけ現状維持。
   const rawAmount = formData.get("estimatedLossYen");
-  const hasAmount = rawAmount !== null && String(rawAmount).trim() !== "";
+  const hasAmount = rawAmount !== null;
   const amount = hasAmount ? parseYen(rawAmount) : null;
   const occurredAtRaw = String(formData.get("occurredAt") ?? "").trim();
   const occurredAt = occurredAtRaw ? parseJstDate(occurredAtRaw) : null;
@@ -1597,9 +1600,10 @@ export async function markPrevented(formData: FormData): Promise<void> {
   ]);
   if (!event || !template) return;
 
-  // 振り返りで金額を改めて入力できる（空欄なら既存のまま）。
+  // 振り返りで金額を改めて入力できる。金額フィールドが送られてきたら採用（空欄は 0）。
+  // フィールド自体が無いときだけ、元の失敗ログの推定額を引き継ぐ。
   const rawAmount = formData.get("estimatedLossYen");
-  const hasAmount = rawAmount !== null && String(rawAmount).trim() !== "";
+  const hasAmount = rawAmount !== null;
   const amount = hasAmount ? parseYen(rawAmount) : template.estimatedLossYen;
 
   // この予定に紐づく「今回の結果」ログを 1 件用意する。

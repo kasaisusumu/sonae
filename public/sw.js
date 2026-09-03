@@ -1,4 +1,4 @@
-/* 勝手に予定分解くん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v7 */
+/* 私の準備マニュアル Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v8 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -20,11 +20,11 @@ self.addEventListener("push", (event) => {
     data = event.data ? event.data.json() : {};
   } catch {
     data = {
-      title: "勝手に予定分解くん",
+      title: "私の準備マニュアル",
       body: event.data ? event.data.text() : "",
     };
   }
-  const title = data.title || "勝手に予定分解くん";
+  const title = data.title || "私の準備マニュアル";
   const url = data.url || urlFromTag(data.tag) || "/";
   event.waitUntil(
     self.registration.showNotification(title, {

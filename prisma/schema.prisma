@@ -19,6 +19,10 @@ model User {
   name      String?
   email     String   @unique
   createdAt DateTime @default(now())
+  // 導入チュートリアル（概念スライド）を完了/スキップした日時。
+  // PWA を「ホーム画面に追加」すると localStorage が別ストレージになり
+  // チュートリアルが再表示されるため、完了状態はサーバー側でも持つ。
+  tutorialSeenAt DateTime?
 
   googleAccount  UserGoogleAccount?
   categories     Category[]

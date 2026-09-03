@@ -152,11 +152,16 @@ function writeFlag(key: string) {
   }
 }
 
-export function PageCoach() {
+export function PageCoach({
+  tutorialDone = false,
+}: {
+  tutorialDone?: boolean;
+}) {
   const pathname = usePathname();
   const [tour, setTour] = useState<Tour | null>(null);
   const [idx, setIdx] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
+  const [nudge, setNudge] = useState(false);
   const rectRef = useRef<Rect | null>(null);
 
   const applyRect = useCallback((r: Rect | null) => {
@@ -188,6 +193,7 @@ export function PageCoach() {
       setRect(null);
       setIdx(0);
       setTour(null);
+      setNudge(false);
     });
 
     if (!t || readFlag(t.key)) {
@@ -196,11 +202,38 @@ export function PageCoach() {
       };
     }
 
-    // スライド式チュートリアルが閉じるのを待ってから開始
-    //（Suspense のストリーミング描画を少し待つ意味も兼ねる）
+    // 導入チュートリアルが完全に終わってから開始する。
+    // 終わっていない（サーバー側フラグも localStorage も無い）なら、代わりに
+    // 「先にチュートリアルを見て」の誘導ポップアップを出す。
+    const introDone = () => {
+      try {
+        return tutorialDone || localStorage.getItem("mm_tutorial_v3") != null;
+      } catch {
+        return tutorialDone;
+      }
+    };
+    const anotherPopup = () =>
+      !!document.querySelector(
+        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-prevent-goals]",
+      );
+
     const start = () => {
       if (cancelled) return;
-      if (document.querySelector("[data-mm-tutorial]")) {
+      if (!introDone()) {
+        // チュートリアル自体が出ている間は何もしない（あとで再判定）
+        if (document.querySelector("[data-mm-tutorial]")) {
+          window.setTimeout(start, 500);
+          return;
+        }
+        try {
+          if (sessionStorage.getItem("mm_coach_nudge_v1")) return;
+        } catch {
+          /* ignore */
+        }
+        setNudge(true);
+        return;
+      }
+      if (anotherPopup()) {
         window.setTimeout(start, 400);
         return;
       }
@@ -211,7 +244,7 @@ export function PageCoach() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [pathname]);
+  }, [pathname, tutorialDone]);
 
   // メニューの「このページの使い方をみる」から手動で開始する。
   // このページにツアーが無ければ何もしない。
@@ -349,6 +382,51 @@ export function PageCoach() {
       new CustomEvent("mm:coach", { detail: { active: !!tour } }),
     );
   }, [tour, idx]);
+
+  // 導入チュートリアル未完了の誘導ポップアップ
+  if (nudge && !tour) {
+    return (
+      <div
+        data-mm-coach
+        className="fixed inset-0 z-[57] flex items-center justify-center bg-black/50 p-4"
+      >
+        <div className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-2xl">
+          <h2 className="text-base font-semibold text-foreground">
+            先に「アプリの使い方」を見てみませんか？
+          </h2>
+          <p className="mt-2 text-sm text-muted">
+            最初にアプリ全体のチュートリアルを見ておくと、各ページの案内もスムーズです。
+          </p>
+          <div className="mt-5 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  sessionStorage.setItem("mm_coach_nudge_v1", "1");
+                } catch {
+                  /* ignore */
+                }
+                setNudge(false);
+              }}
+              className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:border-foreground/40"
+            >
+              あとで
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new Event("mm:open-tutorial"));
+                setNudge(false);
+              }}
+              className="rounded-lg bg-foreground px-4 py-1.5 text-sm font-medium text-surface hover:opacity-90"
+            >
+              使い方を見る
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!tour || !rect) return null;
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { markTutorialSeen } from "@/app/actions";
 
 const KEY = "mm_tutorial_v3";
 const EVENT = "mm:open-tutorial";
@@ -63,7 +64,7 @@ function Visual({ id }: { id: string }): ReactNode {
         <pre className="overflow-x-auto rounded-lg border border-border bg-background p-3 text-[10px] leading-relaxed text-muted">
           {`（元の予定メモ）
 
---- 勝手に予定分解くん ---
+--- 私の準備マニュアル ---
 準備リスト: https://…
 
 【予想される失敗】
@@ -196,7 +197,7 @@ function Visual({ id }: { id: string }): ReactNode {
   return null;
 }
 
-export function Tutorial() {
+export function Tutorial({ tutorialDone = false }: { tutorialDone?: boolean }) {
   const [open, setOpen] = useState(false);
   const [i, setI] = useState(0);
 
@@ -209,14 +210,19 @@ export function Tutorial() {
     try {
       // 「防ぎたい失敗」の初回プロンプトが先。それが終わってから自動表示する
       //（終了時に mm:open-tutorial を投げてくれる）。手動再生は EVENT で常に可能。
-      if (!localStorage.getItem(KEY) && localStorage.getItem("mm_prevent_goals_v1")) {
+      // 完了状態はサーバー側でも持つ（PWA でも再表示しないため）。
+      if (
+        !tutorialDone &&
+        !localStorage.getItem(KEY) &&
+        localStorage.getItem("mm_prevent_goals_v1")
+      ) {
         queueMicrotask(show);
       }
     } catch {
       /* localStorage 不可の環境では出さない */
     }
     return () => window.removeEventListener(EVENT, show);
-  }, []);
+  }, [tutorialDone]);
 
   function finish() {
     try {
@@ -224,6 +230,7 @@ export function Tutorial() {
     } catch {
       /* ignore */
     }
+    void markTutorialSeen();
     setOpen(false);
   }
 

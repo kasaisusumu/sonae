@@ -20,14 +20,14 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "勝手に予定分解くん — 予定の準備リスト",
+  title: "私の準備マニュアル — 予定の準備リスト",
   description:
     "予定を入れるだけで準備リストを自動生成。編集を学習して自分専用マニュアルに育てます。",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "勝手に予定分解くん",
+    title: "私の準備マニュアル",
   },
   icons: {
     icon: "/icons/icon-192.png",
@@ -52,17 +52,26 @@ export default async function RootLayout({
 
   // 「結果記録待ち」の失敗ログ数（ナビにドットを出す）。1 件の軽い count。
   let pendingReview = 0;
+  let tutorialDone = false;
   if (uid) {
-    // 「結果を記録しよう」に出るのと同じ条件:
-    // その予定に採用（linked）されていて、予定が過ぎていて、結果が未入力のものだけ。
-    pendingReview = await prisma.failureLog.count({
-      where: {
-        userId: uid,
-        outcome: "linked",
-        eventId: { not: null },
-        event: { eventDatetime: { lte: new Date() } },
-      },
-    });
+    const [count, me] = await Promise.all([
+      // 「結果を記録しよう」に出るのと同じ条件:
+      // その予定に採用（linked）されていて、予定が過ぎていて、結果が未入力のものだけ。
+      prisma.failureLog.count({
+        where: {
+          userId: uid,
+          outcome: "linked",
+          eventId: { not: null },
+          event: { eventDatetime: { lte: new Date() } },
+        },
+      }),
+      prisma.user.findUnique({
+        where: { id: uid },
+        select: { tutorialSeenAt: true },
+      }),
+    ]);
+    pendingReview = count;
+    tutorialDone = !!me?.tutorialSeenAt;
   }
 
   return (
@@ -71,8 +80,8 @@ export default async function RootLayout({
         <SwRegister />
         {isLoggedIn ? <LiveSync /> : null}
         {isLoggedIn ? <PreventGoals /> : null}
-        {isLoggedIn ? <Tutorial /> : null}
-        {isLoggedIn ? <PageCoach /> : null}
+        {isLoggedIn ? <Tutorial tutorialDone={tutorialDone} /> : null}
+        {isLoggedIn ? <PageCoach tutorialDone={tutorialDone} /> : null}
 
         <header className="sticky top-0 z-30 border-b border-border bg-surface">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5 sm:px-5 sm:py-3">
@@ -80,7 +89,7 @@ export default async function RootLayout({
               {isLoggedIn ? <MenuButton /> : null}
               <Link href="/" className="flex items-baseline gap-2 no-underline">
                 <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">
-                  勝手に予定分解くん
+                  私の準備マニュアル
                 </span>
                 <span className="hidden text-xs text-muted sm:inline">
                   予定の準備、わすれない
@@ -120,7 +129,7 @@ export default async function RootLayout({
 
         <footer className="border-t bg-surface">
           <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-4 text-xs text-muted">
-            <span>勝手に予定分解くん（検証版）— 表示される金額はすべて推定値です。</span>
+            <span>私の準備マニュアル（検証版）— 表示される金額はすべて推定値です。</span>
             <span className="flex items-center gap-3">
               <Link
                 href="/privacy"

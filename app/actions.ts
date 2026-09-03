@@ -1661,6 +1661,19 @@ export async function markPrevented(formData: FormData): Promise<void> {
 
 
 // ─────────────────────────────────────────────
+// オンボーディング
+// ─────────────────────────────────────────────
+
+/** 導入チュートリアルを完了/スキップしたことをサーバー側にも記録する。 */
+export async function markTutorialSeen(): Promise<void> {
+  const userId = await requireUserId();
+  await prisma.user.updateMany({
+    where: { id: userId, tutorialSeenAt: null },
+    data: { tutorialSeenAt: new Date() },
+  });
+}
+
+// ─────────────────────────────────────────────
 // 通知（Web Push）購読の登録・解除
 // ─────────────────────────────────────────────
 
@@ -1710,7 +1723,7 @@ export async function sendTestPush(): Promise<TestPushResult> {
     return { configured, subscriptions, sent: 0, removed: 0 };
   }
   const { sent, removed } = await sendPushToUser(userId, {
-    title: "勝手に予定分解くん：通知テスト",
+    title: "私の準備マニュアル：通知テスト",
     body: "予定が追加されると、このように通知が届きます。",
     url: "/",
     tag: "test",

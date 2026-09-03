@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { CONTACT, LegalPage, OPERATOR, Sec } from "@/app/legal";
 
 export const metadata: Metadata = {
-  title: "利用規約 — 勝手に予定分解くん",
+  title: "利用規約 — 私の準備マニュアル",
 };
 
 export default function TermsPage() {
@@ -10,7 +10,7 @@ export default function TermsPage() {
     <LegalPage title="利用規約">
       <p>
         本利用規約（以下「本規約」）は、{OPERATOR}
-        が提供する「勝手に予定分解くん」（以下「本サービス」）の利用条件を定めるものです。
+        が提供する「私の準備マニュアル」（以下「本サービス」）の利用条件を定めるものです。
         本サービスを利用した時点で、本規約に同意したものとみなします。
       </p>
 

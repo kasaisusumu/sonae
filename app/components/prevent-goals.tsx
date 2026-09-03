@@ -67,7 +67,10 @@ export function PreventGoals() {
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 z-[61] flex items-center justify-center bg-black/55 p-4">
+    <div
+      data-mm-prevent-goals
+      className="fixed inset-0 z-[61] flex items-center justify-center bg-black/55 p-4"
+    >
       <div className="flex max-h-[85vh] w-full max-w-sm flex-col overflow-y-auto rounded-2xl bg-surface p-6 shadow-2xl">
         <h2 className="text-lg font-semibold text-foreground">
           防ぎたい失敗はなんですか？

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
-export type TemplateKind = "task" | "belonging";
+// "task" / "belonging" のほか、ユーザーが新設した枠キー（＝表示名）も入りうる。
+export type TemplateKind = "task" | "belonging" | (string & {});
 
 export type TemplateItem = {
   id: string;
@@ -35,7 +36,7 @@ export async function getUserTemplates(
   });
   return rows.map((t) => ({
     id: t.id,
-    kind: t.kind === "belonging" ? "belonging" : "task",
+    kind: t.kind || "task",
     name: t.name,
     updatedAt: t.updatedAt,
     items: t.items.map((i) => ({

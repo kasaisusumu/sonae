@@ -1753,16 +1753,29 @@ export async function saveListAsTemplate(formData: FormData): Promise<void> {
   revalidateAppViews(eventId);
 }
 
-/** 学習内容ページから、名前を付けたリストを新規作成する（一括貼り付け対応）。 */
+/**
+ * 学習内容ページから、名前を付けたリストを新規作成する。
+ * - 枠: `customKind` があればそれを新しい枠キーに（表示名＝キー）。無ければ task/belonging。
+ * - `tidy=1` のときは自由文（音声入力含む）を AI で項目に整えてから作る。それ以外は行分割。
+ */
 export async function createListTemplate(formData: FormData): Promise<void> {
   const userId = await requireUserId();
-  const kind = readKind(formData.get("kind"));
+  const customKind = String(formData.get("customKind") ?? "")
+    .trim()
+    .slice(0, 24);
+  const kind = customKind
+    ? sectionKeyFromLabel(customKind)
+    : readKind(formData.get("kind"));
   const name = String(formData.get("name") ?? "")
     .trim()
     .slice(0, 60);
   if (!name) return;
 
-  const titles = parseBulkTitles(String(formData.get("bulkText") ?? ""));
+  const bulk = String(formData.get("bulkText") ?? "");
+  const titles =
+    String(formData.get("tidy") ?? "") === "1"
+      ? await (await import("@/lib/tidy-list")).tidyListItems(bulk)
+      : parseBulkTitles(bulk);
 
   await prisma.listTemplate.upsert({
     where: { userId_kind_name: { userId, kind, name } },

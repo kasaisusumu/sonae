@@ -7,6 +7,7 @@ import {
 } from "@/lib/learning";
 import { formatLead } from "@/lib/lead-time";
 import { getUserTemplates } from "@/lib/templates";
+import { sectionLabel } from "@/lib/sections";
 import { InfoHint } from "@/app/components/info-hint";
 import { type SearchEntry } from "./learning-search";
 import { LearningExplorer } from "./learning-explorer";
@@ -204,13 +205,9 @@ export default async function LearningTreePage() {
     })),
     ...templates.map((t) => ({
       kind: "template" as const,
-      tplKind: t.kind,
       anchor: `tpl-${t.id}`,
       title: t.name,
-      crumb:
-        t.kind === "belonging"
-          ? "テンプレート › 持ち物"
-          : "テンプレート › 準備すること",
+      crumb: `テンプレート › ${sectionLabel(t.kind)}`,
       keywords: [],
       items: t.items.map((i) => i.title),
     })),

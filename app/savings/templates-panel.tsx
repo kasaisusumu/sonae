@@ -1,17 +1,15 @@
 import {
-  createListTemplate,
   deleteListTemplate,
   duplicateListTemplate,
   renameListTemplate,
   setListTemplateKind,
 } from "@/app/actions";
 import type { TemplateDetail } from "@/lib/templates";
-import { SubmitButton } from "@/app/components/submit-button";
+import { sectionLabel } from "@/lib/sections";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { TemplateEditor } from "./template-editor";
 import { CopyTemplateButton } from "./copy-template-button";
-
-const KIND_LABEL = { task: "準備すること", belonging: "持ち物" } as const;
+import { NewTemplateForm } from "./new-template-form";
 
 function TemplateCard({ t }: { t: TemplateDetail }) {
   return (
@@ -23,7 +21,7 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
         <span className="min-w-0">
           {t.name}
           <span className="ml-1 font-normal text-muted">
-            （{KIND_LABEL[t.kind]}）
+            （{sectionLabel(t.kind)}）
           </span>
           <span className="ml-1.5 text-xs font-normal text-muted">
             {t.items.length}項目
@@ -61,6 +59,9 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
           >
             <option value="task">準備すること</option>
             <option value="belonging">持ち物</option>
+            {t.kind !== "task" && t.kind !== "belonging" && (
+              <option value={t.kind}>{t.kind}（現在の枠）</option>
+            )}
           </select>
           <button
             type="submit"
@@ -125,49 +126,12 @@ export function TemplatesGroup({ templates }: { templates: TemplateDetail[] }) {
         </div>
       )}
 
-      {/* 新規作成（一括貼り付け対応） */}
+      {/* 新規作成（一括貼り付け・音声入力・AI整列・枠の新設に対応） */}
       <details className="rounded-xl bg-background p-3 [&_summary::-webkit-details-marker]:hidden">
         <summary className="cursor-pointer list-none text-xs font-medium text-teal-dark">
           ＋ 新しいリストを作る
         </summary>
-        <form action={createListTemplate} className="mt-2 space-y-2">
-          <div className="flex items-center gap-3 text-xs">
-            <span className="text-muted">どの枠：</span>
-            <label className="flex items-center gap-1">
-              <input
-                type="radio"
-                name="kind"
-                value="task"
-                defaultChecked
-                className="accent-[var(--foreground)]"
-              />
-              準備すること
-            </label>
-            <label className="flex items-center gap-1">
-              <input
-                type="radio"
-                name="kind"
-                value="belonging"
-                className="accent-[var(--foreground)]"
-              />
-              持ち物
-            </label>
-          </div>
-          <input
-            name="name"
-            required
-            maxLength={60}
-            placeholder="リスト名（例: 日帰り出張の持ち物）"
-            className="w-full rounded-lg border bg-surface px-3 py-2 text-sm"
-          />
-          <textarea
-            name="bulkText"
-            rows={4}
-            placeholder={"項目を1行に1つ貼り付け\n充電器\nモバイルバッテリー\n常備薬"}
-            className="w-full rounded-lg border bg-surface px-3 py-2 text-sm"
-          />
-          <SubmitButton>作成する</SubmitButton>
-        </form>
+        <NewTemplateForm />
       </details>
     </div>
   );

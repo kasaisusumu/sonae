@@ -12,6 +12,7 @@ import { LiveSync } from "@/app/components/live-sync";
 import { PreventGoals } from "@/app/components/prevent-goals";
 import { Tutorial } from "@/app/components/tutorial";
 import { PageCoach } from "@/app/components/page-coach";
+import { NotifyNag } from "@/app/components/notify-nag";
 import { MenuButton } from "@/app/components/menu-button";
 
 const geistSans = Geist({
@@ -53,8 +54,9 @@ export default async function RootLayout({
   // 「結果記録待ち」の失敗ログ数（ナビにドットを出す）。1 件の軽い count。
   let pendingReview = 0;
   let tutorialDone = false;
+  let hasPushSubscription = false;
   if (uid) {
-    const [count, me] = await Promise.all([
+    const [count, me, pushCount] = await Promise.all([
       // 「結果を記録しよう」に出るのと同じ条件:
       // その予定に採用（linked）されていて、予定が過ぎていて、結果が未入力のものだけ。
       prisma.failureLog.count({
@@ -69,10 +71,13 @@ export default async function RootLayout({
         where: { id: uid },
         select: { tutorialSeenAt: true },
       }),
+      prisma.pushSubscription.count({ where: { userId: uid } }),
     ]);
     pendingReview = count;
     tutorialDone = !!me?.tutorialSeenAt;
+    hasPushSubscription = pushCount > 0;
   }
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
 
   return (
     <html lang="ja" className={`${geistSans.variable} h-full`}>
@@ -82,6 +87,12 @@ export default async function RootLayout({
         {isLoggedIn ? <PreventGoals /> : null}
         {isLoggedIn ? <Tutorial tutorialDone={tutorialDone} /> : null}
         {isLoggedIn ? <PageCoach tutorialDone={tutorialDone} /> : null}
+        {isLoggedIn ? (
+          <NotifyNag
+            publicKey={vapidPublicKey}
+            hasSubscription={hasPushSubscription}
+          />
+        ) : null}
 
         <header className="sticky top-0 z-30 border-b border-border bg-surface">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5 sm:px-5 sm:py-3">

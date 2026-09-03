@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,8 +12,40 @@ const TABS = [
   { href: "/settings", label: "設定" },
 ];
 
+/**
+ * スマホのキーボードが出ている間だけ true。
+ * キーボードで visualViewport が縮むと、`position:fixed; bottom:0` のバーが
+ * キーボードの上まで“せり上がって”画面中央に浮いてしまうため、その間は隠す。
+ * URL バーの伸縮（〜100px）で誤検知しないよう、しきい値は大きめ（150px）。
+ */
+function useKeyboardOpen(): boolean {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const update = () => {
+      const hidden = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      setOpen(hidden > 150);
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+
+  return open;
+}
+
 export function BottomNav({ pendingReview = 0 }: { pendingReview?: number }) {
   const pathname = usePathname();
+  const keyboardOpen = useKeyboardOpen();
+
+  // キーボードが出ている間はバーを出さない（せり上がり防止）。
+  if (keyboardOpen) return null;
 
   return (
     <nav

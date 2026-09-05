@@ -21,8 +21,11 @@ export function StickyReviewRows({
   rows: FRRow[];
   className?: string;
 }) {
-  // マウント時のスナップショット。以後 rows が減っても・並びが変わっても表示は保つ。
+  // マウント時に「どの行を・どの順で」出すかだけ固定する（結果を変えても行が
+  // 消えない・並び替わらないため）。金額や結果などの中身は毎回 rows の最新を使う。
+  // rows から消えた行だけ、最後に見えていた内容（スナップショット）で残す。
   const [snapshot] = useState(() => rows);
+  const freshById = new Map(rows.map((r) => [r.id, r] as const));
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
   const [, start] = useTransition();
 
@@ -49,14 +52,14 @@ export function StickyReviewRows({
 
   return (
     <ul className={className}>
-      {snapshot.map((r, i) => {
-        const outcome =
-          r.id in overrides ? overrides[r.id] : r.outcome;
+      {snapshot.map((s, i) => {
+        const r = freshById.get(s.id) ?? s; // 中身は最新優先、消えた行は当時のまま
+        const outcome = s.id in overrides ? overrides[s.id] : r.outcome;
         return (
           <FailureReviewRow
-            key={r.id || `x${i}`}
+            key={s.id || `x${i}`}
             log={{ ...r, outcome }}
-            onOutcome={(t) => handleOutcome(r.id, t)}
+            onOutcome={(t) => handleOutcome(s.id, t)}
           />
         );
       })}

@@ -11,7 +11,7 @@ import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
 import { parseLeads } from "@/lib/lead-time";
-import { markListReviewed } from "@/app/actions";
+import { markListReviewed, generateChecklistForEvent } from "@/app/actions";
 import { Suspense } from "react";
 import {
   FAILURE_LOG_KEY,
@@ -102,6 +102,9 @@ export async function ChecklistSection({
     recurringEventId: string | null;
     failureWarningAckAt: Date | null;
     listReminderLeads: string;
+    // 連携時に取り込んだ既存の予定は false。この間は開いても自動生成しない
+    // （下の「準備リストを作る」ボタンを押したときだけ生成する）。
+    autoManaged: boolean;
     category: { name: string } | null;
   };
 }) {
@@ -125,8 +128,13 @@ export async function ChecklistSection({
   ]);
   let items = itemsAndFlag[0];
   const listCleared = itemsAndFlag[1]?.listCleared ?? false;
+  const needsGeneration = items.length === 0 && !listCleared;
+  // 連携時に取り込んだ既存の予定（autoManaged=false）は、開いただけでは自動生成
+  // しない（ユーザー指定）。それ以外（新規に追加された予定・手動追加）は今まで
+  // 通り、開いた瞬間に生成する。
+  const needsManualGenerate = needsGeneration && !event.autoManaged;
   // ユーザーが意図的に全部消した予定は、二度と自動生成・自動提案しない。
-  if (items.length === 0 && !listCleared) {
+  if (needsGeneration && event.autoManaged) {
     await ensureChecklistForEvent(event.id);
     items = await prisma.checklistItem.findMany({
       where: { eventId: event.id },
@@ -246,6 +254,25 @@ export async function ChecklistSection({
           <DictationInput eventId={event.id} />
         </div>
 
+        {needsManualGenerate && (
+          <div
+            data-coach="generate-checklist"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-muted px-4 py-3"
+          >
+            <p className="flex items-center gap-1.5 text-xs text-foreground">
+              連携時に取り込んだ予定です。準備リストはまだ作っていません
+              <InfoHint>
+                自分で予定に入れる前からあった予定は、開いても自動では作りません。
+                このボタンを押すと、今この場で準備リスト・考えられる失敗を作ります。
+              </InfoHint>
+            </p>
+            <form action={generateChecklistForEvent}>
+              <input type="hidden" name="eventId" value={event.id} />
+              <SubmitButton>🪄 準備リストを作る</SubmitButton>
+            </form>
+          </div>
+        )}
+
         {unreviewed && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-muted px-4 py-3">
             <p className="flex items-center gap-1.5 text-xs text-foreground">
@@ -274,6 +301,7 @@ export async function ChecklistSection({
                     <EventFailureLog
                       eventId={event.id}
                       userId={event.userId}
+                      skipSuggest={needsManualGenerate}
                     />
                   </Suspense>
                 ),

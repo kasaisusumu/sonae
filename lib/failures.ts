@@ -215,10 +215,11 @@ function buildClusters(
   const clusters: WarningCluster[] = groups.map((g) => {
     const occurredCount = g.members.length;
     const lastOccurredAt = g.rep.occurredAt; // sorted desc なので rep が最新
-    const estimatedLossYen = g.members.reduce(
-      (m, x) => Math.max(m, x.estimatedLossYen),
-      0,
-    );
+    // 提案する金額は「これまでの最大」ではなく「直近に記録・採用された金額」。
+    // members は新しい→古い順（sorted 済みの並びを保って push している）ので、
+    // 金額が入っている最初のもの＝直近の金額。書き換えれば次の提案にすぐ反映される。
+    const estimatedLossYen =
+      g.members.find((x) => x.estimatedLossYen > 0)?.estimatedLossYen ?? 0;
     const preventedCount = g.members.reduce(
       (s, x) => s + (preventedCountByLogId.get(x.id) ?? 0),
       0,
@@ -656,10 +657,17 @@ export async function suggestFailureLogsForEvent(
 
   type Scored = FailureSuggestion & { occurredAt: Date };
   const byKey = new Map<string, Scored>();
+  // 提案する金額は「マッチ度が一番高いログの金額」ではなく「同じ内容の失敗で
+  // 直近に記録・採用された金額」。logs は occurredAt 降順なので、そのキーで
+  // 最初に金額>0 に出会った時点のもの＝直近の金額（以後は上書きしない）。
+  const latestAmountByKey = new Map<string, number>();
 
   for (const l of logs) {
     const key = clusterKey(l.description);
     if (!key || ownKeys.has(key) || dismissedKeys.has(key)) continue;
+    if (l.estimatedLossYen > 0 && !latestAmountByKey.has(key)) {
+      latestAmountByKey.set(key, l.estimatedLossYen);
+    }
 
     // 失敗ログの「予測」は確信度が低くても普通に提案してよい（ユーザー指定）。
     // 同じカテゴリ・似た予定名・特徴シグネチャ一致でゆるくスコアリングして多めに出す。
@@ -706,7 +714,8 @@ export async function suggestFailureLogsForEvent(
     .map((s) => ({
       sourceId: s.sourceId,
       description: s.description,
-      estimatedLossYen: s.estimatedLossYen,
+      estimatedLossYen:
+        latestAmountByKey.get(clusterKey(s.description)) ?? s.estimatedLossYen,
       fromEventTitle: s.fromEventTitle,
       reasons: s.reasons,
       score: s.score,

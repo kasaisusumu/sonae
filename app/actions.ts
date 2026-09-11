@@ -33,7 +33,7 @@ import { featureSignature } from "@/lib/signature";
 import { parseLead, stringifyLeads } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
 import { parseJstDate, parseJstDateTimeLocal } from "@/lib/format";
-import { clusterKey } from "@/lib/failures";
+import { clusterKey, ensureSuggestedFailures } from "@/lib/failures";
 import {
   isBuiltinSection,
   parseSectionOrder,
@@ -345,6 +345,27 @@ export async function ensureChecklist(eventId: string): Promise<void> {
   const event = await prisma.event.findFirst({ where: { id: eventId, userId } });
   if (!event) return;
   await ensureChecklistForEvent(eventId);
+}
+
+/**
+ * 連携時に取り込んだ既存の予定（autoManaged=false）は、開いても自動生成しない
+ * （ユーザー指定）。この「準備リストを作る」ボタンを押したときだけ、ここで初めて
+ * 準備リストと考えられる失敗の提案を作る。生成後はこの予定も自動管理の対象になる
+ * （以後は他の予定と同じ扱い）。
+ */
+export async function generateChecklistForEvent(
+  formData: FormData,
+): Promise<void> {
+  const userId = await requireUserId();
+  const eventId = String(formData.get("eventId") ?? "");
+  const event = await prisma.event.findFirst({ where: { id: eventId, userId } });
+  if (!event) return;
+
+  await ensureChecklistForEvent(eventId);
+  await ensureSuggestedFailures(eventId, userId).catch(() => {});
+  await markAutoManaged(eventId);
+  revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
 }
 
 /** チェック（完了）の即時トグル。詳細ページは再描画せず、一覧の集計だけ更新。 */

@@ -16,16 +16,19 @@ import {
 export async function EventFailureLog({
   eventId,
   userId: userIdProp,
+  skipSuggest = false,
 }: {
   eventId: string;
   /** 省略時はセッションから解決（学習内容ページなどから使う）。 */
   userId?: string;
+  /** true の間は自動提案の取り込みをしない（連携時の既存予定・未生成のとき）。 */
+  skipSuggest?: boolean;
 }) {
   const userId = userIdProp ?? (await getCurrentUser())?.id;
   if (!userId) return null;
 
   // 似た予定でよくある失敗を「未確認」の失敗ログとして先に取り込む（特設コーナーはやめた）。
-  await ensureSuggestedFailures(eventId, userId);
+  if (!skipSuggest) await ensureSuggestedFailures(eventId, userId);
 
   const [linked, others, ev] = await Promise.all([
     prisma.failureLog.findMany({

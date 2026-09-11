@@ -33,6 +33,7 @@ model User {
   pushSubscriptions PushSubscription[]
   listTemplates  ListTemplate[]
   failureDismissals FailureDismissal[]
+  activityMinutes   ActivityMinute[]
 }
 
 // Web Push の購読情報（1 ユーザーが複数端末を持てる）
@@ -317,6 +318,20 @@ model Feedback {
   comment   String?
   screen    String? // どの画面から送信されたか
   createdAt DateTime @default(now())
+}
+
+// 管理画面（/admin）の「利用時間」用の軽量な活動ログ。ログイン中のアクセスのたびに
+// 「このユーザー・この分」を 1 行だけ記録する（同じ分に何度アクセスしても増えない）。
+// ページの内容・操作の中身は記録しない（量＝アクティブだった分数だけを見る）。
+model ActivityMinute {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  minuteAt DateTime // その分の開始時刻（UTC・秒以下は切り捨て）
+  dayKey   String   // JST 日付 "YYYY-MM-DD"（管理画面の日別集計を軽くする非正規化）
+
+  @@unique([userId, minuteAt])
+  @@index([userId, dayKey])
 }
 
 // 名前を付けて保存できる準備リストのテンプレート。

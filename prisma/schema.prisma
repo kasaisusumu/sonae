@@ -98,7 +98,8 @@ model Event {
   eventDatetime DateTime
   endDatetime   DateTime?
   memo          String?
-  googleEventId String?   @unique
+  // Google のイベント ID。ユーザーをまたいで一意にはしない（下の @@unique 参照）。
+  googleEventId String?
   // 繰り返し予定の親イベントID（Google）。同じ系列の通知・生成をまとめるのに使う
   recurringEventId String?
   // 自動で準備リスト生成・説明欄書き込みの対象にするか。
@@ -155,6 +156,12 @@ model Event {
   checklistItemImages ChecklistItemImage[]
 
   @@index([userId, recurringEventId])
+  // 招待・共有された予定は Google 側で複数ユーザーの予定に同じ googleEventId が
+  // 付くことがある（例: 同じ会議に招待された2人のテストユーザー）。ここをユーザー
+  // 横断で一意にすると、後から連携した側の取り込みが「重複」扱いで黙って
+  // 失敗する（相手の予定は無事だが、自分の予定が一切取り込まれない）。
+  // ユーザーごとに一意にして、各自が自分の予定として正しく取り込めるようにする。
+  @@unique([userId, googleEventId])
 }
 
 // 準備リストの「各項目のメモ」に貼り付けた画像。

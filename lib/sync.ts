@@ -210,6 +210,11 @@ export async function syncUserCalendar(
           },
         };
       } catch (e: unknown) {
+        // P2002（一意制約違反）＝ (userId, googleEventId) が既に存在。
+        // 一意制約はユーザーごとなので、これは「自分の別の同期経路（webhook と
+        // cron の競合など）で既に取り込み済み」の場合だけ起きる。他ユーザーが
+        // 同じ会議に招待されていて googleEventId が偶然一致していても、ここでは
+        // 一意制約に触れない＝各自ちゃんと自分の予定として取り込まれる。
         if (
           typeof e === "object" &&
           e !== null &&

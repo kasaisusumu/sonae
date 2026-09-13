@@ -7,6 +7,7 @@ import {
   SectionControls,
 } from "@/app/events/[id]/section-manager";
 import { isBuiltinSection } from "@/lib/sections";
+import { DeleteLearnedEventButton } from "./tree-delete-button";
 
 export interface LeafItem {
   id: string;
@@ -29,10 +30,13 @@ export interface LeafSectionData {
  */
 export function LeafBody({
   eventId,
+  eventIds,
   compact,
   sections,
 }: {
   eventId: string;
+  /** 削除（学習を忘れる）の対象。同名グループなら siblingEventIds も含めて渡す。 */
+  eventIds: string[];
   compact: ReactNode;
   sections: LeafSectionData[];
 }) {
@@ -42,13 +46,16 @@ export function LeafBody({
     return (
       <div>
         {compact}
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="mt-2 rounded-lg border border-border px-3 py-1 text-[11px] text-muted hover:border-teal hover:text-teal-dark"
-        >
-          編集
-        </button>
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="rounded-lg border border-border px-3 py-1 text-[11px] text-muted hover:border-teal hover:text-teal-dark"
+          >
+            編集
+          </button>
+          <DeleteLearnedEventButton eventIds={eventIds} />
+        </div>
       </div>
     );
   }

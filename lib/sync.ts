@@ -311,21 +311,28 @@ export async function refreshEventFromGoogle(
 }
 
 /**
- * 直近に取り込んで「その他」に落ちた Google 予定を、本来のカテゴリに振り直す。
+ * 「その他」に落ちた Google 予定を、本来のカテゴリに振り直す（カテゴリの自動生成）。
  * AI 負荷を抑えるため: 過去の予定は対象外 → 同名の既存予定のカテゴリを流用（AIなし）
  * → 残りだけを 1 回の AI 呼び出しでまとめて分類。
+ *
+ * 対象は呼び出し側で選べる:
+ * - 既定（webhook 用）: 直近15分に取り込まれた `autoManaged=true`（＝連携後に新規追加された）予定。
+ * - `firstSync: true`（連携直後の初回取り込み用）: 時間の縛りなしで `autoManaged=false`
+ *   （＝連携時に一括で取り込んだ既存予定）を対象にする。初回接続は速さ優先で
+ *   キーワードだけで振り分けるため、そのままだと「その他」止まりのカテゴリが
+ *   AI で振り直される機会が一度も無かった。
  */
 export async function refineFallbackCategories(
   userId: string,
   limit = 8,
+  opts: { firstSync?: boolean } = {},
 ): Promise<number> {
-  const since = new Date(Date.now() - 15 * 60_000);
   const targets = await prisma.event.findMany({
     where: {
       userId,
       source: "google",
-      autoManaged: true,
-      createdAt: { gte: since },
+      autoManaged: !opts.firstSync,
+      ...(opts.firstSync ? {} : { createdAt: { gte: new Date(Date.now() - 15 * 60_000) } }),
       eventDatetime: { gte: new Date() }, // 過去の予定は分類不要
       category: { name: FALLBACK_CATEGORY },
     },

@@ -1,10 +1,10 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { exchangeCode, ensureWatch } from "@/lib/google";
 import { setSession } from "@/lib/session";
 import { ensureDefaultCategories } from "@/lib/categories";
-import { syncUserCalendar } from "@/lib/sync";
+import { syncUserCalendar, refineFallbackCategories } from "@/lib/sync";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -72,8 +72,17 @@ export async function GET(req: NextRequest) {
 
     // 接続直後に 1 回だけ取り込み、初回から予定が並んで見えるようにする。
     // （初回同期は通知しない。準備リスト生成は開いたとき／LiveSync に任せる。）
+    // 速さ優先でキーワードだけの判定にしているため、まずは「その他」止まりで表示。
     await syncUserCalendar(user.id, { skipAiCategory: true }).catch((e) =>
       console.error("[auth/callback] 初回同期に失敗:", e),
+    );
+
+    // レスポンスは待たせず、その後で「その他」止まりの予定を AI でカテゴリ分けし直す
+    // （カテゴリの自動生成）。連携直後は既存予定がまとまって入るため、1 回で少し多めに。
+    after(() =>
+      refineFallbackCategories(user.id, 20, { firstSync: true }).catch((e) =>
+        console.error("[auth/callback] 初回カテゴリ振り直しに失敗:", e),
+      ),
     );
 
     const dest = wantedWrite ? "/settings" : "/events?connected=1";

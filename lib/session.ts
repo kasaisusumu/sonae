@@ -8,7 +8,7 @@ export const COOKIE_NAME = "sonae_session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 180; // 180 日（middleware でアクセスのたびに延長）
 const MAX_AGE = SESSION_MAX_AGE;
 
-function secret(): string {
+export function secret(): string {
   const s = process.env.SESSION_SECRET;
   if (!s || s.length < 8) {
     throw new Error("SESSION_SECRET が未設定です。.env を確認してください。");

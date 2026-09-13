@@ -27,6 +27,9 @@ export const GOOGLE_SCOPES = [
 /** 説明欄書き込みを有効にするとき用の追加スコープ込み。 */
 export const GOOGLE_SCOPES_WITH_WRITE = [...GOOGLE_SCOPES, CALENDAR_EVENTS_SCOPE];
 
+/** 本人確認だけしたいとき（管理画面の毎回ログイン確認など）用の最小スコープ。カレンダーには触れない。 */
+export const IDENTITY_SCOPES = ["openid", "email", "profile"];
+
 function required(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`${name} が未設定です。.env を確認してください。`);
@@ -44,12 +47,21 @@ export function makeOAuthClient(): OAuth2Client {
 /**
  * Google 同意画面の URL。
  * withWrite=true のときは calendar.events（予定の編集）も要求する。
+ * identityOnly=true のときはカレンダーに触れず本人確認だけ行う（管理画面の再ログイン用）。
  */
-export function buildConsentUrl(state: string, withWrite = false): string {
+export function buildConsentUrl(
+  state: string,
+  opts: { withWrite?: boolean; identityOnly?: boolean } = {},
+): string {
+  const scope = opts.identityOnly
+    ? IDENTITY_SCOPES
+    : opts.withWrite
+      ? GOOGLE_SCOPES_WITH_WRITE
+      : GOOGLE_SCOPES;
   return makeOAuthClient().generateAuthUrl({
     access_type: "offline",
-    prompt: "consent", // refresh_token を確実に得るため
-    scope: withWrite ? GOOGLE_SCOPES_WITH_WRITE : GOOGLE_SCOPES,
+    prompt: "consent", // refresh_token を確実に得るため／毎回はっきり確認させるため
+    scope,
     include_granted_scopes: true,
     state,
   });

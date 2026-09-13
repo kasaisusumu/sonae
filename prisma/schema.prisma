@@ -35,6 +35,7 @@ model User {
   failureDismissals FailureDismissal[]
   activityMinutes   ActivityMinute[]
   featureEvents     FeatureEvent[]
+  adminLoginTokens  AdminLoginToken[]
 }
 
 // Web Push の購読情報（1 ユーザーが複数端末を持てる）
@@ -348,6 +349,19 @@ model FeatureEvent {
 
   @@index([userId, eventKey])
   @@index([eventKey, occurredAt])
+}
+
+// 管理画面（/admin）に「アクセスのたびに毎回」Google ログインをやり直させるための
+// 使い切りトークン。/admin は有効なトークンが無ければ常に Google 再ログインへ飛ばし、
+// 戻ってきたら発行→即消費（1 回限り）でその 1 回のアクセスだけを許可する。
+model AdminLoginToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
+
+  @@index([userId])
 }
 
 // 名前を付けて保存できる準備リストのテンプレート。

@@ -10,9 +10,15 @@ export async function GET(req: NextRequest) {
   // 既定で「予定の編集」スコープも要求する（説明欄書き込みを初回から有効に）。
   // 読み取りだけにしたい場合は ?write=0 を付ける。
   const withWrite = req.nextUrl.searchParams.get("write") !== "0";
+  // dest=admin は「/admin に毎回ログインし直す」ための本人確認専用フロー
+  // （カレンダーには触れない・戻り先が /admin になる）。
+  const isAdminDest = req.nextUrl.searchParams.get("dest") === "admin";
   try {
     const state = crypto.randomBytes(16).toString("hex");
-    const url = buildConsentUrl(state, withWrite);
+    const url = buildConsentUrl(
+      state,
+      isAdminDest ? { identityOnly: true } : { withWrite },
+    );
     const store = await cookies();
     const cookieOpts = {
       httpOnly: true,
@@ -23,6 +29,11 @@ export async function GET(req: NextRequest) {
     };
     store.set("sonae_oauth_state", state, cookieOpts);
     store.set("sonae_oauth_write", withWrite ? "1" : "0", cookieOpts);
+    if (isAdminDest) {
+      store.set("sonae_oauth_dest", "admin", cookieOpts);
+    } else {
+      store.delete("sonae_oauth_dest");
+    }
     return NextResponse.redirect(url);
   } catch (e) {
     // GOOGLE_CLIENT_ID などの環境変数が未設定のとき

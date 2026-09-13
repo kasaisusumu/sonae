@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatYen, formatDateOnly } from "@/lib/format";
 import { jstDayKey } from "@/lib/activity";
+import { isAdminEmail, consumeAdminLoginToken } from "@/lib/admin-auth";
 import {
   PAGE_KEYS,
   FEATURE_KEYS,
@@ -13,6 +14,8 @@ import {
 
 /**
  * 運営者だけが見る管理一覧。ADMIN_EMAIL（.env / Vercel）に一致するユーザー以外は 404。
+ * さらに、アクセスのたびに毎回 Google 再ログインを挟む（有効な使い切りトークンが
+ * 無ければ /api/auth/google?dest=admin に飛ばす。lib/admin-auth.ts 参照）。
  * フィードバック（WTP アンケート）に加え、利用者ごとのアナリティクス
  * （オンボーディング進捗・利用時間・使用量）と全体サマリーを見られる。
  * 個々の失敗ログ・準備リストの中身は載せない（件数・金額などの集計のみ）。
@@ -20,14 +23,6 @@ import {
 export const dynamic = "force-dynamic";
 
 const DAYS_SHOWN = 14; // 日別利用時間で遡る日数
-
-function isAdmin(email: string | null | undefined): boolean {
-  const allow = (process.env.ADMIN_EMAIL ?? "")
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  return !!email && allow.includes(email.toLowerCase());
-}
 
 function fmtDateTime(d: Date): string {
   return d.toLocaleString("ja-JP", {
@@ -179,10 +174,23 @@ function UsageMatrix({
   );
 }
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ a?: string }>;
+}) {
   const me = await getCurrentUser();
   if (!me) redirect("/");
-  if (!isAdmin(me.email)) notFound();
+  if (!isAdminEmail(me.email)) notFound();
+
+  // ここまでは「管理者アカウントでログイン中」の確認。ここから先は
+  // 「たった今 Google に再ログインしてきたか」を毎回確かめる（使い切りトークン）。
+  // 無ければ常に Google 再ログインへ飛ばすので、非管理者には何も見せない。
+  const { a } = await searchParams;
+  const verifiedJustNow = await consumeAdminLoginToken(a, me.id);
+  if (!verifiedJustNow) {
+    redirect("/api/auth/google?dest=admin");
+  }
 
   const now = new Date();
   const todayKey = jstDayKey(now);

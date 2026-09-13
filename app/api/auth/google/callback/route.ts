@@ -5,6 +5,7 @@ import { exchangeCode, ensureWatch } from "@/lib/google";
 import { setSession } from "@/lib/session";
 import { ensureDefaultCategories } from "@/lib/categories";
 import { syncUserCalendar, refineFallbackCategories } from "@/lib/sync";
+import { isAdminEmail, issueAdminLoginToken } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -23,8 +24,10 @@ export async function GET(req: NextRequest) {
   const store = await cookies();
   const expectedState = store.get("sonae_oauth_state")?.value;
   const wantedWrite = store.get("sonae_oauth_write")?.value === "1";
+  const oauthDest = store.get("sonae_oauth_dest")?.value;
   store.delete("sonae_oauth_state");
   store.delete("sonae_oauth_write");
+  store.delete("sonae_oauth_dest");
 
   if (error || !code || !state || state !== expectedState) {
     return NextResponse.redirect(`${base}/?auth=failed`);
@@ -64,6 +67,16 @@ export async function GET(req: NextRequest) {
 
     await ensureDefaultCategories(user.id);
     await setSession(user.id);
+
+    // 管理画面（/admin）の毎回ログイン確認フロー。カレンダー同期などは不要なので、
+    // 本人確認ができたらここで即・使い切りトークンを発行して /admin に戻す。
+    if (oauthDest === "admin") {
+      if (!isAdminEmail(profile.email)) {
+        return NextResponse.redirect(`${base}/`);
+      }
+      const token = await issueAdminLoginToken(user.id);
+      return NextResponse.redirect(`${base}/admin?a=${encodeURIComponent(token)}`);
+    }
 
     // カレンダー変更の即時通知（push watch）を登録。失敗してもポーリングで代替。
     await ensureWatch(user.id).catch((e) =>

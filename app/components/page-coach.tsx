@@ -8,6 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 import { usePathname } from "next/navigation";
+import { trackFeatureUse } from "@/app/actions";
 
 /**
  * ページ内コーチマーク。
@@ -245,6 +246,7 @@ export function PageCoach({
         return;
       }
       setTour(t);
+      void trackFeatureUse(`popup:coach:${t.key}:shown`);
     };
     const timer = window.setTimeout(start, 600);
     return () => {
@@ -268,14 +270,18 @@ export function PageCoach({
       setRect(null);
       setIdx(0);
       setTour(t);
+      void trackFeatureUse(`popup:coach:${t.key}:shown`);
     };
     window.addEventListener("mm:open-coach", onOpen);
     return () => window.removeEventListener("mm:open-coach", onOpen);
   }, [pathname]);
 
-  const finish = useCallback(() => {
+  const finish = useCallback((skipped: boolean) => {
     setTour((cur) => {
-      if (cur) writeFlag(cur.key);
+      if (cur) {
+        writeFlag(cur.key);
+        void trackFeatureUse(`popup:coach:${cur.key}:${skipped ? "skip" : "complete"}`);
+      }
       return null;
     });
     rectRef.current = null;
@@ -287,7 +293,7 @@ export function PageCoach({
       const t = tour;
       if (!t) return i;
       if (i + 1 >= t.steps.length) {
-        finish();
+        finish(false);
         return i;
       }
       return i + 1;
@@ -307,7 +313,7 @@ export function PageCoach({
     let visible = false;
 
     const bail = () => {
-      if (idx + 1 >= tour.steps.length) finish();
+      if (idx + 1 >= tour.steps.length) finish(false);
       else setIdx((i) => i + 1);
     };
 
@@ -376,7 +382,7 @@ export function PageCoach({
   useEffect(() => {
     if (!tour) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") finish();
+      if (e.key === "Escape") finish(true);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -513,7 +519,7 @@ export function PageCoach({
         <div className="mt-3 flex shrink-0 items-center justify-between">
           <button
             type="button"
-            onClick={finish}
+            onClick={() => finish(true)}
             className="text-[11px] text-surface/55 hover:text-surface"
           >
             スキップ

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { trackFeatureUse } from "@/app/actions";
 
 const PREFIX = "mm_seen_";
 
@@ -36,7 +37,12 @@ export function FirstSeen({
     } catch {
       ok = false;
     }
-    if (ok) queueMicrotask(() => setShow(true));
+    if (ok) {
+      queueMicrotask(() => {
+        setShow(true);
+        void trackFeatureUse(`popup:firstseen:${id}:shown`);
+      });
+    }
   }, [id]);
 
   function close() {
@@ -45,6 +51,7 @@ export function FirstSeen({
     } catch {
       /* ignore */
     }
+    void trackFeatureUse(`popup:firstseen:${id}:ack`);
     setShow(false);
   }
 

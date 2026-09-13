@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/session";
 import { isDevLoginEnabled } from "@/lib/dev-login";
 import { getUpcomingWarnings } from "@/lib/failures";
 import { primeNotifiedChecklists } from "@/lib/checklist";
+import { trackEvent } from "@/lib/track";
 import { SavingsDashboard } from "@/app/components/savings-dashboard";
 import { GettingStarted } from "@/app/components/getting-started";
 import { Landing } from "@/app/components/landing";
@@ -70,6 +71,7 @@ export default async function HomePage({
 
   const warnings = await getUpcomingWarnings(user.id);
 
+  trackEvent(user.id, "page:/");
   after(() => primeNotifiedChecklists(user.id));
 
   return (

@@ -14,10 +14,12 @@ import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmLink } from "@/app/components/confirm-link";
 import { PushControls } from "@/app/components/push-controls";
 import { InfoHint } from "@/app/components/info-hint";
+import { trackEvent } from "@/lib/track";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/");
+  trackEvent(user.id, "page:/settings");
 
   const account = user.googleAccount;
   const feedback = await prisma.feedback.findMany({

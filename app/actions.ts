@@ -35,6 +35,7 @@ import { parseBulkTitles } from "@/lib/bulk";
 import { parseJstDate, parseJstDateTimeLocal } from "@/lib/format";
 import { clusterKey, ensureSuggestedFailures } from "@/lib/failures";
 import { APP_NAME } from "@/lib/app-info";
+import { trackEvent } from "@/lib/track";
 import {
   isBuiltinSection,
   parseSectionOrder,
@@ -137,6 +138,7 @@ export async function syncCalendar(): Promise<void> {
   const account = await prisma.userGoogleAccount.findUnique({ where: { userId } });
   if (!account) redirect("/settings");
 
+  trackEvent(userId, "feature:calendar-manual-sync");
   await syncAndNotify(userId);
   await ensureWatch(userId).catch(() => {});
 
@@ -241,7 +243,12 @@ export async function updateEventCategory(formData: FormData): Promise<void> {
   const event = await prisma.event.findFirst({ where: { id: eventId, userId } });
   if (!event) return;
 
+  const existed = await prisma.category.findUnique({
+    where: { userId_name: { userId, name: categoryName } },
+    select: { id: true },
+  });
   const category = await getOrCreateCategory(userId, categoryName);
+  if (!existed) trackEvent(userId, "feature:category-create");
   await prisma.event.update({
     where: { id: eventId },
     data: { categoryId: category.id },
@@ -445,6 +452,7 @@ export async function setListReminders(
     },
   });
   if (res.count === 0) return;
+  trackEvent(userId, "feature:list-reminder-set");
   revalidateAppViews(eventId);
 }
 
@@ -766,6 +774,7 @@ export async function clearChecklistSection(formData: FormData): Promise<void> {
   });
   if (!event) return;
 
+  trackEvent(userId, "feature:clear-section");
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({
       where: { eventId, isSuggested: false, kind },
@@ -840,6 +849,7 @@ export async function addChecklistSection(formData: FormData): Promise<void> {
     where: { id: eventId },
     data: { sectionOrder: stringifySectionOrder([...order, key]) },
   });
+  trackEvent(await getSessionUserId(), "feature:add-section");
   await propagateSectionChange(eventId);
 }
 
@@ -1049,6 +1059,7 @@ export async function deleteCategory(categoryId: string): Promise<void> {
     where: { id: categoryId, userId },
   });
   if (!category) return;
+  trackEvent(userId, "feature:category-delete");
   await prisma.category.delete({ where: { id: categoryId } });
   revalidateAppViews();
 }
@@ -1068,6 +1079,7 @@ export async function forgetLearnedEvent(eventIds: string[]): Promise<void> {
   });
   const ids = events.map((e) => e.id);
   if (ids.length === 0) return;
+  trackEvent(userId, "feature:learned-event-delete");
 
   await prisma.$transaction([
     prisma.editRecord.deleteMany({ where: { eventId: { in: ids } } }),
@@ -1139,6 +1151,7 @@ export async function createFailureLog(formData: FormData): Promise<void> {
 
   // 必須は「何が起きたか」だけ。金額は空なら 0、日付は空なら予定日／今日。
   if (!description) return;
+  trackEvent(userId, "feature:failure-quick-record");
   const estimatedLossYen = parseYen(formData.get("estimatedLossYen"));
 
   const linkedEvent = eventId
@@ -1801,6 +1814,7 @@ export async function sendTestPush(): Promise<TestPushResult> {
   if (!configured || subscriptions === 0) {
     return { configured, subscriptions, sent: 0, removed: 0 };
   }
+  trackEvent(userId, "feature:notification-test");
   const { sent, removed } = await sendPushToUser(userId, {
     title: `${APP_NAME}：通知テスト`,
     body: "予定が追加されると、このように通知が届きます。",
@@ -1857,6 +1871,7 @@ export async function saveListAsTemplate(formData: FormData): Promise<void> {
     .trim()
     .slice(0, 60);
   if (!eventId || !name) return;
+  trackEvent(userId, "feature:template-save");
 
   const event = await prisma.event.findFirst({
     where: { id: eventId, userId },
@@ -2114,6 +2129,7 @@ export async function buildListFromDictation(input: {
   const eventId = String(input.eventId ?? "");
   const text = String(input.text ?? "").slice(0, 4000).trim();
   if (!text) return { ok: false, added: 0, error: "内容がありません。" };
+  trackEvent(userId, "feature:dictation");
 
   const event = await prisma.event.findFirst({
     where: { id: eventId, userId },
@@ -2260,6 +2276,7 @@ export async function applyTemplateToEvent(formData: FormData): Promise<void> {
     include: { items: { orderBy: { sortOrder: "asc" } } },
   });
   if (!template) return;
+  trackEvent(userId, "feature:template-apply");
 
   await addSeedItemsToEvent(
     userId,
@@ -2293,6 +2310,7 @@ export async function copyListFromEvent(formData: FormData): Promise<void> {
     },
   });
   if (!source) return;
+  trackEvent(userId, "feature:copy-from-event");
 
   const picked = source.checklistItems
     .map((it) => ({

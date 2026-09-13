@@ -15,6 +15,7 @@ import { LazyLeaf } from "./lazy-leaf";
 import { LeafBody, type LeafItem, type LeafSectionData } from "./leaf-body";
 import { TemplatesGroup } from "./templates-panel";
 import { DeleteCategoryButton } from "./tree-delete-button";
+import { trackEvent } from "@/lib/track";
 import {
   FailureListEditor,
   type FLRow,
@@ -190,6 +191,7 @@ function NameBranch({
 export default async function LearningTreePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/");
+  trackEvent(user.id, "page:/savings");
 
   const [{ categories, searchIndex }, templates] = await Promise.all([
     getLearningNameTree(user.id),

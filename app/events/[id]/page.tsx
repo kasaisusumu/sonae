@@ -12,6 +12,7 @@ import {
 } from "./checklist-section";
 import { ScrollToHash } from "./scroll-to-hash";
 import { InfoHint } from "@/app/components/info-hint";
+import { trackEvent } from "@/lib/track";
 
 // 初回表示時に準備リストを OpenAI で生成することがあるため長めに
 export const maxDuration = 60;
@@ -24,6 +25,7 @@ export default async function EventDetailPage({
   const { id } = await params;
   const user = await getCurrentUser();
   if (!user) redirect("/");
+  trackEvent(user.id, "page:/events/[id]");
 
   const [event, categories] = await Promise.all([
     prisma.event.findFirst({

@@ -11,6 +11,7 @@ import {
   type FRRow,
 } from "@/app/components/failure-review-row";
 import { StickyReviewRows } from "@/app/components/sticky-review-rows";
+import { trackEvent } from "@/lib/track";
 import { FailureQuickInput } from "./failure-quick-input";
 import { ReviewQueue, type RQLog } from "./review-queue";
 
@@ -45,6 +46,7 @@ const toFR = (l: LogRow): FRRow => ({
 export default async function FailuresPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/");
+  trackEvent(user.id, "page:/failures");
 
   const [categories, logs, events] = await Promise.all([
     prisma.category.findMany({

@@ -12,6 +12,7 @@ import { EventSearch, type SearchRow } from "./event-search";
 import { eventDateKey, eventDateLabel, eventHaystack } from "./haystack";
 import { getUpcomingWarnings } from "@/lib/failures";
 import { APP_NAME } from "@/lib/app-info";
+import { trackEvent } from "@/lib/track";
 
 export default async function EventsPage({
   searchParams,
@@ -21,6 +22,7 @@ export default async function EventsPage({
   const { connected } = await searchParams;
   const user = await getCurrentUser();
   if (!user) redirect("/");
+  trackEvent(user.id, "page:/events");
 
   const [categories, events, linkedLogs, warnings] = await Promise.all([
     prisma.category.findMany({

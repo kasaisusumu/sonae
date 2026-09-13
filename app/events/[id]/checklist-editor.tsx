@@ -10,6 +10,7 @@ import {
   saveListAsTemplate,
   setItemNotifyLead,
   toggleChecklistItemDone,
+  trackFeatureUse,
 } from "@/app/actions";
 import { LEAD_PRESETS, formatLead, isLeadPreset } from "@/lib/lead-time";
 import { InfoHint } from "@/app/components/info-hint";
@@ -373,6 +374,7 @@ export function ChecklistEditor({
   }
 
   function add() {
+    void trackFeatureUse("feature:add-item");
     setItems((prev) => [
       ...prev,
       {
@@ -403,6 +405,7 @@ export function ChecklistEditor({
       setBulkNote("すべて登録済みでした。");
       return;
     }
+    void trackFeatureUse("feature:bulk-add");
     const merged: Item[] = [
       ...items,
       ...fresh.map((p) => ({

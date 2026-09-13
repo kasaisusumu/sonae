@@ -220,6 +220,26 @@ export function ChecklistEditor({
       return;
     }
     setItems(initial);
+    // it.key は毎回の initialItems 更新（＝自動保存のたびに saveChecklist が項目行を
+    // 作り直すので、保存が完了するたびに起きる）で新しく振られ直す。openKeys をそのまま
+    // 引き継ぐと、保存が終わった瞬間に「開いている」判定が外れて詳細（メモ・リンク欄）が
+    // 勝手に閉じてしまう。正規化した文言を橋渡しにして、同じ項目の開閉状態を新しい key へ
+    // 移し替える（メモを書いている最中に自動保存が走っても閉じないようにする）。
+    setOpenKeys((prevOpen) => {
+      if (prevOpen.size === 0) return prevOpen;
+      const openTitles = new Set(
+        items
+          .filter((it) => prevOpen.has(it.key))
+          .map((it) => normTitle(it.title))
+          .filter(Boolean),
+      );
+      if (openTitles.size === 0) return new Set();
+      const next = new Set<string>();
+      for (const it of initial) {
+        if (openTitles.has(normTitle(it.title))) next.add(it.key);
+      }
+      return next;
+    });
     setRemovedTitles([]);
     setStructEdited(false);
     setSaved(false);

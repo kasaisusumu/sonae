@@ -1,6 +1,3 @@
-"use client";
-
-import { useState } from "react";
 import {
   deleteListTemplate,
   duplicateListTemplate,
@@ -9,69 +6,34 @@ import {
 } from "@/app/actions";
 import type { TemplateDetail } from "@/lib/templates";
 import { sectionLabel } from "@/lib/sections";
-import { formatLead } from "@/lib/lead-time";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { TemplateEditor } from "./template-editor";
 import { CopyTemplateButton } from "./copy-template-button";
 import { NewTemplateForm } from "./new-template-form";
 
-/**
- * 学習内容の樹形図の葉（EventLeaf/LeafBody）と同じ形: 開くと中身のコンパクト表示
- * ＋管理操作が出て、「編集」を押したときだけ今までどおりの編集画面（TemplateEditor）
- * に切り替わる。
- */
-function TemplateBody({ t }: { t: TemplateDetail }) {
-  const [editing, setEditing] = useState(false);
-
-  if (editing) {
-    return (
-      <div>
-        <button
-          type="button"
-          onClick={() => setEditing(false)}
-          className="mb-1 text-[11px] text-muted underline hover:text-foreground"
-        >
-          閉じる
-        </button>
-        <TemplateEditor
-          templateId={t.id}
-          initialItems={t.items.map((i) => ({
-            title: i.title,
-            notifyLeadMinutes: i.notifyLeadMinutes,
-          }))}
-        />
-      </div>
-    );
-  }
-
+function TemplateCard({ t }: { t: TemplateDetail }) {
   return (
-    <div>
-      <ul className="space-y-0.5">
-        {t.items.length === 0 ? (
-          <li className="text-[11px] text-muted">（項目なし）</li>
-        ) : (
-          t.items.map((i) => (
-            <li key={i.id} className="text-[11px] text-muted">
-              {i.title}
-              {i.notifyLeadMinutes != null && (
-                <span className="text-teal-dark">
-                  {" "}
-                  （🔔{formatLead(i.notifyLeadMinutes)}）
-                </span>
-              )}
-            </li>
-          ))
-        )}
-      </ul>
+    <details
+      id={`tpl-${t.id}`}
+      className="group scroll-mt-24 rounded-xl bg-background p-3 [&_summary::-webkit-details-marker]:hidden"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 text-sm font-medium">
+        <span className="min-w-0">
+          {t.name}
+          <span className="ml-1 font-normal text-muted">
+            （{sectionLabel(t.kind)}）
+          </span>
+          <span className="ml-1.5 text-xs font-normal text-muted">
+            {t.items.length}項目
+          </span>
+        </span>
+        <span className="shrink-0 text-xs text-teal-dark">
+          <span className="group-open:hidden">開いて編集</span>
+          <span className="hidden group-open:inline">閉じる</span>
+        </span>
+      </summary>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="rounded-lg border border-border px-3 py-1 text-[11px] text-muted hover:border-teal hover:text-teal-dark"
-        >
-          編集
-        </button>
         <form action={renameListTemplate} className="flex items-center gap-1">
           <input type="hidden" name="id" value={t.id} />
           <input
@@ -128,29 +90,14 @@ function TemplateBody({ t }: { t: TemplateDetail }) {
           </ConfirmButton>
         </form>
       </div>
-    </div>
-  );
-}
 
-/** 短冊1枚ぶん。学習内容の樹形図の葉と同じ見た目（開閉するだけの details/summary）。 */
-function TemplateCard({ t }: { t: TemplateDetail }) {
-  return (
-    <details
-      id={`tpl-${t.id}`}
-      className="scroll-mt-24 rounded-xl bg-background p-3 [&_summary::-webkit-details-marker]:hidden"
-    >
-      <summary className="cursor-pointer list-none text-sm font-medium">
-        {t.name}
-        <span className="ml-1 font-normal text-muted">
-          （{sectionLabel(t.kind)}）
-        </span>
-        <span className="ml-1.5 text-xs font-normal text-muted">
-          {t.items.length}項目
-        </span>
-      </summary>
-      <div className="mt-2 border-l border-border pl-3">
-        <TemplateBody t={t} />
-      </div>
+      <TemplateEditor
+        templateId={t.id}
+        initialItems={t.items.map((i) => ({
+          title: i.title,
+          notifyLeadMinutes: i.notifyLeadMinutes,
+        }))}
+      />
     </details>
   );
 }

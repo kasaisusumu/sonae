@@ -1748,7 +1748,7 @@ export async function sendTestPush(): Promise<TestPushResult> {
     return { configured, subscriptions, sent: 0, removed: 0 };
   }
   const { sent, removed } = await sendPushToUser(userId, {
-    title: "私の準備マニュアル：通知テスト",
+    title: "私のマニュアルそなえさん：通知テスト",
     body: "予定が追加されると、このように通知が届きます。",
     url: "/",
     tag: "test",

@@ -1,4 +1,4 @@
-/* 私の準備マニュアル Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v9 */
+/* 私のマニュアルそなえさん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v10 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -27,11 +27,11 @@ self.addEventListener("push", (event) => {
     data = event.data ? event.data.json() : {};
   } catch {
     data = {
-      title: "私の準備マニュアル",
+      title: "私のマニュアルそなえさん",
       body: event.data ? event.data.text() : "",
     };
   }
-  const title = data.title || "私の準備マニュアル";
+  const title = data.title || "私のマニュアルそなえさん";
   const url = data.url || urlFromTag(data.tag) || "/";
   event.waitUntil(
     self.registration.showNotification(title, {

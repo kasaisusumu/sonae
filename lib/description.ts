@@ -2,13 +2,14 @@ import crypto from "node:crypto";
 import { formatLead, parseLead } from "@/lib/lead-time";
 import { sectionKeyFromLabel, sectionLabel } from "@/lib/sections";
 
-const START = "--- 私の準備マニュアル ---";
+const START = "--- 私のマニュアルそなえさん ---";
 // 旧マーカー（互換のため、除去・パース対象に含める）
 const LEGACY_MARKS = [
   "--- そなえ ---",
   "--- 私のマネージャー ---",
   "--- 勝手に準備分解くん ---",
   "--- 勝手に予定分解くん ---",
+  "--- 私の準備マニュアル ---",
 ];
 const ALL_MARKS = [START, ...LEGACY_MARKS];
 const END = "---";
@@ -209,7 +210,7 @@ const DONE_MARK =
 const BOX_OR_BULLET =
   /^(?:[☐☑✅⬜◻◼■□▪▫✔✓]️?|\[[ xX]\]|[・*\-•‣▸▹])\s*/;
 
-/** 「私の準備マニュアル」ブロックを行ごとに読み、項目を復元する。ゆるくパースする。 */
+/** 「私のマニュアルそなえさん」ブロックを行ごとに読み、項目を復元する。ゆるくパースする。 */
 export function parseSonaeBlock(desc: string | null | undefined): {
   hasBlock: boolean;
   items: ParsedItem[];

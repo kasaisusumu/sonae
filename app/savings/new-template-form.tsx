@@ -54,12 +54,14 @@ export function NewTemplateForm() {
         placeholder="リスト名（例: 日帰り出張の持ち物）"
         className="w-full rounded-lg border bg-surface px-3 py-2 text-sm"
       />
+      <p className="text-[11px] text-muted">
+        内容は項目を1行に1つ。スマホのマイクキーで話してもOK。
+        「AIで整えて作成」なら、話し言葉のままでも整えます。
+      </p>
       <textarea
         name="bulkText"
         rows={4}
-        placeholder={
-          "項目を1行に1つ。スマホのマイクキーで話してもOK。\n（例）充電器 モバイルバッテリー 常備薬\n「AIで整えて作成」なら、話し言葉のままでも整えます。"
-        }
+        placeholder={"1行に1つ（例）\n充電器\nモバイルバッテリー\n常備薬"}
         className="w-full rounded-lg border bg-surface px-3 py-2 text-sm"
       />
       <div className="flex flex-wrap items-center gap-2">

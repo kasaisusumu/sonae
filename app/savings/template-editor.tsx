@@ -181,13 +181,15 @@ export function TemplateEditor({
       </div>
 
       <div className="rounded-lg border border-border bg-background p-2">
+        <p className="mb-1 text-[11px] text-muted">
+          メモから一括追加。スマホのマイクキーで話してもOK。
+          「🎤 AIで整えて追加」なら話し言葉のままでも整えます。
+        </p>
         <textarea
           value={bulk}
           onChange={(e) => setBulk(e.target.value)}
           rows={3}
-          placeholder={
-            "メモから一括追加（1行に1つ）。スマホのマイクキーで話してもOK。\n（例）充電器 モバイルバッテリー 常備薬\n「🎤 AIで整えて追加」なら話し言葉のままでも整えます。"
-          }
+          placeholder={"1行に1つ（例）\n充電器\nモバイルバッテリー\n常備薬"}
           className="w-full rounded-md border bg-surface px-2 py-1.5 text-sm"
         />
         <div className="mt-1 flex flex-wrap items-center gap-2">

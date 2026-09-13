@@ -1025,6 +1025,48 @@ export async function deleteLearnedRule(ruleId: string): Promise<void> {
   revalidateAppViews();
 }
 
+/**
+ * 学習されたマニュアルページ: カテゴリを削除する。
+ * 予定・失敗ログはカテゴリ無し（その他扱い）になるだけで消えない
+ * （Event/FailureLog の categoryId は onDelete: SetNull）。このカテゴリで
+ * 学習したルール（LearnedRule）は一緒に消える（onDelete: Cascade）。
+ */
+export async function deleteCategory(categoryId: string): Promise<void> {
+  const userId = await requireUserId();
+  const category = await prisma.category.findFirst({
+    where: { id: categoryId, userId },
+  });
+  if (!category) return;
+  await prisma.category.delete({ where: { id: categoryId } });
+  revalidateAppViews();
+}
+
+/**
+ * 学習されたマニュアルページ: 樹形図の「学習された予定」を1件、学習前の状態に戻す
+ * （＝一覧から消える）。実際の予定・準備リストの中身（ChecklistItem）は消さない
+ * ——あくまで「これは確認・編集済み」という学習の印を外すだけ。
+ * まとめて表示されている同名グループ（siblingEventIds 含む）もまとめて対象にする。
+ */
+export async function forgetLearnedEvent(eventIds: string[]): Promise<void> {
+  const userId = await requireUserId();
+  if (eventIds.length === 0) return;
+  const events = await prisma.event.findMany({
+    where: { id: { in: eventIds }, userId },
+    select: { id: true },
+  });
+  const ids = events.map((e) => e.id);
+  if (ids.length === 0) return;
+
+  await prisma.$transaction([
+    prisma.editRecord.deleteMany({ where: { eventId: { in: ids } } }),
+    prisma.event.updateMany({
+      where: { id: { in: ids } },
+      data: { listCustomized: false, listReviewedAt: null, listCleared: false },
+    }),
+  ]);
+  revalidateAppViews();
+}
+
 // ─────────────────────────────────────────────
 // P1: 失敗ログ & 再発防止
 // ─────────────────────────────────────────────

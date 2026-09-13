@@ -14,6 +14,7 @@ import { LearningExplorer } from "./learning-explorer";
 import { LazyLeaf } from "./lazy-leaf";
 import { LeafBody, type LeafItem, type LeafSectionData } from "./leaf-body";
 import { TemplatesGroup } from "./templates-panel";
+import { DeleteCategoryButton, DeleteLearnedEventButton } from "./tree-delete-button";
 import {
   FailureListEditor,
   type FLRow,
@@ -101,16 +102,21 @@ function EventLeaf({
       id={`ev-${leaf.eventId}`}
       tone={depth % 2 === 1 ? "muted" : "surface"}
       summary={
-        <>
-          {leaf.title}
-          <span className="ml-1 font-normal text-muted">
-            {leaf.situationLabel}
+        <span className="flex items-center justify-between gap-2">
+          <span className="min-w-0">
+            {leaf.title}
+            <span className="ml-1 font-normal text-muted">
+              {leaf.situationLabel}
+            </span>
+            {leaf.failures.length > 0 && (
+              <span className="ml-1 text-warn">⚠{leaf.failures.length}</span>
+            )}
+            <Keywords words={leaf.keywords} />
           </span>
-          {leaf.failures.length > 0 && (
-            <span className="ml-1 text-warn">⚠{leaf.failures.length}</span>
-          )}
-          <Keywords words={leaf.keywords} />
-        </>
+          <DeleteLearnedEventButton
+            eventIds={[leaf.eventId, ...leaf.siblingEventIds]}
+          />
+        </span>
       }
     >
       {/* 失敗ログは一番上に。予定詳細と同じ形式でその場編集・追加できる。 */}
@@ -221,11 +227,17 @@ export default async function LearningTreePage() {
           className="rounded-2xl bg-surface p-4"
           open
         >
-          <summary className="cursor-pointer text-base font-semibold">
-            {cat.categoryName}
-            <span className="ml-2 text-xs font-normal text-muted">
-              {cat.node.count}件
+          <summary className="flex cursor-pointer items-center justify-between gap-2 text-base font-semibold">
+            <span className="min-w-0">
+              {cat.categoryName}
+              <span className="ml-2 text-xs font-normal text-muted">
+                {cat.node.count}件
+              </span>
             </span>
+            <DeleteCategoryButton
+              categoryId={cat.categoryId}
+              categoryName={cat.categoryName}
+            />
           </summary>
           <div className="mt-3 space-y-1.5 border-l border-border pl-3">
             {cat.node.children.map((c) => (

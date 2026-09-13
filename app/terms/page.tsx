@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { CONTACT, LegalPage, OPERATOR, Sec } from "@/app/legal";
+import { APP_NAME } from "@/lib/app-info";
 
 export const metadata: Metadata = {
-  title: "利用規約 — 私のマニュアル「そなえ」さん",
+  title: `利用規約 — ${APP_NAME}`,
 };
 
 export default function TermsPage() {
@@ -10,7 +11,7 @@ export default function TermsPage() {
     <LegalPage title="利用規約">
       <p>
         本利用規約（以下「本規約」）は、{OPERATOR}
-        が提供する私のマニュアル「そなえ」さん（以下「本サービス」）の利用条件を定めるものです。
+        が提供する{APP_NAME}（以下「本サービス」）の利用条件を定めるものです。
         本サービスを利用した時点で、本規約に同意したものとみなします。
       </p>
 

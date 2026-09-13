@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PrivateModeNotice } from "@/app/components/private-mode-notice";
+import { APP_NAME } from "@/lib/app-info";
 
 // 黒背景に白文字を、確実に出るユーティリティで固定（token が効かない環境でも潰れない）。
 const CTA_CLASS =
@@ -285,7 +286,7 @@ export function Landing({
           に同意したものとみなします。
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-muted">
-          途中で「このアプリは確認されていません」と出たら、「詳細」→「私のマニュアル「そなえ」さん に移動」で進めます。
+          途中で「このアプリは確認されていません」と出たら、「詳細」→「{APP_NAME} に移動」で進めます。
         </p>
         {devLogin && (
           <p className="mt-5 text-[11px] text-muted">

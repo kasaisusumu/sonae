@@ -11,6 +11,7 @@ import { SubmitButton } from "@/app/components/submit-button";
 import { EventSearch, type SearchRow } from "./event-search";
 import { eventDateKey, eventDateLabel, eventHaystack } from "./haystack";
 import { getUpcomingWarnings } from "@/lib/failures";
+import { APP_NAME } from "@/lib/app-info";
 
 export default async function EventsPage({
   searchParams,
@@ -131,7 +132,7 @@ export default async function EventsPage({
                 </span>
                 <span className="mt-2 block rounded-lg border border-border bg-surface-muted p-2 text-[11px] leading-relaxed text-muted">
                   <span className="block">（予定のメモ）</span>
-                  <span className="mt-1.5 block">--- 私のマニュアル「そなえ」さん ---</span>
+                  <span className="mt-1.5 block">--- {APP_NAME} ---</span>
                   <span className="block text-teal-dark underline">
                     準備リスト: https://…/events/xxxx ← ここをタップ
                   </span>

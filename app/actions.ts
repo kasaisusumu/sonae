@@ -34,6 +34,7 @@ import { parseLead, stringifyLeads } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
 import { parseJstDate, parseJstDateTimeLocal } from "@/lib/format";
 import { clusterKey, ensureSuggestedFailures } from "@/lib/failures";
+import { APP_NAME } from "@/lib/app-info";
 import {
   isBuiltinSection,
   parseSectionOrder,
@@ -1790,7 +1791,7 @@ export async function sendTestPush(): Promise<TestPushResult> {
     return { configured, subscriptions, sent: 0, removed: 0 };
   }
   const { sent, removed } = await sendPushToUser(userId, {
-    title: "私のマニュアル「そなえ」さん：通知テスト",
+    title: `${APP_NAME}：通知テスト`,
     body: "予定が追加されると、このように通知が届きます。",
     url: "/",
     tag: "test",

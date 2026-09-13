@@ -1,9 +1,12 @@
 import crypto from "node:crypto";
 import { formatLead, parseLead } from "@/lib/lead-time";
 import { sectionKeyFromLabel, sectionLabel } from "@/lib/sections";
+import { APP_NAME } from "@/lib/app-info";
 
-const START = "--- 私のマニュアル「そなえ」さん ---";
-// 旧マーカー（互換のため、除去・パース対象に含める）
+const START = `--- ${APP_NAME} ---`;
+// 旧マーカー（互換のため、除去・パース対象に含める）。
+// APP_NAME には連動させない — 名前を変えるたびに「直前までの値」をここへ手で
+// 追記していく歴史の記録（カレンダーに書き込み済みの過去のマーカーを読むため）。
 const LEGACY_MARKS = [
   "--- そなえ ---",
   "--- 私のマネージャー ---",
@@ -211,7 +214,7 @@ const DONE_MARK =
 const BOX_OR_BULLET =
   /^(?:[☐☑✅⬜◻◼■□▪▫✔✓]️?|\[[ xX]\]|[・*\-•‣▸▹])\s*/;
 
-/** 「私のマニュアル「そなえ」さん」ブロックを行ごとに読み、項目を復元する。ゆるくパースする。 */
+/** アプリのブロック（START マーカー区切り）を行ごとに読み、項目を復元する。ゆるくパースする。 */
 export function parseSonaeBlock(desc: string | null | undefined): {
   hasBlock: boolean;
   items: ParsedItem[];

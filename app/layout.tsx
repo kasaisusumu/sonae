@@ -5,6 +5,7 @@ import "./globals.css";
 import { getSessionUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { reviewPendingFailureWhere } from "@/lib/failures";
+import { APP_NAME, APP_TAGLINE, APP_DESCRIPTION } from "@/lib/app-info";
 import { FeedbackWidget } from "@/app/components/feedback-widget";
 import { LogoutButton } from "@/app/components/logout-button";
 import { SwRegister } from "@/app/components/sw-register";
@@ -21,19 +22,41 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
+// 検索結果・リンクの共有プレビュー（OGP/Twitter カード）に出るタイトル・説明文。
+// ここも APP_NAME/APP_DESCRIPTION から作るので、lib/app-info.ts を直せば追随する。
+// ただし検索エンジン・SNS 側のキャッシュは古いままのことがあり、コードを直しても
+// 反映は次回のクロール待ち（Search Console 等から再クロールを申請すれば早まる）。
+const pageTitle = `${APP_NAME} — ${APP_TAGLINE}`;
+
 export const metadata: Metadata = {
-  title: "私のマニュアル「そなえ」さん — 予定の準備リスト",
-  description:
-    "予定を入れるだけで準備リストを自動生成。編集を学習して自分専用マニュアルに育てます。",
+  ...(process.env.APP_BASE_URL
+    ? { metadataBase: new URL(process.env.APP_BASE_URL) }
+    : {}),
+  title: pageTitle,
+  description: APP_DESCRIPTION,
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "私のマニュアル「そなえ」さん",
+    title: APP_NAME,
   },
   icons: {
     icon: "/icons/icon-192.png",
     apple: "/icons/apple-touch-icon.png",
+  },
+  openGraph: {
+    title: pageTitle,
+    description: APP_DESCRIPTION,
+    siteName: APP_NAME,
+    type: "website",
+    locale: "ja_JP",
+    images: ["/icons/icon-512.png"],
+  },
+  twitter: {
+    card: "summary",
+    title: pageTitle,
+    description: APP_DESCRIPTION,
+    images: ["/icons/icon-512.png"],
   },
 };
 
@@ -96,7 +119,7 @@ export default async function RootLayout({
               {isLoggedIn ? <MenuButton /> : null}
               <Link href="/" className="flex items-baseline gap-2 no-underline">
                 <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">
-                  私のマニュアル「そなえ」さん
+                  {APP_NAME}
                 </span>
                 <span className="hidden text-xs text-muted sm:inline">
                   予定の準備、わすれない
@@ -136,7 +159,7 @@ export default async function RootLayout({
 
         <footer className="border-t bg-surface">
           <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-4 text-xs text-muted">
-            <span>私のマニュアル「そなえ」さん（検証版）— 表示される金額はすべて推定値です。</span>
+            <span>{APP_NAME}（検証版）— 表示される金額はすべて推定値です。</span>
             <span className="flex items-center gap-3">
               <Link
                 href="/privacy"

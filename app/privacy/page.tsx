@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import { CONTACT, LegalPage, OPERATOR, Sec } from "@/app/legal";
+import { APP_NAME } from "@/lib/app-info";
 
 export const metadata: Metadata = {
-  title: "プライバシーポリシー — 私のマニュアル「そなえ」さん",
+  title: `プライバシーポリシー — ${APP_NAME}`,
 };
 
 export default function PrivacyPage() {
   return (
     <LegalPage title="プライバシーポリシー">
       <p>
-        私のマニュアル「そなえ」さん（以下「本サービス」）は、{OPERATOR}
+        {APP_NAME}（以下「本サービス」）は、{OPERATOR}
         が個人で運営する検証版のサービスです。本ポリシーは、本サービスが取得する情報とその取り扱いについて定めます。
       </p>
 

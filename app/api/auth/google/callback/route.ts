@@ -66,17 +66,24 @@ export async function GET(req: NextRequest) {
     });
 
     await ensureDefaultCategories(user.id);
-    await setSession(user.id);
 
     // 管理画面（/admin）の毎回ログイン確認フロー。カレンダー同期などは不要なので、
     // 本人確認ができたらここで即・使い切りトークンを発行して /admin に戻す。
+    // ここで isAdminEmail が false のときは setSession を呼ばない
+    // （ブラウザに他の Google アカウントがログイン済みだと select_account 前は
+    // そちらのアカウントで認証されうる。ここでセッションを書き換えると、確認に
+    // 失敗しただけなのに「元々ログインしていた正しいアカウント」から
+    // ログアウトされたように見えてしまうため、元のセッションはそのまま残す）。
     if (oauthDest === "admin") {
       if (!isAdminEmail(profile.email)) {
-        return NextResponse.redirect(`${base}/`);
+        return NextResponse.redirect(`${base}/admin`);
       }
+      await setSession(user.id);
       const token = await issueAdminLoginToken(user.id);
       return NextResponse.redirect(`${base}/admin?a=${encodeURIComponent(token)}`);
     }
+
+    await setSession(user.id);
 
     // カレンダー変更の即時通知（push watch）を登録。失敗してもポーリングで代替。
     await ensureWatch(user.id).catch((e) =>

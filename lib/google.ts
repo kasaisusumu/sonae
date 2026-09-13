@@ -60,7 +60,10 @@ export function buildConsentUrl(
       : GOOGLE_SCOPES;
   return makeOAuthClient().generateAuthUrl({
     access_type: "offline",
-    prompt: "consent", // refresh_token を確実に得るため／毎回はっきり確認させるため
+    // identityOnly（管理画面の毎回ログイン確認）では、ブラウザに複数の Google
+    // アカウントがログイン済みだと consent だけではアカウント選択が省略されて
+    // 意図しないアカウントのまま認証されうる。select_account で必ず選ばせる。
+    prompt: opts.identityOnly ? "select_account consent" : "consent",
     scope,
     include_granted_scopes: true,
     state,

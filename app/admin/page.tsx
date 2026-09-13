@@ -3,6 +3,13 @@ import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatYen, formatDateOnly } from "@/lib/format";
 import { jstDayKey } from "@/lib/activity";
+import {
+  PAGE_KEYS,
+  FEATURE_KEYS,
+  INFOHINT_KEYS,
+  POPUP_KEYS,
+  type TrackedKey,
+} from "@/lib/track-catalog";
 
 /**
  * 運営者だけが見る管理一覧。ADMIN_EMAIL（.env / Vercel）に一致するユーザー以外は 404。
@@ -64,6 +71,114 @@ function recentDayKeys(n: number, now: Date): { key: string; label: string }[] {
   return out;
 }
 
+type UsageRow = {
+  key: string;
+  label: string;
+  perUser: number[];
+  total: number;
+  avg: number;
+};
+
+/**
+ * カタログ（PAGE_KEYS 等）の全項目を、利用者ごとの内訳＋合計＋平均つきで
+ * 合計の多い順に並べる。一度も使われていない項目も 0 件のまま含める
+ * （＝そのままテーブルの下の方＝ワーストランキングとして見える）。
+ */
+function buildUsageRows(
+  catalog: TrackedKey[],
+  usageByKey: Map<string, Map<string, number>>,
+  userIds: string[],
+): UsageRow[] {
+  return catalog
+    .map(({ key, label }) => {
+      const byUser = usageByKey.get(key);
+      const perUser = userIds.map((uid) => byUser?.get(uid) ?? 0);
+      const total = perUser.reduce((a, b) => a + b, 0);
+      const avg = userIds.length > 0 ? total / userIds.length : 0;
+      return { key, label, perUser, total, avg };
+    })
+    .sort((a, b) => b.total - a.total);
+}
+
+/**
+ * 利用状況の表（項目 × 利用者のマトリクス）。合計の多い順に並んでいるので、
+ * 上のほうがランキング、下のほう（特に 0 件）がワーストランキングとして読める。
+ * 「ユーザー別」＝各列、「一ユーザーあたり」＝平均列、「全体の総数」＝合計列。
+ */
+function UsageMatrix({
+  title,
+  hint,
+  rows,
+  userLabels,
+}: {
+  title: string;
+  hint?: string;
+  rows: UsageRow[];
+  userLabels: string[];
+}) {
+  if (rows.length === 0) return null;
+  const usedCount = rows.filter((r) => r.total > 0).length;
+  return (
+    <div className="space-y-2">
+      <h3 className="flex items-center gap-1.5 text-sm font-semibold">
+        {title}
+        <span className="text-xs font-normal text-muted">
+          （使われたことがあるもの {usedCount} / {rows.length}）
+        </span>
+      </h3>
+      {hint && <p className="text-[11px] text-muted">{hint}</p>}
+      <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+        <table className="w-full text-left text-[11px]">
+          <thead className="border-b border-border bg-surface-muted text-muted">
+            <tr>
+              <th className="sticky left-0 whitespace-nowrap bg-surface-muted px-3 py-2 font-medium">
+                多い順（下ほどワースト）
+              </th>
+              {userLabels.map((label, i) => (
+                <th
+                  key={i}
+                  className="whitespace-nowrap px-2 py-2 text-center font-medium"
+                >
+                  {label}
+                </th>
+              ))}
+              <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
+                合計
+              </th>
+              <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
+                1人あたり平均
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((r) => (
+              <tr key={r.key} className={r.total === 0 ? "opacity-50" : undefined}>
+                <td className="sticky left-0 whitespace-nowrap bg-surface px-3 py-2 font-medium text-foreground">
+                  {r.label}
+                </td>
+                {r.perUser.map((n, i) => (
+                  <td
+                    key={i}
+                    className="whitespace-nowrap px-2 py-2 text-center tabular-nums text-muted"
+                  >
+                    {n > 0 ? n : "・"}
+                  </td>
+                ))}
+                <td className="whitespace-nowrap px-3 py-2 text-right font-semibold tabular-nums">
+                  {r.total}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums text-muted">
+                  {r.avg.toFixed(1)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default async function AdminPage() {
   const me = await getCurrentUser();
   if (!me) redirect("/");
@@ -82,6 +197,7 @@ export default async function AdminPage() {
     savingsByUser,
     activityByUser,
     activityByUserDay,
+    usageByKeyUser,
   ] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: "asc" },
@@ -127,6 +243,11 @@ export default async function AdminPage() {
       by: ["userId", "dayKey"],
       _count: { _all: true },
     }),
+    // ページ・機能・ⓘ・案内ポップアップの利用状況（すべて FeatureEvent に集約）。
+    prisma.featureEvent.groupBy({
+      by: ["userId", "eventKey"],
+      _count: { _all: true },
+    }),
   ]);
 
   const hasChecklistSet = new Set(checklistEvents.map((e) => e.userId));
@@ -156,6 +277,17 @@ export default async function AdminPage() {
     const arr = feedbackByUser.get(f.user.id) ?? [];
     arr.push(f);
     feedbackByUser.set(f.user.id, arr);
+  }
+
+  // ページ・機能・ⓘ・案内ポップアップの利用状況: eventKey → userId → 回数。
+  const usageByKey = new Map<string, Map<string, number>>();
+  for (const row of usageByKeyUser) {
+    let m = usageByKey.get(row.eventKey);
+    if (!m) {
+      m = new Map();
+      usageByKey.set(row.eventKey, m);
+    }
+    m.set(row.userId, row._count._all);
   }
 
   const rows = users.map((u) => {
@@ -194,6 +326,13 @@ export default async function AdminPage() {
       byDay: days.map((d) => byDay?.get(d.key) ?? 0),
     };
   });
+
+  const userIds = users.map((u) => u.id);
+  const userLabels = rows.map((r) => r.name || r.email.split("@")[0]);
+  const pageUsageRows = buildUsageRows(PAGE_KEYS, usageByKey, userIds);
+  const featureUsageRows = buildUsageRows(FEATURE_KEYS, usageByKey, userIds);
+  const infohintUsageRows = buildUsageRows(INFOHINT_KEYS, usageByKey, userIds);
+  const popupUsageRows = buildUsageRows(POPUP_KEYS, usageByKey, userIds);
 
   const wtp = feedback
     .map((f) => f.wtpYen)
@@ -450,6 +589,42 @@ export default async function AdminPage() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      {/* ── 利用状況ランキング（ページ・機能・ⓘ・案内ポップアップ） ── */}
+      <section className="space-y-6">
+        <div>
+          <h2 className="text-sm font-semibold">利用状況ランキング</h2>
+          <p className="mt-1 text-[11px] text-muted">
+            どの表も「利用者ごとの回数」「1人あたり平均」「全体の合計」を同時に見られ、
+            合計の多い順に並んでいます。上位＝よく使われている、下位（特に0件）＝
+            ワーストランキング（ほぼ使われていない・気づかれていない機能）として読めます。
+          </p>
+        </div>
+
+        <UsageMatrix
+          title="ページ閲覧"
+          rows={pageUsageRows}
+          userLabels={userLabels}
+        />
+        <UsageMatrix
+          title="機能の利用"
+          hint="話して作る・一括追加・カテゴリ作成/削除・通知テストなど、押された/使われた回数。"
+          rows={featureUsageRows}
+          userLabels={userLabels}
+        />
+        <UsageMatrix
+          title="ⓘ 説明ポップアップ"
+          hint="各画面のⓘボタンが実際に押されて開かれた回数。"
+          rows={infohintUsageRows}
+          userLabels={userLabels}
+        />
+        <UsageMatrix
+          title="案内ポップアップ（表示・スキップ・最後まで見た）"
+          hint="導入チュートリアル・はじめかた誘導・コーチマークの表示回数と、スキップされた/されなかった（最後まで見た）回数。「表示」に対して「スキップ」が多いほど、早々に離脱されていることを示します。"
+          rows={popupUsageRows}
+          userLabels={userLabels}
+        />
       </section>
 
       {/* ── フィードバック一覧 ── */}

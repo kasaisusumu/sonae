@@ -124,7 +124,7 @@ function EventLeaf({
       {leaf.mergedCount > 1 && !leaf.cleared && (
         <p className="mb-2 mt-3 flex items-center gap-1 text-[11px] text-muted">
           同じ名前の未編集 {leaf.mergedCount} 件をまとめて編集
-          <InfoHint>
+          <InfoHint id="savings-merge-group">
             ここでの編集はその全部に反映されます。別の1件を違う内容に編集すると、
             そこで分かれます。
           </InfoHint>
@@ -133,7 +133,7 @@ function EventLeaf({
       {leaf.cleared ? (
         <p className="mt-3 flex items-center gap-1 rounded-lg bg-surface-muted p-3 text-xs text-muted">
           準備リストは空（内容なしとして学習）
-          <InfoHint>
+          <InfoHint id="savings-cleared">
             似た予定でも何も出しません。同じ名前でも、中身のある予定とは分けて覚えています。
           </InfoHint>
         </p>
@@ -254,7 +254,7 @@ export default async function LearningTreePage() {
         <h1 className="text-xl font-semibold">学習されたマニュアル</h1>
         <p className="mt-1 text-sm text-muted">
           予定ごとに覚えた準備リストと、保存したマニュアルを確認・編集できます。
-          <InfoHint>
+          <InfoHint id="savings-intro">
             自動で覚えた「どの予定でどんなリストになるか」と、名前を付けて保存した
             セットの両方。上の検索はまとめて探します。
           </InfoHint>

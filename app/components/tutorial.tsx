@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { markTutorialSeen } from "@/app/actions";
+import { markTutorialSeen, trackFeatureUse } from "@/app/actions";
 import { APP_NAME } from "@/lib/app-info";
 
 const KEY = "mm_tutorial_v3";
@@ -206,6 +206,7 @@ export function Tutorial({ tutorialDone = false }: { tutorialDone?: boolean }) {
     const show = () => {
       setI(0);
       setOpen(true);
+      void trackFeatureUse("popup:tutorial:shown");
     };
     window.addEventListener(EVENT, show);
     try {
@@ -225,13 +226,14 @@ export function Tutorial({ tutorialDone = false }: { tutorialDone?: boolean }) {
     return () => window.removeEventListener(EVENT, show);
   }, [tutorialDone]);
 
-  function finish() {
+  function finish(skipped: boolean) {
     try {
       localStorage.setItem(KEY, "done");
     } catch {
       /* ignore */
     }
     void markTutorialSeen();
+    void trackFeatureUse(`popup:tutorial:${skipped ? "skip" : "complete"}`);
     setOpen(false);
   }
 
@@ -256,7 +258,7 @@ export function Tutorial({ tutorialDone = false }: { tutorialDone?: boolean }) {
         <div className="mt-5 flex items-center justify-between">
           <button
             type="button"
-            onClick={finish}
+            onClick={() => finish(true)}
             className="text-xs text-muted hover:text-foreground"
           >
             スキップ
@@ -276,7 +278,7 @@ export function Tutorial({ tutorialDone = false }: { tutorialDone?: boolean }) {
             )}
             <button
               type="button"
-              onClick={() => (last ? finish() : setI(i + 1))}
+              onClick={() => (last ? finish(false) : setI(i + 1))}
               className="rounded-lg bg-foreground px-4 py-1.5 text-sm font-medium text-surface hover:opacity-90"
             >
               {last ? "はじめる" : "次へ"}

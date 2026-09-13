@@ -34,6 +34,7 @@ model User {
   listTemplates  ListTemplate[]
   failureDismissals FailureDismissal[]
   activityMinutes   ActivityMinute[]
+  featureEvents     FeatureEvent[]
 }
 
 // Web Push の購読情報（1 ユーザーが複数端末を持てる）
@@ -332,6 +333,21 @@ model ActivityMinute {
 
   @@unique([userId, minuteAt])
   @@index([userId, dayKey])
+}
+
+// 管理画面（/admin）の「機能・ページ利用状況」用。呼ばれるたびに 1 行追加する
+// 素朴なイベントログ（ActivityMinute と違い分単位の重複排除はしない＝頻度そのものを見る）。
+// eventKey は "page:/events" / "feature:dictation" / "infohint:xxx" /
+// "popup:tutorial:shown" のような、lib/track-catalog.ts で定義した固定の識別子。
+model FeatureEvent {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventKey   String
+  occurredAt DateTime @default(now())
+
+  @@index([userId, eventKey])
+  @@index([eventKey, occurredAt])
 }
 
 // 名前を付けて保存できる準備リストのテンプレート。

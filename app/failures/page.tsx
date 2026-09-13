@@ -105,7 +105,7 @@ export default async function FailuresPage() {
         <h1 className="text-xl font-semibold tracking-tight">失敗ログ</h1>
         <p className="mt-1 text-sm text-muted">
           うっかりを記録すると、似た予定が発生した時に私が思い出させます。
-          <InfoHint>
+          <InfoHint id="failures-intro">
             責めるための記録ではありません。書くほど先回りの精度が上がります。
           </InfoHint>
         </p>
@@ -121,7 +121,7 @@ export default async function FailuresPage() {
       >
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           ✍️ ひとこと記録する
-          <InfoHint>
+          <InfoHint id="failures-quick-record">
             よくあるものはボタンで一発。必須は「何が起きたか」だけ。金額は空なら 0、
             日付は予定を選べばその日になります。あとから直せます。
           </InfoHint>

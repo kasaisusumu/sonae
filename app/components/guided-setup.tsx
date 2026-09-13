@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { syncCalendar } from "@/app/actions";
+import { syncCalendar, trackFeatureUse } from "@/app/actions";
 import { SubmitButton } from "@/app/components/submit-button";
 import { NotifyEnableButton } from "@/app/components/push-controls";
 
@@ -79,6 +79,7 @@ export function GuidedSetup({
     } catch {
       /* ignore */
     }
+    void trackFeatureUse("popup:guided:dismiss");
     setHidden(true);
   }
 
@@ -172,6 +173,16 @@ export function GuidedSetup({
   const total = steps.length;
   const doneCount = steps.filter((s) => s.done).length;
   const currentIndex = steps.findIndex((s) => !s.done);
+  const curKey = currentIndex === -1 ? null : steps[currentIndex].key;
+
+  // 表示中のステップが変わるたびに「表示した」を1回だけ記録する。
+  const shownKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ready || hidden || !curKey) return;
+    if (shownKeyRef.current === curKey) return;
+    shownKeyRef.current = curKey;
+    void trackFeatureUse("popup:guided:shown");
+  }, [ready, hidden, curKey]);
 
   if (!ready || hidden) return null;
   if (currentIndex === -1) return null; // 全部おわった

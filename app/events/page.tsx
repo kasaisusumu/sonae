@@ -121,7 +121,7 @@ export default async function EventsPage({
           <div>
             <h1 className="flex items-center gap-1.5 text-xl font-semibold tracking-tight">
               これからの予定
-              <InfoHint>
+              <InfoHint id="events-upcoming">
                 <span className="block font-semibold text-foreground">
                   カレンダーの説明欄から、そのまま準備リストへ
                 </span>

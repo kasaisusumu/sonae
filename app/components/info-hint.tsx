@@ -1,16 +1,21 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { trackFeatureUse } from "@/app/actions";
 
 /**
  * ⓘ ボタン。押すと画面中央に読みやすいポップアップで説明を出す。
  * （tooltip 方式だと右端で画面外にはみ出し、横スクロールが出ていたので中央固定に）
  * 見出しや <p> の中に置けるよう、要素は span / button のみで組む。
+ * `id` は管理画面の利用状況分析用の識別子（`lib/track-catalog.ts` の
+ * `INFOHINT_KEYS` と対応させる。新しく置いたら両方に追記すること）。
  */
 export function InfoHint({
+  id,
   children,
   label = "説明を見る",
 }: {
+  id: string;
   children: ReactNode;
   label?: string;
 }) {
@@ -21,7 +26,10 @@ export function InfoHint({
         type="button"
         aria-label={label}
         aria-expanded={open}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          void trackFeatureUse(`infohint:${id}`);
+        }}
         className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border align-middle text-[10px] font-semibold leading-none text-muted hover:border-foreground/50 hover:text-foreground"
       >
         i

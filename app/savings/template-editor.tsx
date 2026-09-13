@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { saveTemplateItems } from "@/app/actions";
+import { saveTemplateItems, tidyTemplateBulkText, trackFeatureUse } from "@/app/actions";
 import { LEAD_PRESETS, isLeadPreset } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
@@ -72,8 +72,7 @@ export function TemplateEditor({
       { key: nextKey(), title: "", notifyLeadMinutes: null },
     ]);
   }
-  function addBulk() {
-    const titles = parseBulkTitles(bulk);
+  function mergeTitlesIntoRows(titles: string[]) {
     if (titles.length === 0) return;
     const have = new Set(
       rows.map((r) => r.title.toLowerCase().replace(/\s+/g, "")),
@@ -94,6 +93,21 @@ export function TemplateEditor({
       return next;
     });
     setBulk("");
+  }
+
+  function addBulk() {
+    mergeTitlesIntoRows(parseBulkTitles(bulk));
+  }
+
+  const [tidying, startTidy] = useTransition();
+  function addBulkTidy() {
+    const text = bulk.trim();
+    if (!text) return;
+    void trackFeatureUse("feature:template-tidy-add");
+    startTidy(async () => {
+      const titles = await tidyTemplateBulkText(text);
+      mergeTitlesIntoRows(titles);
+    });
   }
 
   return (
@@ -171,17 +185,27 @@ export function TemplateEditor({
           value={bulk}
           onChange={(e) => setBulk(e.target.value)}
           rows={3}
-          placeholder={"メモから一括追加（1行に1つ）\n充電器\nモバイルバッテリー"}
+          placeholder={
+            "メモから一括追加（1行に1つ）。スマホのマイクキーで話してもOK。\n（例）充電器 モバイルバッテリー 常備薬\n「🎤 AIで整えて追加」なら話し言葉のままでも整えます。"
+          }
           className="w-full rounded-md border bg-surface px-2 py-1.5 text-sm"
         />
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-1 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={addBulk}
-            disabled={!bulk.trim()}
+            disabled={!bulk.trim() || tidying}
             className="rounded-md bg-foreground px-3 py-1 text-xs font-medium text-surface hover:opacity-90 disabled:opacity-50"
           >
             一括で行に追加
+          </button>
+          <button
+            type="button"
+            onClick={addBulkTidy}
+            disabled={!bulk.trim() || tidying}
+            className="rounded-md border border-foreground px-3 py-1 text-xs font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
+          >
+            {tidying ? "整えています…" : "🎤 AIで整えて追加"}
           </button>
           <span className="text-[11px] text-muted">追加すると自動保存されます。</span>
         </div>

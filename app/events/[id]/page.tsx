@@ -79,7 +79,7 @@ export default async function EventDetailPage({
 
       <h2 className="flex items-center gap-1.5 border-t border-border pt-5 text-lg font-semibold tracking-tight">
         準備リスト
-        <InfoHint>
+        <InfoHint id="event-checklist-heading">
           追加・削除・通知タイミングの変更は、この種類の予定の学習に使われます。
         </InfoHint>
       </h2>

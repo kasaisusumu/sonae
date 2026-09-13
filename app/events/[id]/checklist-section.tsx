@@ -261,7 +261,7 @@ export async function ChecklistSection({
           >
             <p className="flex items-center gap-1.5 text-xs text-foreground">
               連携時に取り込んだ予定です。準備リストはまだ作っていません
-              <InfoHint>
+              <InfoHint id="checklist-generate-existing">
                 自分で予定に入れる前からあった予定は、開いても自動では作りません。
                 このボタンを押すと、今この場で準備リスト・考えられる失敗を作ります。
               </InfoHint>
@@ -277,7 +277,7 @@ export async function ChecklistSection({
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface-muted px-4 py-3">
             <p className="flex items-center gap-1.5 text-xs text-foreground">
               このリストは未確認です
-              <InfoHint>
+              <InfoHint id="checklist-unreviewed">
                 中身を見て問題なければ「確認しました」を押してください。編集しても消えます。
               </InfoHint>
             </p>

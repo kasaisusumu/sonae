@@ -122,7 +122,7 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
     <section id="review" className="scroll-mt-4 space-y-3">
       <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
         🤔 結果を記録しよう（{remaining}件）
-        <InfoHint>
+        <InfoHint id="failures-review-queue">
           終わった予定、どうでしたか？ 「防げた」にしたものだけが節約額に積み上がります。
           押しても、このページを離れるまでは消えません。
         </InfoHint>

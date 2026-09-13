@@ -48,6 +48,17 @@ async function requireUserId(): Promise<string> {
   return userId;
 }
 
+/**
+ * クライアント側の機能利用・ⓘ・案内ポップアップの表示/スキップを記録する
+ * （管理画面の利用状況分析用）。ログインしていなければ何もしない。失敗しても無視する
+ * （UI 動作の途中に `void trackFeatureUse(...)` の形で呼ぶ想定。await/エラー処理は不要）。
+ */
+export async function trackFeatureUse(eventKey: string): Promise<void> {
+  const userId = await getSessionUserId();
+  if (!userId) return;
+  await prisma.featureEvent.create({ data: { userId, eventKey } }).catch(() => {});
+}
+
 function parseYen(raw: FormDataEntryValue | null): number {
   const n = Math.round(Number(String(raw ?? "").replace(/[^\d.-]/g, "")));
   return Number.isFinite(n) && n >= 0 ? n : 0;
@@ -1965,6 +1976,17 @@ export async function saveTemplateItems(
   ]);
 
   revalidateAppViews();
+}
+
+/**
+ * 名前付きマニュアルの編集画面（TemplateEditor）用: 自由文（スマホのマイクキーで
+ * 音声入力した話し言葉のままでもよい）を AI で項目名の配列に整える。
+ * DB へは書かない（呼び出し側が saveTemplateItems で保存する）。
+ */
+export async function tidyTemplateBulkText(text: string): Promise<string[]> {
+  await requireUserId();
+  const { tidyListItems } = await import("@/lib/tidy-list");
+  return tidyListItems(text);
 }
 
 /** 名前を付けたリストに、一括貼り付けで項目を追記する。 */

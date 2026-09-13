@@ -117,7 +117,7 @@ export default async function SettingsPage() {
               <span className="text-xs font-semibold">
                 説明欄に準備リストを書き込む
               </span>
-              <InfoHint>
+              <InfoHint id="settings-write-description">
                 予定の説明欄の末尾に「準備リストのリンク＋箇条書き」を追記・更新します。
                 日時・タイトル・元の説明文は変更しません。連携より前の予定は、
                 アプリで1回編集するか「確認しました」を押してから書き込まれます。
@@ -164,7 +164,7 @@ export default async function SettingsPage() {
       <section data-coach="settings-notify" className="rounded-2xl bg-surface p-5">
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-muted">
           通知
-          <InfoHint>
+          <InfoHint id="settings-notify">
             新しい予定の取り込み、準備リストのリマインド、予定のあとの
             「失敗はあった？」を、必要なときだけ送ります（数分おきに確認）。
           </InfoHint>

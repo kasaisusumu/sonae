@@ -899,7 +899,7 @@ export function ChecklistEditor({
 
       <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted">
         文言・メモ・追加・削除は自動保存
-        <InfoHint>
+        <InfoHint id="checklist-autosave">
           ∨ で通知タイミング・メモ・リンク・写真。文言もメモも、手を止めたら
           自動で保存されます。✕ で削除。
         </InfoHint>

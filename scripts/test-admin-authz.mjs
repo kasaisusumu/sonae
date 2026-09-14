@@ -27,7 +27,7 @@
  * 事前準備:
  *   1. ローカルで `npm run dev`（http://localhost:3000）を起動しておく
  *   2. .env の ADMIN_EMAIL に test-admin@example.com を含めておく
- *      例: ADMIN_EMAIL="kadomimo0504@gmail.com,test-admin@example.com"
+ *      例: ADMIN_EMAIL="m.kadota.official@gmail.com,test-admin@example.com"
  *      （本番 Vercel の環境変数は一切変更しない。ローカルの .env だけでよい）
  *
  * 実行:

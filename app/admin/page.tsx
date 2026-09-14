@@ -1,9 +1,14 @@
 import { notFound, redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatYen, formatDateOnly } from "@/lib/format";
 import { jstDayKey } from "@/lib/activity";
-import { isAdminEmail, consumeAdminLoginToken } from "@/lib/admin-auth";
+import {
+  isAdminEmail,
+  isAdminVerifiedCookieValid,
+  ADMIN_VERIFIED_COOKIE,
+} from "@/lib/admin-auth";
 import {
   PAGE_KEYS,
   FEATURE_KEYS,
@@ -190,18 +195,24 @@ function adminLoginErrorMessage(err: string | undefined, who: string | undefined
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ a?: string; err?: string; who?: string }>;
+  searchParams: Promise<{ err?: string; who?: string }>;
 }) {
   const me = await getCurrentUser();
   if (!me) redirect("/");
   if (!isAdminEmail(me.email)) notFound();
 
   // ここまでは「管理者アカウントでログイン中」の確認。ここから先は
-  // 「たった今 Google に再ログインしてきたか」を毎回確かめる（使い切りトークン）。
-  // 無ければ常に Google 再ログインへ飛ばすので、非管理者には何も見せない。
-  const { a, err, who } = await searchParams;
-  const verifiedJustNow = await consumeAdminLoginToken(a, me.id);
-  if (!verifiedJustNow) {
+  // 「Google に再ログインしてから一定時間（20分）以内か」を確かめる。
+  // 期限内ならスクロールなどでの再読み込みでも保持され、期限が切れたら
+  // また Google 再ログインが必要になる。無ければ常に Google 再ログインへ
+  // 飛ばすので、非管理者には何も見せない。
+  const { err, who } = await searchParams;
+  const store = await cookies();
+  const verified = isAdminVerifiedCookieValid(
+    store.get(ADMIN_VERIFIED_COOKIE)?.value,
+    me.id,
+  );
+  if (!verified) {
     // 直前の再ログインが失敗した直後（err 付き）は、無限に飛ばし続けずに
     // 理由を表示する。それ以外（初回アクセスなど）は黙って再ログインへ。
     if (err) {

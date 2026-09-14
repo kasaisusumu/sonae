@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import { prisma } from "@/lib/prisma";
 import { secret } from "@/lib/session";
 
 /**
@@ -19,38 +18,47 @@ export function isAdminEmail(email: string | null | undefined): boolean {
   return !!email && allowedAdminEmails().includes(email.toLowerCase());
 }
 
-// この時間を過ぎたトークンは、たとえ未消費でも無効（ログインし直し）。
-const TOKEN_MAX_AGE_MS = 5 * 60 * 1000;
+export const ADMIN_VERIFIED_COOKIE = "sonae_admin_verified";
 
-function sign(id: string): string {
-  return crypto.createHmac("sha256", secret()).update(`admin-login:${id}`).digest("hex");
+// Google 再ログイン確認から、この時間だけ /admin を見続けられる。
+// スクロール（pull-to-refresh 等）での偶発的な再読み込みでもログイン画面に
+// 戻されないよう、1 リクエスト限りの使い切りトークンではなく「時間帯」にした。
+// この時間を過ぎたら、また Google 再ログインが必要になる。
+export const ADMIN_VERIFIED_MAX_AGE_MS = 20 * 60 * 1000;
+
+function signVerified(userId: string, issuedAtMs: number): string {
+  return crypto
+    .createHmac("sha256", secret())
+    .update(`admin-verified:${userId}:${issuedAtMs}`)
+    .digest("hex");
 }
 
 /**
- * 管理者としての Google 再ログインが成功した直後に、その 1 回のアクセス分だけ
- * 有効なトークンを発行する。/admin を開くたびに毎回ログインし直させるための仕組み。
+ * 管理者としての Google 再ログインが成功した直後に呼ぶ。
+ * 「いつ確認できたか」を自己署名した値を返し、Cookie にそのまま入れる。
  */
-export async function issueAdminLoginToken(userId: string): Promise<string> {
-  const row = await prisma.adminLoginToken.create({ data: { userId } });
-  return `${row.id}.${sign(row.id)}`;
+export function issueAdminVerifiedCookieValue(userId: string): string {
+  const issuedAtMs = Date.now();
+  return `${issuedAtMs}.${signVerified(userId, issuedAtMs)}`;
 }
 
 /**
- * トークンを 1 回だけ消費する。成功したときだけ true を返す
- * （＝このリクエスト 1 回に限り管理画面を表示してよい）。
- * 署名不一致・期限切れ・二重使用・別ユーザーのものはすべて false。
- * DB 側の条件付き UPDATE で消費するため、同時アクセスがあっても二重には成功しない。
+ * Cookie の値が「このユーザー本人が、有効期限内に Google 再ログインを
+ * 済ませたもの」かどうかを検証する。消費（使い切り）はしないので、
+ * 期限内なら同じ Cookie で何度アクセス・再読み込みしても通る。
  */
-export async function consumeAdminLoginToken(
+export function isAdminVerifiedCookieValid(
   raw: string | null | undefined,
   userId: string,
-): Promise<boolean> {
+): boolean {
   if (!raw) return false;
   const idx = raw.lastIndexOf(".");
   if (idx <= 0) return false;
-  const id = raw.slice(0, idx);
+  const issuedAtMs = Number(raw.slice(0, idx));
   const sig = raw.slice(idx + 1);
-  const expected = sign(id);
+  if (!Number.isFinite(issuedAtMs)) return false;
+
+  const expected = signVerified(userId, issuedAtMs);
   if (
     sig.length !== expected.length ||
     !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))
@@ -58,10 +66,7 @@ export async function consumeAdminLoginToken(
     return false;
   }
 
-  const cutoff = new Date(Date.now() - TOKEN_MAX_AGE_MS);
-  const { count } = await prisma.adminLoginToken.updateMany({
-    where: { id, userId, usedAt: null, createdAt: { gte: cutoff } },
-    data: { usedAt: new Date() },
-  });
-  return count === 1;
+  const age = Date.now() - issuedAtMs;
+  // 未来すぎる（クロックずれ許容 5 秒）か、古すぎるものは無効。
+  return age >= -5000 && age <= ADMIN_VERIFIED_MAX_AGE_MS;
 }

@@ -5,7 +5,12 @@ import { exchangeCode, ensureWatch } from "@/lib/google";
 import { setSession } from "@/lib/session";
 import { ensureDefaultCategories } from "@/lib/categories";
 import { syncUserCalendar, refineFallbackCategories } from "@/lib/sync";
-import { isAdminEmail, issueAdminLoginToken } from "@/lib/admin-auth";
+import {
+  isAdminEmail,
+  issueAdminVerifiedCookieValue,
+  ADMIN_VERIFIED_COOKIE,
+  ADMIN_VERIFIED_MAX_AGE_MS,
+} from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -74,7 +79,7 @@ export async function GET(req: NextRequest) {
     await ensureDefaultCategories(user.id);
 
     // 管理画面（/admin）の毎回ログイン確認フロー。カレンダー同期などは不要なので、
-    // 本人確認ができたらここで即・使い切りトークンを発行して /admin に戻す。
+    // 本人確認ができたらここで即・確認済み Cookie を発行して /admin に戻す。
     // ここで isAdminEmail が false のときは setSession を呼ばない
     // （ブラウザに他の Google アカウントがログイン済みだと select_account 前は
     // そちらのアカウントで認証されうる。ここでセッションを書き換えると、確認に
@@ -87,8 +92,14 @@ export async function GET(req: NextRequest) {
         );
       }
       await setSession(user.id);
-      const token = await issueAdminLoginToken(user.id);
-      return NextResponse.redirect(`${base}/admin?a=${encodeURIComponent(token)}`);
+      store.set(ADMIN_VERIFIED_COOKIE, issueAdminVerifiedCookieValue(user.id), {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/admin",
+        maxAge: Math.floor(ADMIN_VERIFIED_MAX_AGE_MS / 1000),
+      });
+      return NextResponse.redirect(`${base}/admin`);
     }
 
     await setSession(user.id);

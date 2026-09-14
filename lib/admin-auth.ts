@@ -2,11 +2,15 @@ import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { secret } from "@/lib/session";
 
-/** 管理者として許可されたメールアドレス一覧（ADMIN_EMAIL、カンマ区切り・大小無視）。 */
+/**
+ * 管理者として許可されたメールアドレス一覧（ADMIN_EMAIL、カンマ区切り・大小無視）。
+ * Vercel の環境変数入力欄に `.env.example` の書き方（`"a@example.com"`）をそのまま
+ * 引用符付きで貼ってしまう事故がありうるので、前後の引用符も念のため取り除く。
+ */
 function allowedAdminEmails(): string[] {
   return (process.env.ADMIN_EMAIL ?? "")
     .split(",")
-    .map((s) => s.trim().toLowerCase())
+    .map((s) => s.trim().replace(/^["']+|["']+$/g, "").trim().toLowerCase())
     .filter(Boolean);
 }
 

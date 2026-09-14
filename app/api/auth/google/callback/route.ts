@@ -30,6 +30,12 @@ export async function GET(req: NextRequest) {
   store.delete("sonae_oauth_dest");
 
   if (error || !code || !state || state !== expectedState) {
+    // 管理画面の再ログイン中の失敗は、元のセッションを保ったまま /admin に
+    // 戻して理由を表示する（/ に戻すと、ログイン済みのままなので
+    // auth=failed のメッセージが表示されず「何も起きなかった」ように見えてしまう）。
+    if (oauthDest === "admin") {
+      return NextResponse.redirect(`${base}/admin?err=state`);
+    }
     return NextResponse.redirect(`${base}/?auth=failed`);
   }
 
@@ -76,7 +82,9 @@ export async function GET(req: NextRequest) {
     // ログアウトされたように見えてしまうため、元のセッションはそのまま残す）。
     if (oauthDest === "admin") {
       if (!isAdminEmail(profile.email)) {
-        return NextResponse.redirect(`${base}/admin`);
+        return NextResponse.redirect(
+          `${base}/admin?err=mismatch&who=${encodeURIComponent(profile.email)}`,
+        );
       }
       await setSession(user.id);
       const token = await issueAdminLoginToken(user.id);
@@ -109,6 +117,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${base}${dest}`);
   } catch (e) {
     console.error("[auth/callback] 失敗:", e);
+    if (oauthDest === "admin") {
+      return NextResponse.redirect(`${base}/admin?err=exchange`);
+    }
     return NextResponse.redirect(`${base}/?auth=failed`);
   }
 }

@@ -174,10 +174,23 @@ function UsageMatrix({
   );
 }
 
+function adminLoginErrorMessage(err: string | undefined, who: string | undefined): string {
+  if (err === "mismatch") {
+    return `Google側で選んだアカウント（${who ?? "不明"}）は管理者として登録されていません。アカウント選択画面で正しいアカウントを選び直してください。`;
+  }
+  if (err === "state") {
+    return "ログインの確認情報（state）が一致しませんでした。Cookieがブロックされていないか確認のうえ、もう一度お試しください。";
+  }
+  if (err === "exchange") {
+    return "Googleとの認証処理中にエラーが発生しました。もう一度お試しください（続く場合は運営者にご連絡ください）。";
+  }
+  return "確認に失敗しました。もう一度お試しください。";
+}
+
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ a?: string }>;
+  searchParams: Promise<{ a?: string; err?: string; who?: string }>;
 }) {
   const me = await getCurrentUser();
   if (!me) redirect("/");
@@ -186,9 +199,25 @@ export default async function AdminPage({
   // ここまでは「管理者アカウントでログイン中」の確認。ここから先は
   // 「たった今 Google に再ログインしてきたか」を毎回確かめる（使い切りトークン）。
   // 無ければ常に Google 再ログインへ飛ばすので、非管理者には何も見せない。
-  const { a } = await searchParams;
+  const { a, err, who } = await searchParams;
   const verifiedJustNow = await consumeAdminLoginToken(a, me.id);
   if (!verifiedJustNow) {
+    // 直前の再ログインが失敗した直後（err 付き）は、無限に飛ばし続けずに
+    // 理由を表示する。それ以外（初回アクセスなど）は黙って再ログインへ。
+    if (err) {
+      return (
+        <main className="mx-auto max-w-md px-4 py-16 text-sm">
+          <h1 className="mb-3 text-base font-semibold">管理者ログインの確認に失敗しました</h1>
+          <p className="mb-4 text-muted">{adminLoginErrorMessage(err, who)}</p>
+          <a
+            href="/api/auth/google?dest=admin"
+            className="inline-block rounded-lg bg-foreground px-4 py-2 font-medium text-surface hover:opacity-90"
+          >
+            もう一度ログインする
+          </a>
+        </main>
+      );
+    }
     redirect("/api/auth/google?dest=admin");
   }
 

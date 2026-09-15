@@ -19,6 +19,12 @@ interface Sig {
 /**
  * EventFeature を粗いバケットに落として、キー順を固定した JSON 文字列にする。
  * 4 次元（期間・海外・平日・時間帯）で、以前より細かく分ける。
+ *
+ * 注: EventFeatureData.eventLengthBucket（予定自体の所要時間）はここに含めない。
+ * 含めると exclude_item/fixed_item など既存ルール全体の一致条件がより細かくなり、
+ * 同一カテゴリ内の学習の枝分かれ方が変わってしまう（ユーザー指示で既存の学習挙動は
+ * 変えない方針のため）。pattern_item（カテゴリ横断パターン）は featureSignature を
+ * 検索条件に使わず slotType だけで横断検索するので、影響しない。
  */
 export function featureSignature(f: EventFeatureData): string {
   return JSON.stringify({

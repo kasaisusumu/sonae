@@ -59,6 +59,7 @@ function sigOf(ef: StoredFeature): string | null {
     isWeekday: ef.isWeekday,
     timeBucket: ef.timeBucket as TimeBucket,
     keywords: [],
+    eventLengthBucket: null,
   });
 }
 

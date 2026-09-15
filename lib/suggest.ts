@@ -3,8 +3,11 @@ import { extractEventFeature, type EventFeatureData } from "@/lib/features";
 import { generateBaseChecklist, type GeneratedBase } from "@/lib/generate";
 import { recallBaseChecklist } from "@/lib/recall";
 import { parseLead } from "@/lib/lead-time";
+import { matchEventToSlotType } from "@/lib/pattern-classify";
 import {
   getApplicableRules,
+  getApplicablePatternRules,
+  getKnownPatternSlotTypes,
   norm,
   parseNotifyValue,
   suggestNotifyLead,
@@ -24,7 +27,7 @@ export interface BuiltItem {
   timingLabel: string | null;
   notifyLeadMinutes: number | null;
   isSuggested: boolean;
-  suggestionType: "exclude" | "add" | "timing" | null;
+  suggestionType: "exclude" | "add" | "timing" | "pattern_analogy" | null;
   suggestionRuleId: string | null;
   suggestionValue: string | null;
   priority: number;
@@ -175,6 +178,56 @@ function composeKind(
 }
 
 /**
+ * カテゴリ横断パターン（ruleType="pattern_item"）を、この予定向けに具体化する。
+ * - skip（recall で前回の内容をそのまま出す＝verbatim）のときは何も足さない。
+ *   通知/タイミングの上書きや仮提案も verbatim では出さない既存方針と揃える。
+ * - ユーザーが1件もパターンを学習していなければ、AI を呼ぶまでもなく空を返す。
+ * - 確信度の条件（aiConfidence >= 0.8 または 採用-却下 >= 2）を満たすものだけ、
+ *   isSuggested:false・通常の項目と同じ見え方で追加する（目立たない中間状態は作らない）。
+ */
+async function buildPatternItems(
+  userId: string,
+  eventTitle: string,
+  feature: EventFeatureData,
+  skip: boolean,
+): Promise<BuiltItem[]> {
+  if (skip) return [];
+  const knownSlotTypes = await getKnownPatternSlotTypes(userId);
+  if (knownSlotTypes.length === 0) return [];
+
+  const match = await matchEventToSlotType(
+    { title: eventTitle, keywords: feature.keywords },
+    knownSlotTypes,
+  );
+  if (!match) return [];
+
+  const out: BuiltItem[] = [];
+  for (const kind of ["task", "belonging"] as ItemKind[]) {
+    const rules = await getApplicablePatternRules(userId, match.slotType, kind);
+    for (const r of rules) {
+      const strong =
+        (r.aiConfidence ?? 0) >= 0.8 ||
+        r.confirmedCount - r.contradictedCount >= 2;
+      if (!strong || !r.patternTemplate.includes("{slot}")) continue;
+      const title = r.patternTemplate.replace("{slot}", match.value);
+      if (!title.trim()) continue;
+      out.push({
+        kind,
+        title,
+        timingLabel: null,
+        notifyLeadMinutes: null,
+        isSuggested: false,
+        suggestionType: "pattern_analogy",
+        suggestionRuleId: r.id,
+        suggestionValue: title,
+        priority: 1,
+      });
+    }
+  }
+  return out;
+}
+
+/**
  * 予定の準備リスト（準備すること＋持ち物）を組み立てる。
  * 一般ベース → 確定ルール強制適用 → 仮ルールは提案 → 上限で間引き。
  * 学習が薄いカテゴリ・パターンではベースがほぼそのまま出る。
@@ -202,6 +255,7 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
       isWeekday: feature.isWeekday,
       timeBucket: feature.timeBucket,
       keywords: JSON.stringify(feature.keywords),
+      eventLengthBucket: feature.eventLengthBucket,
     },
     update: {
       isOverseas: feature.isOverseas,
@@ -209,6 +263,7 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
       isWeekday: feature.isWeekday,
       timeBucket: feature.timeBucket,
       keywords: JSON.stringify(feature.keywords),
+      eventLengthBucket: feature.eventLengthBucket,
     },
   });
 
@@ -253,7 +308,7 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
   // 項目ごとの通知は既定「なし」。生成時に時間を自動で埋めない（学習した notify_override があればそれは効く）。
   // リマインドは予定単位の「準備リストのリマインド」（既定 1 日前）に一本化。
   const verbatim = !!recalled;
-  return [
+  const composed = [
     ...composeKind("task", gen.tasks, taskRules, {
       autofillNotify: false,
       verbatim,
@@ -263,4 +318,19 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
       verbatim,
     }),
   ];
+
+  // カテゴリ横断パターン（例:「新幹線の時間を確認する」→ 別カテゴリでも交通手段の項目として転用）。
+  // 既に同じ内容の項目があれば重複させない。
+  const patternItems = await buildPatternItems(
+    event.userId,
+    event.title,
+    feature,
+    verbatim,
+  );
+  const existingKeys = new Set(composed.map((it) => `${it.kind}:${norm(it.title)}`));
+  const dedupedPatternItems = patternItems.filter(
+    (it) => !existingKeys.has(`${it.kind}:${norm(it.title)}`),
+  );
+
+  return [...composed, ...dedupedPatternItems];
 }

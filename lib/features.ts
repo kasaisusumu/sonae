@@ -1,4 +1,6 @@
 export type TimeBucket = "morning" | "afternoon" | "evening" | "allday";
+/** 予定自体の所要時間バケット。宿泊数（durationNights）とは別物（日帰り出張と半日の会議は違う）。 */
+export type EventLengthBucket = "short" | "half_day" | "full_day";
 
 export interface EventFeatureData {
   isOverseas: boolean | null;
@@ -6,6 +8,8 @@ export interface EventFeatureData {
   isWeekday: boolean;
   timeBucket: TimeBucket;
   keywords: string[];
+  /** endDatetime - eventDatetime から算出。終了時刻が無い等で不明なら null。 */
+  eventLengthBucket: EventLengthBucket | null;
 }
 
 const OVERSEAS_HINTS = [
@@ -81,6 +85,19 @@ function extractKeywords(text: string): string[] {
   return out;
 }
 
+/** 予定自体の長さ（開始〜終了）をバケットに落とす。終了時刻が無ければ null。 */
+function inferEventLengthBucket(
+  start: Date,
+  end: Date | null | undefined,
+): EventLengthBucket | null {
+  if (!end) return null;
+  const hours = (end.getTime() - start.getTime()) / 3_600_000;
+  if (!Number.isFinite(hours) || hours <= 0) return null;
+  if (hours <= 2) return "short";
+  if (hours <= 6) return "half_day";
+  return "full_day";
+}
+
 function timeBucketOf(d: Date, text: string): TimeBucket {
   if (/終日|all\s*day/i.test(text)) return "allday";
   const h = d.getHours();
@@ -105,5 +122,6 @@ export function extractEventFeature(event: {
     isWeekday: day >= 1 && day <= 5,
     timeBucket: timeBucketOf(event.eventDatetime, text),
     keywords: extractKeywords(text),
+    eventLengthBucket: inferEventLengthBucket(event.eventDatetime, event.endDatetime),
   };
 }

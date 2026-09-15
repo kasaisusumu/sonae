@@ -211,9 +211,11 @@ model ChecklistItem {
 
   // confidence の低い「提案」項目（ユーザーが1タップで適用/却下）
   isSuggested      Boolean @default(false)
-  suggestionType   String? // "exclude" | "add" | "timing"
+  // "exclude" | "add" | "timing" | "pattern_analogy"（カテゴリ横断パターンから
+  // そのまま確定項目として追加したもの。isSuggested は false のまま＝通常項目と同じ見た目）
+  suggestionType   String?
   suggestionRuleId String? // 元になった LearnedRule.id
-  suggestionValue  String? // timing 提案のときの提案タイミング
+  suggestionValue  String? // timing 提案のときの提案タイミング / pattern_analogy の確定タイトル
 }
 
 // ── 学習ロジック（spec 9.2）: EventFeature + EditRecord + LearnedRule ──
@@ -228,6 +230,11 @@ model EventFeature {
   isWeekday      Boolean  @default(true)
   timeBucket     String? // "morning" | "afternoon" | "evening" | "allday"
   keywords       String   @default("[]") // json string[]
+  // 予定自体の所要時間バケット（endDatetime - eventDatetime）。
+  // "short" | "half_day" | "full_day"。不明（終了時刻なし等）なら null。
+  // featureSignature には含めない（既存の同一カテゴリ学習の枝分かれ方を変えないため。
+  // 詳細は lib/signature.ts のコメント参照）。将来の分析用に保存だけしておく。
+  eventLengthBucket String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -255,19 +262,28 @@ model LearnedRule {
   category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   featureSignature  String   @default("{}") // json {d?:duration, o?:overseas, w?:weekday, t?:timeBucket}
   itemKind          String   @default("task") // "task" | "belonging"
-  ruleType          String // "exclude_item" | "fixed_item" | "timing_override"
+  ruleType          String // "exclude_item" | "fixed_item" | "timing_override" | "notify_override" | "pattern_item"
   target            String // 対象項目名
   value             String? // timing_override / fixed_item のタイミングラベル
   confidence        Float    @default(0.35) // 0-1。反復確認で上昇、矛盾で低下、未更新で経年劣化
-  confirmedCount    Int      @default(1) // 連続確認回数（矛盾でリセット）
+  confirmedCount    Int      @default(1) // 連続確認回数（矛盾でリセット）。pattern_item は別の数え方（下記）
   contradictedCount Int      @default(0) // 矛盾が起きた累計
   lastConfirmedAt   DateTime @default(now())
   isUserLocked      Boolean  @default(false) // 「学習内容の確認」画面で固定した
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // ── ruleType="pattern_item" 専用（カテゴリ横断のパターン提案） ──
+  // 「バスの時間を確認する」のような項目が別カテゴリでも転用できるかを AI で判定した結果。
+  // confirmedCount/contradictedCount は上の一般ルールと同じ列を使うが、意味が違う:
+  // ここでは「単純な採用/却下の差分カウント」（computeConfidence は使わない）。
+  slotType        String? // 一般化した対象の種類。例: "交通手段"（pattern_item のときのみ使用）
+  patternTemplate String? // 一般化テンプレート。例: "{slot}の時間を確認する"
+  aiConfidence    Float? // AI による初回判定時の確信度（0.0〜1.0）
+
   @@unique([categoryId, itemKind, ruleType, target, featureSignature])
   @@index([categoryId, itemKind, ruleType])
+  @@index([ruleType, slotType])
 }
 
 model FailureLog {

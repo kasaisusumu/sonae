@@ -8,12 +8,14 @@ import {
   WILDCARD_SIGNATURE,
 } from "@/lib/signature";
 import { resolveSections, sectionLabel } from "@/lib/sections";
+import { classifyItemPattern } from "@/lib/pattern-classify";
 
 export type RuleType =
   | "exclude_item"
   | "fixed_item"
   | "timing_override"
-  | "notify_override"; // value = 予定開始の何分前に通知するか（分）／"off" = 通知しない
+  | "notify_override" // value = 予定開始の何分前に通知するか（分）／"off" = 通知しない
+  | "pattern_item"; // カテゴリ横断パターン（§ カテゴリ横断パターン提案機能）
 // 組み込みは task / belonging。ユーザーが足した枠は枠名そのものがキーになる。
 export type ItemKind = "task" | "belonging" | (string & {});
 
@@ -252,6 +254,113 @@ async function contradictAll(
   for (const r of rows) await contradictRule(r.id);
 }
 
+// ── カテゴリ横断パターン（ruleType="pattern_item"） ─────────────────
+
+export interface PatternRule {
+  id: string;
+  itemKind: ItemKind;
+  slotType: string;
+  patternTemplate: string;
+  aiConfidence: number | null;
+  confirmedCount: number;
+  contradictedCount: number;
+}
+
+/**
+ * ユーザーが少しでも学習した pattern_item の slotType 一覧（カテゴリ横断・重複無し）。
+ * これが空なら、新しい予定で slotType 推定 AI を呼ぶ必要すら無い（安価な早期終了）。
+ * 却下（contradictedCount > confirmedCount）が優勢のものは候補にも出さない。
+ */
+export async function getKnownPatternSlotTypes(userId: string): Promise<string[]> {
+  const rows = await prisma.learnedRule.findMany({
+    where: { ruleType: "pattern_item", category: { userId } },
+    select: { slotType: true, confirmedCount: true, contradictedCount: true },
+  });
+  const ok = new Set<string>();
+  for (const r of rows) {
+    if (r.slotType && r.contradictedCount <= r.confirmedCount) ok.add(r.slotType);
+  }
+  return [...ok];
+}
+
+/**
+ * 指定 slotType の pattern_item ルールを、カテゴリを問わず横断して取得する
+ * （既存の getApplicableRules は categoryId 単位で完結する前提のため、こちらは別関数にする。
+ * @@unique な制約はカテゴリ単位のまま変えず、検索だけ横断的に行う）。
+ * 却下が優勢（contradictedCount > confirmedCount）のものは以後提案しない。
+ */
+export async function getApplicablePatternRules(
+  userId: string,
+  slotType: string,
+  itemKind: ItemKind = "task",
+): Promise<PatternRule[]> {
+  if (!slotType) return [];
+  const rows = await prisma.learnedRule.findMany({
+    where: {
+      ruleType: "pattern_item",
+      slotType,
+      itemKind,
+      category: { userId },
+    },
+  });
+  return rows
+    .filter((r) => r.contradictedCount <= r.confirmedCount && r.patternTemplate)
+    .map((r) => ({
+      id: r.id,
+      itemKind: r.itemKind as ItemKind,
+      slotType: r.slotType!,
+      patternTemplate: r.patternTemplate!,
+      aiConfidence: r.aiConfidence,
+      confirmedCount: r.confirmedCount,
+      contradictedCount: r.contradictedCount,
+    }));
+}
+
+/**
+ * 新しく確認された pattern_item を（無ければ）作る。confirmedCount/contradictedCount は
+ * 0 で初期化し、以後は saveChecklist 側の採用/却下だけで増減する
+ * （computeConfidence は使わない。同一項目から派生した元の fixed_item ルールにも影響しない）。
+ */
+export async function createPatternRuleIfNew(input: {
+  categoryId: string;
+  itemKind: ItemKind;
+  target: string;
+  featureSignature: string;
+  slotType: string;
+  patternTemplate: string;
+  aiConfidence: number;
+}): Promise<void> {
+  const target = input.target.trim();
+  if (!target) return;
+  const existing = await prisma.learnedRule.findUnique({
+    where: {
+      categoryId_itemKind_ruleType_target_featureSignature: {
+        categoryId: input.categoryId,
+        itemKind: input.itemKind,
+        ruleType: "pattern_item",
+        target,
+        featureSignature: input.featureSignature,
+      },
+    },
+  });
+  if (existing) return;
+  await prisma.learnedRule.create({
+    data: {
+      categoryId: input.categoryId,
+      itemKind: input.itemKind,
+      ruleType: "pattern_item",
+      target,
+      featureSignature: input.featureSignature,
+      slotType: input.slotType,
+      patternTemplate: input.patternTemplate,
+      aiConfidence: input.aiConfidence,
+      confirmedCount: 0,
+      contradictedCount: 0,
+      // 一般の confidence 計算式は使わないが、列自体は NOT NULL では無いので既定値のままでよい。
+    },
+  });
+}
+
 export interface EditForLearning {
   eventId: string;
   categoryId: string;
@@ -322,6 +431,34 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
       a.timingLabel,
     );
     await contradictAll(categoryId, itemKind, "exclude_item", a.title);
+  }
+
+  // カテゴリ横断パターン判定（1回目の追加から実行。既存の fixed_item 学習とは
+  // 完全に独立で、CONFIDENCE_THRESHOLD/computeConfidence には一切触れない）。
+  const newTitles = input.added.map((a) => a.title.trim()).filter(Boolean);
+  if (newTitles.length > 0 && process.env.OPENAI_API_KEY) {
+    const category = await prisma.category
+      .findUnique({ where: { id: categoryId }, select: { name: true } })
+      .catch(() => null);
+    const categoryName = category?.name ?? "その他";
+    for (const title of newTitles) {
+      const cls = await classifyItemPattern({
+        title,
+        categoryName,
+        keywords: feature.keywords,
+      }).catch(() => ({ isPattern: false as const }));
+      if (cls.isPattern && cls.slotType && cls.patternTemplate) {
+        await createPatternRuleIfNew({
+          categoryId,
+          itemKind,
+          target: title,
+          featureSignature: sig,
+          slotType: cls.slotType,
+          patternTemplate: cls.patternTemplate,
+          aiConfidence: cls.aiConfidence ?? 0.5,
+        }).catch(() => {});
+      }
+    }
   }
   for (const rt of input.retimed) {
     if (!rt.title.trim() || !rt.timingLabel.trim()) continue;
@@ -440,6 +577,7 @@ function signatureFromFeatureRow(f: FeatureRow): string {
     isWeekday: f.isWeekday,
     timeBucket: f.timeBucket as TimeBucket,
     keywords: [],
+    eventLengthBucket: null,
   });
 }
 

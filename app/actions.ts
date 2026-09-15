@@ -687,6 +687,26 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
       });
     }
 
+    // カテゴリ横断パターン（pattern_analogy）の採用/却下フィードバック。
+    // この保存で非提案項目は毎回全部作り直され、その際 suggestionType は引き継がれない
+    // （上の createMany 参照）ので、「pattern_analogy が付いたまま迎えるこの1回の保存」が
+    // 採用/却下を判定できる唯一の機会になる。次回以降の保存では既にタグが外れているので
+    // 何回再保存しても二重にカウントされない。
+    const patternPrev = prev.filter(
+      (c) => c.suggestionType === "pattern_analogy" && c.suggestionRuleId,
+    );
+    for (const c of patternPrev) {
+      const kept = nextTitles.has(c.title.trim());
+      await prisma.learnedRule
+        .update({
+          where: { id: c.suggestionRuleId! },
+          data: kept
+            ? { confirmedCount: { increment: 1 } }
+            : { contradictedCount: { increment: 1 } },
+        })
+        .catch(() => {});
+    }
+
     await markAutoManaged(input.eventId);
 
     // 内容（項目・通知時間）が変わった編集なら、同名グループの扱いを更新する。

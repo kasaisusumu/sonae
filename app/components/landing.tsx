@@ -111,10 +111,10 @@ function FailMock() {
       </div>
       <div className="rounded-xl bg-gradient-to-br from-foreground to-foreground/85 p-3.5 text-white shadow-[0_10px_30px_-12px_rgba(0,0,0,0.5)]">
         <p className="text-[10px] uppercase tracking-wide text-white/60">
-          今月 防げた分（推定）
+          今月 防げた件数
         </p>
         <p className="mt-1 text-[26px] font-bold tabular-nums leading-none">
-          ¥3,200
+          4件
         </p>
         <p className="mt-1 text-[10px] text-white/55">防げたうっかり 4 件</p>
       </div>

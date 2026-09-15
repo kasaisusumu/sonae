@@ -5,7 +5,7 @@ import {
   setFailureOutcome,
   updateFailureLog,
 } from "@/app/actions";
-import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
+import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { SubmitButton } from "@/app/components/submit-button";
 
@@ -14,7 +14,7 @@ export type FRRow = {
   id: string;
   description: string;
   occurredAt: Date;
-  estimatedLossYen: number;
+  countermeasure: string | null;
   outcome: string | null;
   categoryName: string | null;
   eventTitle: string | null;
@@ -91,7 +91,6 @@ export function FailureReviewRow({
       {formatDateOnly(l.occurredAt)}
       {l.categoryName ? ` ・ ${l.categoryName}` : " ・ カテゴリなし"}
       {l.eventTitle ? ` ・ 「${l.eventTitle}」` : ""}
-      {l.estimatedLossYen > 0 ? ` ・ 推定 ${formatYen(l.estimatedLossYen)}` : ""}
     </p>
   );
 
@@ -110,6 +109,11 @@ export function FailureReviewRow({
         <div className="min-w-0">
           <p className="whitespace-pre-wrap text-sm">{l.description}</p>
           {meta}
+          {l.countermeasure && (
+            <p className="mt-1 text-xs text-teal-dark">
+              💡 対策: {l.countermeasure}
+            </p>
+          )}
         </div>
         <form action={deleteFailureLog}>
           <input type="hidden" name="id" value={l.id} />
@@ -154,7 +158,7 @@ export function FailureReviewRow({
 
       <details className="mt-2 [&_summary::-webkit-details-marker]:hidden">
         <summary className="cursor-pointer list-none text-[11px] text-teal-dark">
-          ✏️ 内容・金額・日付を直す
+          ✏️ 内容・対策を直す
         </summary>
         <form action={updateFailureLog} className="mt-2 space-y-2">
           <input type="hidden" name="id" value={l.id} />
@@ -165,29 +169,13 @@ export function FailureReviewRow({
             defaultValue={l.description}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
           />
-          <div className="grid gap-2 sm:grid-cols-2">
-            <label className="block text-xs text-muted">
-              金額（円）
-              <input
-                type="number"
-                name="estimatedLossYen"
-                min={0}
-                step={100}
-                defaultValue={l.estimatedLossYen || ""}
-                placeholder="任意"
-                className="mt-0.5 w-full rounded-md border bg-background px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="block text-xs text-muted">
-              日付
-              <input
-                type="date"
-                name="occurredAt"
-                defaultValue={toDateInputValue(l.occurredAt)}
-                className="mt-0.5 w-full rounded-md border bg-background px-3 py-2 text-sm"
-              />
-            </label>
-          </div>
+          <textarea
+            name="countermeasure"
+            rows={1}
+            defaultValue={l.countermeasure ?? ""}
+            placeholder="有効だった対策（あれば・任意）"
+            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+          />
           <SubmitButton variant="ghost">更新</SubmitButton>
         </form>
       </details>

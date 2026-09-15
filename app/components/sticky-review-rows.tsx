@@ -30,10 +30,10 @@ export function StickyReviewRows({
   const [, start] = useTransition();
 
   const CONFIRM: Record<OutcomeTarget, string> = {
-    prevented: "「防げた」で記録しますか？（推定額が節約額に積み上がります）",
-    not_prevented: "「防げなかった」に変更しますか？（節約額から外れます）",
-    irrelevant: "「今回は関係ない」に変更しますか？（節約額から外れます）",
-    unset: "この結果を取り消しますか？（節約額から外れます）",
+    prevented: "「防げた」で記録しますか？（防げた件数に積み上がります）",
+    not_prevented: "「防げなかった」に変更しますか？（防げた件数から外れます）",
+    irrelevant: "「今回は関係ない」に変更しますか？（防げた件数から外れます）",
+    unset: "この結果を取り消しますか？（防げた件数から外れます）",
   };
 
   function handleOutcome(id: string, t: OutcomeTarget) {

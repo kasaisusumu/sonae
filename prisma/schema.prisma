@@ -284,8 +284,11 @@ model FailureLog {
   // 予定の特徴シグネチャ（spec 9.2 の {d,o,w,t}）。記録時にその場で確定する。
   // "{}" は「予定に紐づかない＝カテゴリ全体」を意味し、どの予定にも当たる。
   featureSignature String   @default("{}")
-  // 推定損失額（円・任意。0 のままでもよい）
+  // 推定損失額（円）。UI では入力させず金額表示もしない旧フィールド（後方互換のため残す）。
   estimatedLossYen Int      @default(0)
+  // 有効だった対策（自由記述・任意）。「防げた」ときに何をしたかを書いてもらう。
+  // 似た失敗の候補を出すときに対策候補としても引き継がれる（learning と同じ要領）。
+  countermeasure   String?
   // 振り返りの結果: null = 未選択 / "prevented" = 防げた / "not_prevented" = 防げなかった
   // ダッシュボードには "prevented" のものだけ残す。未選択は失敗ログ一覧で選ぶ。
   outcome          String?

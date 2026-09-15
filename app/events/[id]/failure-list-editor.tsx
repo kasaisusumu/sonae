@@ -9,7 +9,7 @@ import {
   setFailureOutcome,
   updateFailureLog,
 } from "@/app/actions";
-import { formatDateOnly, formatYen, toDateInputValue } from "@/lib/format";
+import { formatDateOnly } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
@@ -19,7 +19,7 @@ export type FLRow = {
   id: string;
   description: string;
   outcome: string | null;
-  estimatedLossYen: number;
+  countermeasure: string | null;
   occurredAt: Date;
 };
 export type FLOther = {
@@ -46,18 +46,15 @@ function meta(o: string | null): { icon: string; label: string } {
 
 
 /**
- * 1 行ぶんの編集フォーム（内容・結果・金額・日付）＋削除。両表示で共通。
- * 「更新」ボタンはなく、変えたその場で自動保存する（内容・金額・日付は少し待って
+ * 1 行ぶんの編集フォーム（内容・結果・対策）＋削除。両表示で共通。
+ * 「更新」ボタンはなく、変えたその場で自動保存する（内容・対策は少し待って
  * から、結果／状態の選択は即時）。要領は準備リストの自動保存と同じ。
- * hideDate: この予定に紐づく失敗ログは日付が予定の日で確定しているので出さない。
+ * 金額・日付は聞かない（振り返りではどちらも不要という方針）。
  */
-function RowEditForms({ r, hideDate = false }: { r: FLRow; hideDate?: boolean }) {
+function RowEditForms({ r }: { r: FLRow }) {
   const [desc, setDesc] = useState(r.description);
   const [outcome, setOutcome] = useState<string>(r.outcome ?? "");
-  const [amount, setAmount] = useState(
-    r.estimatedLossYen ? String(r.estimatedLossYen) : "",
-  );
-  const [date, setDate] = useState(toDateInputValue(r.occurredAt));
+  const [countermeasure, setCountermeasure] = useState(r.countermeasure ?? "");
   const [pending, start] = useTransition();
   const firstRun = useRef(true);
 
@@ -65,13 +62,12 @@ function RowEditForms({ r, hideDate = false }: { r: FLRow; hideDate?: boolean })
     const fd = new FormData();
     fd.set("id", r.id);
     fd.set("description", desc);
-    fd.set("estimatedLossYen", amount);
-    if (!hideDate) fd.set("occurredAt", date);
+    fd.set("countermeasure", countermeasure);
     if (over.outcome !== undefined) fd.set("outcome", over.outcome);
     return fd;
   }
 
-  // 内容・金額・日付は入力が落ち着いてから保存（結果の select は onChange で即時）。
+  // 内容・対策は入力が落ち着いてから保存（結果の select は onChange で即時）。
   useEffect(() => {
     if (firstRun.current) {
       firstRun.current = false;
@@ -82,18 +78,26 @@ function RowEditForms({ r, hideDate = false }: { r: FLRow; hideDate?: boolean })
     }, 800);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [desc, amount, date]);
+  }, [desc, countermeasure]);
 
   return (
     <>
       <AutosaveIndicator show={pending} />
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <textarea
           rows={2}
           value={desc}
           onChange={(e) => setDesc(e.target.value)}
           className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
           aria-label="失敗の内容"
+        />
+        <textarea
+          rows={1}
+          value={countermeasure}
+          onChange={(e) => setCountermeasure(e.target.value)}
+          placeholder="有効だった対策（あれば・任意）"
+          className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+          aria-label="有効だった対策"
         />
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
           <select
@@ -111,25 +115,6 @@ function RowEditForms({ r, hideDate = false }: { r: FLRow; hideDate?: boolean })
             <option value="not_prevented">防げなかった</option>
             <option value="irrelevant">今回は関係ない</option>
           </select>
-          <input
-            type="number"
-            min={0}
-            step={100}
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="円"
-            className="w-20 rounded-md border bg-background px-1.5 py-1 text-xs"
-            aria-label="金額"
-          />
-          {!hideDate && (
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="rounded-md border bg-background px-1.5 py-1 text-xs"
-              aria-label="日付"
-            />
-          )}
           <span className="text-[11px] text-muted">
             {pending ? "保存中…" : "変更は自動保存"}
           </span>
@@ -165,7 +150,18 @@ export function FailureListEditor({
   others?: FLOther[];
   variant?: "plain" | "warn";
 }) {
-  const [openId, setOpenId] = useState<string | null>(null);
+  // 失敗候補（outcome === null ＝アプリが自動提案したもの）は、対策候補も
+  // 一緒に見てもらいたいので、最初から開いた状態で出す（ユーザー指定）。
+  const [openIds, setOpenIds] = useState(
+    () => new Set(initial.filter((r) => r.outcome === null).map((r) => r.id)),
+  );
+  const toggle = (id: string) =>
+    setOpenIds((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const [adding, setAdding] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [pickOpen, setPickOpen] = useState(false);
@@ -207,7 +203,7 @@ export function FailureListEditor({
         <ul className="mt-1 space-y-1">
           {initial.map((r) => {
             const m = meta(r.outcome);
-            const open = openId === r.id;
+            const open = openIds.has(r.id);
             return (
               <li
                 key={r.id}
@@ -218,15 +214,12 @@ export function FailureListEditor({
                 </p>
                 <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-muted">
                   <span>{formatDateOnly(r.occurredAt)}</span>
-                  {r.estimatedLossYen > 0 && (
-                    <span>・ 推定 {formatYen(r.estimatedLossYen)}</span>
-                  )}
                   <span>・ {m.label}</span>
                   <button
                     type="button"
                     onClick={() => {
                       setEditMode(true);
-                      setOpenId(open ? null : r.id);
+                      toggle(r.id);
                     }}
                     className="ml-auto rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] text-muted hover:text-foreground"
                   >
@@ -257,16 +250,12 @@ export function FailureListEditor({
                 placeholder="何が起きた？（例: 集合時間に遅刻した）"
                 className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs"
               />
+              <input
+                name="countermeasure"
+                placeholder="有効だった対策（あれば・任意）"
+                className="w-full rounded-md border bg-background px-2 py-1 text-xs"
+              />
               <div className="flex flex-wrap items-center gap-2">
-                <input
-                  type="number"
-                  name="estimatedLossYen"
-                  min={0}
-                  step={100}
-                  placeholder="金額（円・任意）"
-                  className="w-36 rounded-md border bg-background px-2 py-1 text-xs"
-                  aria-label="金額"
-                />
                 <SubmitButton>記録する</SubmitButton>
                 <button
                   type="button"
@@ -304,7 +293,7 @@ export function FailureListEditor({
           <p>
             似た予定でよくあった失敗を、
             <strong className="text-foreground">赤い未確認</strong>
-            の行として自動で並べています。
+            の行として自動で並べています。対策の候補があれば一緒に出します。
           </p>
           <p className="mt-1.5">
             この予定でも気をつけたいなら<strong>「採用」</strong>、
@@ -333,7 +322,7 @@ export function FailureListEditor({
         <ul className="space-y-1">
           {rows.map((r) => {
             const m = meta(r.outcome);
-            const open = openId === r.id;
+            const open = openIds.has(r.id);
             // 未確認（＝アプリが提案した先回り）は赤で目立たせる。
             const suggested = r.outcome === null;
             return (
@@ -355,7 +344,7 @@ export function FailureListEditor({
                   </span>
                   <button
                     type="button"
-                    onClick={() => setOpenId(open ? null : r.id)}
+                    onClick={() => toggle(r.id)}
                     aria-label={open ? "閉じる" : "編集"}
                     className={`mt-0.5 shrink-0 rounded-md border px-2 py-1 text-sm leading-none ${
                       open
@@ -366,6 +355,11 @@ export function FailureListEditor({
                     {open ? "∧" : "∨"}
                   </button>
                 </div>
+                {suggested && r.countermeasure && !open && (
+                  <p className="ml-6 mt-0.5 text-[11px] text-teal-dark">
+                    💡 対策候補: {r.countermeasure}
+                  </p>
+                )}
 
                 {/* 提案（未確認）はワンタップ＋確認で採用／削除 */}
                 {suggested && !open && (
@@ -394,7 +388,7 @@ export function FailureListEditor({
 
                 {open && (
                   <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
-                    <RowEditForms r={r} hideDate />
+                    <RowEditForms r={r} />
                   </div>
                 )}
               </li>
@@ -416,16 +410,12 @@ export function FailureListEditor({
             placeholder="何が起きた？（例: 集合時間に遅刻した）"
             className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
           />
+          <input
+            name="countermeasure"
+            placeholder="有効だった対策（あれば・任意）"
+            className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+          />
           <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="number"
-              name="estimatedLossYen"
-              min={0}
-              step={100}
-              placeholder="金額（円・任意）"
-              className="w-40 rounded-md border bg-background px-2 py-1 text-sm"
-              aria-label="金額"
-            />
             <SubmitButton>記録する</SubmitButton>
             <button
               type="button"

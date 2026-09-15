@@ -4,10 +4,9 @@ import {
   logRepeatedFailure,
   markPrevented,
 } from "@/app/actions";
-import { formatDateOnly, formatYen } from "@/lib/format";
+import { formatDateOnly } from "@/lib/format";
 import { LEAD_PRESETS } from "@/lib/lead-time";
 import { SubmitButton } from "@/app/components/submit-button";
-import { RetroAmountInput } from "@/app/components/retro-amount-input";
 import { RetroOutcomeSelect } from "./retro-outcome-select";
 import type { EventWarning } from "@/lib/failures";
 
@@ -58,13 +57,15 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
             <p className="mt-1 text-xs text-muted">
               直近 {formatDateOnly(log.lastOccurredAt)}
               {log.fromEventTitle ? ` ・ 「${log.fromEventTitle}」のとき` : ""}
-              {log.estimatedLossYen > 0
-                ? ` ・ 推定損失 ${formatYen(log.estimatedLossYen)}`
-                : ""}
               {log.preventedCount > 0
                 ? ` ・ これまで ${log.preventedCount}回は防げた`
                 : ""}
             </p>
+            {log.countermeasure && (
+              <p className="mt-1 text-xs text-teal-dark">
+                💡 前回効いた対策: {log.countermeasure}
+              </p>
+            )}
 
             {/* これからの予定: 対策を準備リストに追加できる */}
             {!isPast && (
@@ -77,7 +78,9 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                   対策をリストに追加
                   <input
                     name="label"
-                    defaultValue={log.description.slice(0, 40)}
+                    defaultValue={
+                      log.countermeasure || log.description.slice(0, 40)
+                    }
                     className="mt-1 block w-56 rounded-md border bg-background px-2 py-1 text-sm text-foreground"
                   />
                 </label>
@@ -103,9 +106,6 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium text-teal-dark">
                     ✓ 「防げた」で記録しました
-                    {log.estimatedLossYen > 0
-                      ? `（${formatYen(log.estimatedLossYen)}を節約に計上）`
-                      : ""}
                   </p>
                   {log.thisEventLogId && (
                     <RetroOutcomeSelect
@@ -113,10 +113,6 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                       current="prevented"
                     />
                   )}
-                  <RetroAmountInput
-                    failureLogId={log.thisEventLogId ?? log.id}
-                    initial={log.estimatedLossYen}
-                  />
                 </div>
               ) : log.loggedThisEventCount > 0 ? (
                 <div className="space-y-1.5">
@@ -140,16 +136,14 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                   <form action={markPrevented} className="space-y-1.5">
                     <input type="hidden" name="eventId" value={event.id} />
                     <input type="hidden" name="failureLogId" value={log.id} />
-                    <label className="flex items-center gap-1.5 text-[11px] text-muted">
-                      防げた場合の金額（任意・あとで直せます）
-                      <input
-                        type="number"
-                        name="estimatedLossYen"
-                        min={0}
-                        step={100}
-                        defaultValue={log.estimatedLossYen || ""}
-                        placeholder="円"
-                        className="w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                    <label className="block text-[11px] text-muted">
+                      有効だった対策（あれば・任意）
+                      <textarea
+                        name="countermeasure"
+                        rows={2}
+                        defaultValue={log.countermeasure ?? ""}
+                        placeholder="例: 前日にリマインダーを設定した"
+                        className="mt-0.5 w-full rounded-md border bg-background px-2 py-1 text-xs text-foreground"
                       />
                     </label>
                     <SubmitButton>

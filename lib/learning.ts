@@ -363,7 +363,7 @@ export interface LeafFailure {
   id: string;
   description: string; // 全文（切らない）
   occurredAt: Date;
-  estimatedLossYen: number;
+  countermeasure: string | null;
   outcome: string | null; // "prevented" | "not_prevented" | null
 }
 
@@ -613,7 +613,7 @@ export async function getLearningNameTree(userId: string): Promise<{
               id: true,
               description: true,
               occurredAt: true,
-              estimatedLossYen: true,
+              countermeasure: true,
               outcome: true,
             },
           },
@@ -680,7 +680,7 @@ export async function getLearningNameTree(userId: string): Promise<{
             id: f.id,
             description: f.description,
             occurredAt: f.occurredAt,
-            estimatedLossYen: f.estimatedLossYen,
+            countermeasure: f.countermeasure,
             outcome: f.outcome,
           })),
         };

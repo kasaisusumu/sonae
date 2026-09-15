@@ -51,6 +51,8 @@ export interface WarningCluster {
   id: string; // 代表（最新）の FailureLog.id。アクションで使う
   description: string;
   estimatedLossYen: number;
+  /** 直近に記録された「有効だった対策」。無ければ null（対策候補は無しで出す）。 */
+  countermeasure: string | null;
   occurredCount: number; // このまとまりの記録回数
   preventedCount: number; // 「防げた」と申告された回数（全予定合計）
   lastOccurredAt: Date;
@@ -130,6 +132,7 @@ type LogRow = {
   categoryId: string | null;
   description: string;
   estimatedLossYen: number;
+  countermeasure: string | null;
   occurredAt: Date;
   eventId: string | null;
   outcome: string | null;
@@ -142,6 +145,7 @@ const LOG_SELECT = {
   categoryId: true,
   description: true,
   estimatedLossYen: true,
+  countermeasure: true,
   occurredAt: true,
   eventId: true,
   outcome: true,
@@ -220,6 +224,11 @@ function buildClusters(
     // 金額が入っている最初のもの＝直近の金額。書き換えれば次の提案にすぐ反映される。
     const estimatedLossYen =
       g.members.find((x) => x.estimatedLossYen > 0)?.estimatedLossYen ?? 0;
+    // 対策候補も同じ考え方: 直近に記録された対策があれば引き継ぐ。無ければ null
+    // のまま出し、その場で書いてもらう（ユーザー指定）。
+    const countermeasure =
+      g.members.find((x) => x.countermeasure?.trim())?.countermeasure?.trim() ??
+      null;
     const preventedCount = g.members.reduce(
       (s, x) => s + (preventedCountByLogId.get(x.id) ?? 0),
       0,
@@ -252,6 +261,7 @@ function buildClusters(
       id: g.rep.id,
       description: g.rep.description,
       estimatedLossYen,
+      countermeasure,
       occurredCount,
       preventedCount,
       lastOccurredAt,
@@ -609,6 +619,8 @@ export interface FailureSuggestion {
   sourceId: string;
   description: string;
   estimatedLossYen: number;
+  /** 対策候補（直近に記録された「有効だった対策」）。無ければ null。 */
+  countermeasure: string | null;
   fromEventTitle: string | null;
   reasons: string[]; // "同じカテゴリ" / "似た予定" / "状況が近い" / "名前が近い"
   score: number;
@@ -661,12 +673,17 @@ export async function suggestFailureLogsForEvent(
   // 直近に記録・採用された金額」。logs は occurredAt 降順なので、そのキーで
   // 最初に金額>0 に出会った時点のもの＝直近の金額（以後は上書きしない）。
   const latestAmountByKey = new Map<string, number>();
+  // 対策候補も同じ考え方: 同じ内容の失敗で直近に記録された対策を引き継ぐ。
+  const latestCountermeasureByKey = new Map<string, string>();
 
   for (const l of logs) {
     const key = clusterKey(l.description);
     if (!key || ownKeys.has(key) || dismissedKeys.has(key)) continue;
     if (l.estimatedLossYen > 0 && !latestAmountByKey.has(key)) {
       latestAmountByKey.set(key, l.estimatedLossYen);
+    }
+    if (l.countermeasure?.trim() && !latestCountermeasureByKey.has(key)) {
+      latestCountermeasureByKey.set(key, l.countermeasure.trim());
     }
 
     // 失敗ログの「予測」は確信度が低くても普通に提案してよい（ユーザー指定）。
@@ -700,6 +717,7 @@ export async function suggestFailureLogsForEvent(
         sourceId: l.id,
         description: l.description,
         estimatedLossYen: l.estimatedLossYen,
+        countermeasure: l.countermeasure,
         fromEventTitle: l.event?.title ?? null,
         reasons,
         score,
@@ -716,6 +734,10 @@ export async function suggestFailureLogsForEvent(
       description: s.description,
       estimatedLossYen:
         latestAmountByKey.get(clusterKey(s.description)) ?? s.estimatedLossYen,
+      // 対策が紐づいていなければ null のまま出す（書いてもらう。ユーザー指定）。
+      countermeasure:
+        latestCountermeasureByKey.get(clusterKey(s.description)) ??
+        s.countermeasure,
       fromEventTitle: s.fromEventTitle,
       reasons: s.reasons,
       score: s.score,
@@ -728,8 +750,8 @@ export interface EventDescriptionFailures {
   isPast: boolean;
   /** 終了前だけ: 予想される失敗の内容（過去に似た予定であったもの）。 */
   anticipated: string[];
-  /** 終了後だけ: 今回は回避できた失敗（内容＋推定額）。 */
-  avoided: { text: string; yen: number }[];
+  /** 終了後だけ: 今回は回避できた失敗（内容＋有効だった対策）。 */
+  avoided: { text: string; countermeasure: string | null }[];
   /** 終了後だけ: 今回起きてしまった失敗の内容。 */
   occurred: string[];
 }
@@ -766,15 +788,14 @@ export async function getEventDescriptionFailures(
       orderBy: { occurredAt: "desc" },
       select: {
         description: true,
-        estimatedLossYen: true,
+        countermeasure: true,
         outcome: true,
       },
     }),
     prisma.savingsEntry.findMany({
       where: { userId: event.userId, eventId, confirmedByUser: true },
       select: {
-        amountYen: true,
-        failureLog: { select: { description: true } },
+        failureLog: { select: { description: true, countermeasure: true } },
       },
     }),
     getWarningForEvent(event).catch(() => null),
@@ -805,11 +826,14 @@ export async function getEventDescriptionFailures(
   }
 
   // 終了後: 回避した失敗（この予定で「防げた」と計上されたもの＋紐づけ済みで prevented）
-  const avoided = new Map<string, { text: string; yen: number }>();
+  const avoided = new Map<string, { text: string; countermeasure: string | null }>();
   for (const s of savingsHere) {
     const text = s.failureLog?.description?.trim();
     if (!text) continue;
-    avoided.set(norm(text), { text, yen: Math.max(0, s.amountYen) });
+    avoided.set(norm(text), {
+      text,
+      countermeasure: s.failureLog?.countermeasure?.trim() || null,
+    });
   }
   for (const l of linked) {
     if (l.outcome !== "prevented") continue;
@@ -817,7 +841,7 @@ export async function getEventDescriptionFailures(
     if (!avoided.has(k)) {
       avoided.set(k, {
         text: l.description.trim(),
-        yen: Math.max(0, l.estimatedLossYen),
+        countermeasure: l.countermeasure?.trim() || null,
       });
     }
   }
@@ -899,6 +923,7 @@ export async function ensureSuggestedFailures(
           featureSignature: sig,
           description: s.description,
           estimatedLossYen: s.estimatedLossYen,
+          countermeasure: s.countermeasure,
           outcome: null, // 提案＝未確認
           occurredAt: event.eventDatetime,
         },

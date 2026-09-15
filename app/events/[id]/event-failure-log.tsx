@@ -38,7 +38,7 @@ export async function EventFailureLog({
         id: true,
         description: true,
         outcome: true,
-        estimatedLossYen: true,
+        countermeasure: true,
         occurredAt: true,
       },
     }),

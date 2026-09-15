@@ -32,7 +32,7 @@ import { extractEventFeature } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
 import { parseLead, stringifyLeads } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
-import { parseJstDate, parseJstDateTimeLocal } from "@/lib/format";
+import { parseJstDateTimeLocal } from "@/lib/format";
 import { clusterKey, ensureSuggestedFailures } from "@/lib/failures";
 import { APP_NAME } from "@/lib/app-info";
 import { trackEvent } from "@/lib/track";
@@ -1141,18 +1141,19 @@ export async function seedFailureGoals(labels: string[]): Promise<void> {
   revalidateAppViews();
 }
 
-/** 「うっかり失敗」を記録する。金額は任意。特定の予定に紐づけられる。 */
+/**
+ * 「うっかり失敗」を記録する。必須は「何が起きたか」だけ。
+ * 金額・日付・カテゴリは聞かない（予定に紐づけた場合はその予定の日・カテゴリを使う）。
+ * 有効だった対策は任意（空欄でもOK。あとから書き足せる）。
+ */
 export async function createFailureLog(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const description = String(formData.get("description") ?? "").trim();
-  const categoryName = String(formData.get("categoryName") ?? "").trim();
-  const occurredAtRaw = String(formData.get("occurredAt") ?? "").trim();
+  const countermeasure = String(formData.get("countermeasure") ?? "").trim() || null;
   const eventId = String(formData.get("eventId") ?? "").trim() || null;
 
-  // 必須は「何が起きたか」だけ。金額は空なら 0、日付は空なら予定日／今日。
   if (!description) return;
   trackEvent(userId, "feature:failure-quick-record");
-  const estimatedLossYen = parseYen(formData.get("estimatedLossYen"));
 
   const linkedEvent = eventId
     ? await prisma.event.findFirst({
@@ -1166,10 +1167,6 @@ export async function createFailureLog(formData: FormData): Promise<void> {
           endDatetime: true,
         },
       })
-    : null;
-
-  const category = categoryName
-    ? await getOrCreateCategory(userId, categoryName)
     : null;
 
   // 予定に紐づくなら、その予定の特徴シグネチャをその場で確定（学習と同じ粒度）
@@ -1187,18 +1184,15 @@ export async function createFailureLog(formData: FormData): Promise<void> {
   await prisma.failureLog.create({
     data: {
       userId,
-      categoryId: category?.id ?? linkedEvent?.categoryId ?? null,
+      categoryId: linkedEvent?.categoryId ?? null,
       eventId: linkedEvent?.id ?? null,
       featureSignature: featureSig,
       description,
-      estimatedLossYen,
+      countermeasure,
       // ユーザーが予定に紐づけて自分で追加したものは初めから「紐付け」。
       // 予定なし（カテゴリ全体）の記録は「未確認」のまま。
       outcome: linkedEvent ? "linked" : null,
-      occurredAt:
-        (occurredAtRaw ? parseJstDate(occurredAtRaw) : null) ??
-        linkedEvent?.eventDatetime ??
-        new Date(),
+      occurredAt: linkedEvent?.eventDatetime ?? new Date(),
     },
   });
 
@@ -1265,6 +1259,7 @@ export async function logRepeatedFailure(formData: FormData): Promise<void> {
         featureSignature: featureSig,
         description: template.description,
         estimatedLossYen: template.estimatedLossYen,
+        countermeasure: template.countermeasure,
         outcome: newOutcome,
         occurredAt: event.eventDatetime,
       },
@@ -1411,11 +1406,11 @@ export async function deleteFailureLog(formData: FormData): Promise<void> {
 
 /**
  * 失敗ログ 1 件の振り返り結果を切り替える。
- *   "prevented"     … 防げた → 推定損失額を 1 回だけ節約に計上。ダッシュボードに残る。
+ *   "prevented"     … 防げた → 1 回だけ節約（件数）に計上。ダッシュボードに残る。
  *   "not_prevented" … 防げなかった → 計上は取り消し。ダッシュボードには出さない。
  *   "irrelevant"    … 今回は関係ない → 計上は取り消し。振り返り済み扱いにして一覧から下げる。
  *   "unset"         … 未選択に戻す → 計上取り消し。失敗ログ一覧で選び直す。
- * 同じボタンをもう一度押したら "unset"（トグル）。
+ * 同じボタンをもう一度押したら "unset"（トグル）。金額は聞かない（件数のみで計上）。
  */
 export async function setFailureOutcome(formData: FormData): Promise<void> {
   const userId = await requireUserId();
@@ -1430,28 +1425,13 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
       : "unset";
   if (!failureLogId) return;
 
-  // 振り返り時に金額を改めて入力・修正できる。金額フィールドが送られてきたら
-  // その値を採用する（空欄は 0）。フィールド自体が無いとき（結果だけ変える
-  // RetroOutcomeSelect など）だけ、既存の金額を保つ。
-  const rawAmount = formData.get("estimatedLossYen");
-  const hasAmount = rawAmount !== null;
-  const newAmount = hasAmount ? parseYen(rawAmount) : null;
-
   const log = await prisma.failureLog.findFirst({
     where: { id: failureLogId, userId },
-    select: { id: true, eventId: true, estimatedLossYen: true },
+    select: { id: true, eventId: true },
   });
   if (!log) return;
 
-  const amount = newAmount ?? log.estimatedLossYen;
-
   if (outcome === "prevented") {
-    if (hasAmount) {
-      await prisma.failureLog.update({
-        where: { id: failureLogId },
-        data: { estimatedLossYen: amount },
-      });
-    }
     const existing = await prisma.savingsEntry.findFirst({
       where: { userId, failureLogId },
       select: { id: true },
@@ -1462,14 +1442,8 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
           userId,
           failureLogId,
           eventId: log.eventId,
-          amountYen: amount,
           confirmedByUser: true,
         },
-      });
-    } else if (hasAmount) {
-      await prisma.savingsEntry.updateMany({
-        where: { userId, failureLogId },
-        data: { amountYen: amount },
       });
     }
     await prisma.failureLog.update({
@@ -1477,12 +1451,6 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
       data: { outcome: "prevented" },
     });
   } else {
-    if (hasAmount) {
-      await prisma.failureLog.update({
-        where: { id: failureLogId },
-        data: { estimatedLossYen: amount },
-      });
-    }
     await prisma.savingsEntry.deleteMany({ where: { userId, failureLogId } });
     await prisma.failureLog.update({
       where: { id: failureLogId },
@@ -1499,40 +1467,7 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
 }
 
 /**
- * 失敗ログの推定金額を、振り返りの場であとから入力・修正する。
- * すでに「防げた」に計上済みなら、節約額の方も同じ金額へ揃える。
- */
-export async function updateFailureAmount(formData: FormData): Promise<void> {
-  const userId = await requireUserId();
-  const failureLogId = String(formData.get("failureLogId") ?? "");
-  if (!failureLogId) return;
-  const amount = parseYen(formData.get("estimatedLossYen"));
-
-  const log = await prisma.failureLog.findFirst({
-    where: { id: failureLogId, userId },
-    select: { id: true, eventId: true },
-  });
-  if (!log) return;
-
-  await prisma.failureLog.update({
-    where: { id: failureLogId },
-    data: { estimatedLossYen: amount },
-  });
-  await prisma.savingsEntry.updateMany({
-    where: { userId, failureLogId },
-    data: { amountYen: amount },
-  });
-
-  revalidateAppViews(log.eventId ?? undefined);
-  if (log.eventId) {
-    const eid = log.eventId;
-    await markAutoManaged(eid);
-    after(() => void syncEventDescription(eid));
-  }
-}
-
-/**
- * 失敗ログの内容（失敗内容・金額・日付・結果／状態）をまとめて編集する。
+ * 失敗ログの内容（失敗内容・対策・結果／状態）をまとめて編集する。
  * 予定ページからいつでも呼べる。結果（防げた／防げなかった／未選択）を変えたら
  * 節約ダッシュボードの計上も揃える。
  */
@@ -1543,17 +1478,17 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
 
   const log = await prisma.failureLog.findFirst({
     where: { id, userId },
-    select: { id: true, eventId: true, estimatedLossYen: true },
+    select: { id: true, eventId: true },
   });
   if (!log) return;
 
   const description = String(formData.get("description") ?? "").trim();
-  // 金額フィールドが送られてきたら採用（空欄は 0）。フィールドが無いときだけ現状維持。
-  const rawAmount = formData.get("estimatedLossYen");
-  const hasAmount = rawAmount !== null;
-  const amount = hasAmount ? parseYen(rawAmount) : null;
-  const occurredAtRaw = String(formData.get("occurredAt") ?? "").trim();
-  const occurredAt = occurredAtRaw ? parseJstDate(occurredAtRaw) : null;
+  // 対策フィールドが送られてきたら採用（空欄でもOK＝消せる）。フィールドが無いときだけ現状維持。
+  const rawCountermeasure = formData.get("countermeasure");
+  const hasCountermeasure = rawCountermeasure !== null;
+  const countermeasure = hasCountermeasure
+    ? String(rawCountermeasure).trim() || null
+    : null;
 
   const rawOutcome = formData.get("outcome");
   const hasOutcome = rawOutcome !== null;
@@ -1570,19 +1505,10 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
     where: { id },
     data: {
       ...(description ? { description } : {}),
-      ...(hasAmount ? { estimatedLossYen: amount! } : {}),
-      ...(occurredAt ? { occurredAt } : {}),
+      ...(hasCountermeasure ? { countermeasure } : {}),
       ...(hasOutcome ? { outcome } : {}),
     },
   });
-
-  const effectiveAmount = hasAmount ? amount! : log.estimatedLossYen;
-  if (hasAmount) {
-    await prisma.savingsEntry.updateMany({
-      where: { userId, failureLogId: id },
-      data: { amountYen: effectiveAmount },
-    });
-  }
 
   if (log.eventId) {
     const eid = log.eventId;
@@ -1590,7 +1516,7 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
     after(() => void syncEventDescription(eid));
   }
 
-  // 結果を変えたら節約計上も合わせる（setFailureOutcome と同じ扱い）。
+  // 結果を変えたら節約計上（件数）も合わせる（setFailureOutcome と同じ扱い）。
   if (hasOutcome) {
     if (outcome === "prevented") {
       const existing = await prisma.savingsEntry.findFirst({
@@ -1603,7 +1529,6 @@ export async function updateFailureLog(formData: FormData): Promise<void> {
             userId,
             failureLogId: id,
             eventId: log.eventId,
-            amountYen: effectiveAmount,
             confirmedByUser: true,
           },
         });
@@ -1672,7 +1597,8 @@ export async function addPreventionItem(formData: FormData): Promise<void> {
 }
 
 /**
- * 「これは防げた」と自己申告し、推定損失額を節約に計上する。
+ * 「これは防げた」と自己申告し、件数を節約に計上する。有効だった対策があれば
+ * 一緒に記録し、次に似た失敗を提案するときの対策候補として引き継がれる。
  * 振り返りの結果は「この予定に紐づく失敗ログ」1件に集約する（なければ複製）ので、
  * あとから RetroOutcomeSelect でその 1 件を選び直すだけで結果を変えられる。
  */
@@ -1688,11 +1614,13 @@ export async function markPrevented(formData: FormData): Promise<void> {
   ]);
   if (!event || !template) return;
 
-  // 振り返りで金額を改めて入力できる。金額フィールドが送られてきたら採用（空欄は 0）。
-  // フィールド自体が無いときだけ、元の失敗ログの推定額を引き継ぐ。
-  const rawAmount = formData.get("estimatedLossYen");
-  const hasAmount = rawAmount !== null;
-  const amount = hasAmount ? parseYen(rawAmount) : template.estimatedLossYen;
+  // 有効だった対策を改めて入力・修正できる。フィールドが送られてきたら採用
+  // （空欄なら消える）。フィールド自体が無いときだけ、元の失敗ログの対策を引き継ぐ。
+  const rawCountermeasure = formData.get("countermeasure");
+  const hasCountermeasure = rawCountermeasure !== null;
+  const countermeasure = hasCountermeasure
+    ? String(rawCountermeasure).trim() || null
+    : template.countermeasure;
 
   // この予定に紐づく「今回の結果」ログを 1 件用意する。
   const existing = await prisma.failureLog.findFirst({
@@ -1706,7 +1634,7 @@ export async function markPrevented(formData: FormData): Promise<void> {
       where: { id: targetId },
       data: {
         outcome: "prevented",
-        ...(hasAmount ? { estimatedLossYen: amount } : {}),
+        countermeasure,
       },
     });
   } else {
@@ -1725,7 +1653,7 @@ export async function markPrevented(formData: FormData): Promise<void> {
         eventId: event.id,
         featureSignature: featureSig,
         description: template.description,
-        estimatedLossYen: amount,
+        countermeasure,
         outcome: "prevented",
         occurredAt: event.eventDatetime,
       },
@@ -1736,12 +1664,11 @@ export async function markPrevented(formData: FormData): Promise<void> {
 
   await prisma.savingsEntry.upsert({
     where: { eventId_failureLogId: { eventId, failureLogId: targetId } },
-    update: { amountYen: amount, confirmedByUser: true },
+    update: { confirmedByUser: true },
     create: {
       userId,
       eventId,
       failureLogId: targetId,
-      amountYen: amount,
       confirmedByUser: true,
     },
   });

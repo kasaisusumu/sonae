@@ -98,8 +98,8 @@ function progress(items: DescItem[]): string {
 export interface DescFailureSections {
   /** 予定終了前: 予想される（＝過去に似た予定であった）失敗の内容。 */
   anticipated?: string[];
-  /** 予定終了後: 今回は回避できた失敗（内容と推定額）。 */
-  avoided?: { text: string; yen: number }[];
+  /** 予定終了後: 今回は回避できた失敗（内容と、有効だった対策）。 */
+  avoided?: { text: string; countermeasure: string | null }[];
   /** 予定終了後: 今回起きてしまった失敗の内容。 */
   occurred?: string[];
 }
@@ -120,10 +120,6 @@ export const INFO_HEADINGS = new Set([
   "今回の失敗",
 ]);
 
-function yen(n: number): string {
-  return `¥${Math.round(n).toLocaleString("ja-JP")}`;
-}
-
 /** 失敗セクション（予想／回避／今回）を行配列にする。中身が無い枠は出さない。 */
 function failureLines(f: DescFailureSections | undefined): string[] {
   if (!f) return [];
@@ -135,9 +131,11 @@ function failureLines(f: DescFailureSections | undefined): string[] {
   if (f.avoided && f.avoided.length > 0) {
     out.push("", "【回避した失敗】");
     for (const a of f.avoided) {
-      out.push(
-        `🛡 ${oneLine(a.text)}${a.yen > 0 ? `（推定 ${yen(a.yen)}）` : ""}`,
-      );
+      out.push(`🛡 ${oneLine(a.text)}`);
+      // 有効だった対策は、準備リストのコメントと同じ要領で次の行に字下げして書く。
+      if (a.countermeasure) {
+        out.push(`${COMMENT_INDENT}対策: ${oneLine(a.countermeasure)}`);
+      }
     }
   }
   if (f.occurred && f.occurred.length > 0) {

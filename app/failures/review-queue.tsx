@@ -2,17 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { deleteFailureLog, setFailureOutcome } from "@/app/actions";
-import { formatDateOnly, formatYen } from "@/lib/format";
+import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { InfoHint } from "@/app/components/info-hint";
-import { RetroAmountInput } from "@/app/components/retro-amount-input";
 import { RetroOutcomeSelect } from "@/app/events/[id]/retro-outcome-select";
 
 export type RQLog = {
   id: string;
   description: string;
   occurredAt: Date;
-  estimatedLossYen: number;
+  countermeasure: string | null;
   outcome: string | null;
   category: { name: string } | null;
   event: { title: string } | null;
@@ -26,17 +25,15 @@ const OUTCOME_LABEL: Record<string, string> = {
 
 /** まだ結果が決まっていない失敗の「今回どうでした？」。予定詳細ページの振り返りと同じ形式。 */
 function PendingChoice({ log }: { log: RQLog }) {
-  const [amount, setAmount] = useState(
-    log.estimatedLossYen ? String(log.estimatedLossYen) : "",
-  );
+  const [countermeasure, setCountermeasure] = useState(log.countermeasure ?? "");
   const [, start] = useTransition();
 
-  function submit(outcome: string, confirmMsg: string, withAmount = false) {
+  function submit(outcome: string, confirmMsg: string, withCountermeasure = false) {
     if (!window.confirm(confirmMsg)) return;
     const fd = new FormData();
     fd.set("failureLogId", log.id);
     fd.set("outcome", outcome);
-    if (withAmount) fd.set("estimatedLossYen", amount);
+    if (withCountermeasure) fd.set("countermeasure", countermeasure);
     start(() => setFailureOutcome(fd));
   }
 
@@ -45,27 +42,21 @@ function PendingChoice({ log }: { log: RQLog }) {
       <p className="text-xs text-muted">
         今回はどうでしたか？ どれか押すだけでOKです。
       </p>
-      <label className="flex items-center gap-1.5 text-[11px] text-muted">
-        防げた場合の金額（任意・あとで直せます）
-        <input
-          type="number"
-          min={0}
-          step={100}
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="円"
-          className="w-24 rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+      <label className="block text-[11px] text-muted">
+        有効だった対策（あれば・任意）
+        <textarea
+          rows={1}
+          value={countermeasure}
+          onChange={(e) => setCountermeasure(e.target.value)}
+          placeholder="例: 前日にリマインダーを設定した"
+          className="mt-0.5 w-full rounded-md border bg-background px-2 py-1 text-xs text-foreground"
         />
       </label>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() =>
-            submit(
-              "prevented",
-              "「防げた」で記録しますか？（推定額が節約額に積み上がります）",
-              true,
-            )
+            submit("prevented", "「防げた」で記録しますか？（防げた件数に積み上がります）", true)
           }
           className="rounded-lg bg-foreground px-3.5 py-1.5 text-sm font-semibold text-surface hover:opacity-90"
         >
@@ -98,7 +89,7 @@ function PendingChoice({ log }: { log: RQLog }) {
  * ふりかえり（結果記録待ち）。押しても「このページを離れるまで」カードは消えない。
  * マウント時に「未確認だった id」を控え、以後はそのカードを出し続ける（結果は最新を表示）。
  * 他ページへ移動して戻る＝再マウントで、片付いたものは外れる。
- * 形式は予定詳細ページの振り返り（WarningPanel）と同じ。金額・結果は自動保存。
+ * 形式は予定詳細ページの振り返り（WarningPanel）と同じ。対策・結果は自動保存。
  */
 // 「まだ結果が入力されていない」＝採用済み（linked）で結果が決まっていない。
 const isPending = (l: RQLog) => l.outcome === "linked";
@@ -123,7 +114,7 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
       <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
         🤔 結果を記録しよう（{remaining}件）
         <InfoHint id="failures-review-queue">
-          終わった予定、どうでしたか？ 「防げた」にしたものだけが節約額に積み上がります。
+          終わった予定、どうでしたか？ 「防げた」にしたものだけが防げた件数に積み上がります。
           押しても、このページを離れるまでは消えません。
         </InfoHint>
       </h2>
@@ -167,10 +158,12 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
               <p className="mt-1 text-xs text-muted">
                 直近 {formatDateOnly(l.occurredAt)}
                 {l.event ? ` ・ 「${l.event.title}」のとき` : ""}
-                {l.estimatedLossYen > 0
-                  ? ` ・ 推定損失 ${formatYen(l.estimatedLossYen)}`
-                  : ""}
               </p>
+              {l.countermeasure && (
+                <p className="mt-1 text-xs text-teal-dark">
+                  💡 対策候補: {l.countermeasure}
+                </p>
+              )}
 
               {settled ? (
                 <div className="mt-3 space-y-1.5">
@@ -181,12 +174,6 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
                     logId={l.id}
                     current={l.outcome ?? "unset"}
                   />
-                  {l.outcome === "prevented" && (
-                    <RetroAmountInput
-                      failureLogId={l.id}
-                      initial={l.estimatedLossYen}
-                    />
-                  )}
                   <p className="text-[11px] text-muted">
                     このページを離れると片付きます（気が変わったら選び直せます）。
                   </p>

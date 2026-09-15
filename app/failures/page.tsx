@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { createFailureLog } from "@/app/actions";
-import { DEFAULT_CATEGORIES } from "@/lib/categories";
-import { formatDateOnly, jstToday } from "@/lib/format";
+import { formatDateOnly } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { InfoHint } from "@/app/components/info-hint";
 import {
@@ -15,15 +14,11 @@ import { trackEvent } from "@/lib/track";
 import { FailureQuickInput } from "./failure-quick-input";
 import { ReviewQueue, type RQLog } from "./review-queue";
 
-function todayValue(): string {
-  return jstToday();
-}
-
 type LogRow = {
   id: string;
   description: string;
   occurredAt: Date;
-  estimatedLossYen: number;
+  countermeasure: string | null;
   outcome: string | null;
   category: { name: string } | null;
   event: {
@@ -37,7 +32,7 @@ const toFR = (l: LogRow): FRRow => ({
   id: l.id,
   description: l.description,
   occurredAt: l.occurredAt,
-  estimatedLossYen: l.estimatedLossYen,
+  countermeasure: l.countermeasure,
   outcome: l.outcome,
   categoryName: l.category?.name ?? null,
   eventTitle: l.event?.title ?? null,
@@ -48,11 +43,7 @@ export default async function FailuresPage() {
   if (!user) redirect("/");
   trackEvent(user.id, "page:/failures");
 
-  const [categories, logs, events] = await Promise.all([
-    prisma.category.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "asc" },
-    }),
+  const [logs, events] = await Promise.all([
     prisma.failureLog.findMany({
       where: { userId: user.id },
       orderBy: { occurredAt: "desc" },
@@ -72,9 +63,6 @@ export default async function FailuresPage() {
     }),
   ]);
 
-  const categoryNames = Array.from(
-    new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
-  );
   const now = new Date();
   // 「予定が終わっている」の判定。lib/failures.ts の eventEndedWhere（ナビのドットが
   // 使う Prisma 条件）と必ず同じ意味に保つこと（= (endDatetime ?? eventDatetime) <= now）。
@@ -124,72 +112,38 @@ export default async function FailuresPage() {
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           ✍️ ひとこと記録する
           <InfoHint id="failures-quick-record">
-            よくあるものはボタンで一発。必須は「何が起きたか」だけ。金額は空なら 0、
-            日付は予定を選べばその日になります。あとから直せます。
+            よくあるものはボタンで一発。必須は「何が起きたか」だけ。金額・日付・カテゴリは
+            聞きません（予定を選べばその予定に合わせます）。
           </InfoHint>
         </h2>
         <form action={createFailureLog} className="mt-3 space-y-3">
           <FailureQuickInput />
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-xs text-muted">
-              どの予定？
-              <select
-                name="eventId"
-                defaultValue=""
-                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
-              >
-                <option value="">— 紐づけない（カテゴリ全体の記録）—</option>
-                {events.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {formatDateOnly(e.eventDatetime)} {e.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs text-muted">
-              損失額（円・任意）
-              <input
-                type="number"
-                name="estimatedLossYen"
-                min={0}
-                step={100}
-                placeholder="なければ空欄（0）"
-                className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-              />
-            </label>
-          </div>
+          <label className="block text-xs text-muted">
+            どの予定？
+            <select
+              name="eventId"
+              defaultValue=""
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
+            >
+              <option value="">— 紐づけない（カテゴリ全体の記録）—</option>
+              {events.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {formatDateOnly(e.eventDatetime)} {e.title}
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <details className="[&_summary::-webkit-details-marker]:hidden">
-            <summary className="cursor-pointer list-none text-xs text-teal-dark">
-              くわしく（日付・カテゴリ・任意）▾
-            </summary>
-            <div className="mt-2 grid gap-3 sm:grid-cols-2">
-              <label className="text-xs text-muted">
-                いつ？
-                <input
-                  type="date"
-                  name="occurredAt"
-                  defaultValue={todayValue()}
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                />
-              </label>
-              <label className="text-xs text-muted">
-                関連カテゴリ
-                <input
-                  name="categoryName"
-                  list="failure-category-options"
-                  placeholder="予定を選べば自動で入ります"
-                  className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-                />
-                <datalist id="failure-category-options">
-                  {categoryNames.map((n) => (
-                    <option key={n} value={n} />
-                  ))}
-                </datalist>
-              </label>
-            </div>
-          </details>
+          <label className="block text-xs text-muted">
+            有効だった対策（あれば・任意）
+            <textarea
+              name="countermeasure"
+              rows={2}
+              placeholder="例: 前日にリマインダーを設定した"
+              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
+            />
+          </label>
 
           <SubmitButton>記録する</SubmitButton>
         </form>

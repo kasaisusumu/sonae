@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { SavingsSeries, SeriesItem } from "@/lib/savings";
-import { formatYen } from "@/lib/format";
 import { type FRRow } from "@/app/components/failure-review-row";
 import { StickyReviewRows } from "@/app/components/sticky-review-rows";
 
@@ -10,7 +9,7 @@ const toFR = (it: SeriesItem): FRRow => ({
   id: it.id,
   description: it.description,
   occurredAt: it.occurredAt,
-  estimatedLossYen: it.amountYen,
+  countermeasure: it.countermeasure,
   outcome: it.outcome,
   categoryName: it.categoryName,
   eventTitle: it.eventTitle,
@@ -27,7 +26,7 @@ const GRAINS: { id: Grain; label: string }[] = [
 const H = 128; // グラフの高さ(px)
 
 /**
- * 防げた失敗の「金額」と「件数」を、月/週/日で切り替えて見る二軸棒グラフ。
+ * 防げた失敗の「件数」を、月/週/日で切り替えて見る棒グラフ。
  * 選んだ粒度は localStorage に保持する。データが無くても枠は常に表示する。
  */
 const GRAIN_UNIT: Record<Grain, string> = {
@@ -69,10 +68,8 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
   };
 
   const data = series[grain];
-  const maxAmount = Math.max(1, ...data.map((d) => d.amountYen));
   const maxCount = Math.max(1, ...data.map((d) => d.count));
-  const hasData = data.some((d) => d.amountYen > 0 || d.count > 0);
-  const totalAmount = data.reduce((a, d) => a + d.amountYen, 0);
+  const hasData = data.some((d) => d.count > 0);
   const totalCount = data.reduce((a, d) => a + d.count, 0);
 
   return (
@@ -97,25 +94,20 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
         </div>
       </div>
 
-      {/* 凡例＋合計 */}
+      {/* 合計 */}
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
-        <span className="inline-flex items-center gap-1">
-          <span className="inline-block h-2 w-2 rounded-sm bg-chart-amount" />
-          金額 {formatYen(totalAmount)}
-        </span>
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-2 w-2 rounded-sm bg-chart-count" />
           件数 {totalCount}件
         </span>
       </div>
 
-      {/* 二軸: 左=金額 / 右=件数 */}
       <div className="mt-3 flex items-stretch gap-2">
         <div
-          className="flex w-9 shrink-0 flex-col justify-between py-1 text-right text-[9px] leading-none text-chart-amount"
+          className="flex w-6 shrink-0 flex-col justify-between py-1 text-right text-[9px] leading-none text-chart-count"
           style={{ height: H }}
         >
-          <span>{formatYen(maxAmount)}</span>
+          <span>{maxCount}</span>
           <span>0</span>
         </div>
 
@@ -138,30 +130,19 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
                       ? "cursor-pointer hover:bg-surface-muted"
                       : "cursor-default"
                   }`}
-                  title={`${d.label}${isNow ? "（今）" : ""}: ${formatYen(
-                    d.amountYen,
-                  )} / ${d.count}件${tappable ? "（タップで内訳）" : ""}`}
+                  title={`${d.label}${isNow ? "（今）" : ""}: ${d.count}件${
+                    tappable ? "（タップで内訳）" : ""
+                  }`}
                 >
-                  <div className="flex w-full items-end justify-center gap-0.5">
-                    <span
-                      className="w-1/2 max-w-[10px] rounded-t bg-chart-amount"
-                      style={{
-                        height: Math.max(
-                          d.amountYen > 0 ? 3 : 0,
-                          Math.round((d.amountYen / maxAmount) * (H - 16)),
-                        ),
-                      }}
-                    />
-                    <span
-                      className="w-1/2 max-w-[10px] rounded-t bg-chart-count"
-                      style={{
-                        height: Math.max(
-                          d.count > 0 ? 3 : 0,
-                          Math.round((d.count / maxCount) * (H - 16)),
-                        ),
-                      }}
-                    />
-                  </div>
+                  <span
+                    className="w-full max-w-[16px] rounded-t bg-chart-count"
+                    style={{
+                      height: Math.max(
+                        d.count > 0 ? 3 : 0,
+                        Math.round((d.count / maxCount) * (H - 16)),
+                      ),
+                    }}
+                  />
                   <span
                     className={`whitespace-nowrap text-[9px] ${
                       isNow ? "font-semibold text-foreground" : "text-muted"
@@ -175,19 +156,11 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
             })}
           </div>
         </div>
-
-        <div
-          className="flex w-6 shrink-0 flex-col justify-between py-1 text-left text-[9px] leading-none text-chart-count"
-          style={{ height: H }}
-        >
-          <span>{maxCount}</span>
-          <span>0</span>
-        </div>
       </div>
 
       {!hasData && (
         <p className="mt-2 text-[11px] text-muted">
-          まだ「防げた」がありません。失敗ログで「防げた」を選ぶと、ここに金額と件数が積み上がります。
+          まだ「防げた」がありません。失敗ログで「防げた」を選ぶと、ここに件数が積み上がります。
         </p>
       )}
       {hasData && (
@@ -211,7 +184,7 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
                   {data[openIdx].label} に防げた失敗
                 </p>
                 <p className="mt-0.5 text-xs text-muted">
-                  {data[openIdx].count}件 ・ {formatYen(data[openIdx].amountYen)}
+                  {data[openIdx].count}件
                 </p>
               </div>
               <button

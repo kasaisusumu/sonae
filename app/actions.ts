@@ -15,12 +15,14 @@ import { syncAndNotify } from "@/lib/sync";
 import { sendPushToUser, isPushConfigured } from "@/lib/push";
 import { ensureWatch, stopWatch } from "@/lib/google";
 import {
+  addSeedItemsToEvent,
   ensureChecklistForEvent,
   generateAndSaveChecklist,
   normTitle,
   primeNotifiedChecklists,
   propagateListToNameGroup,
   resolveNameGroupOnEdit,
+  type SeedItem,
 } from "@/lib/checklist";
 import {
   recordEdit,
@@ -1938,13 +1940,6 @@ export async function submitFeedback(formData: FormData): Promise<void> {
 // 準備リストのテンプレート（名前を付けて保存・再利用）＋他の予定からコピー
 // ─────────────────────────────────────────────
 
-type TemplateSeed = {
-  /** "task" / "belonging" / ユーザーが足した枠名 */
-  kind: string;
-  title: string;
-  notifyLeadMinutes: number | null;
-};
-
 function readKind(v: unknown): "task" | "belonging" {
   return String(v ?? "") === "belonging" ? "belonging" : "task";
 }
@@ -2128,80 +2123,6 @@ export async function addTemplateItemsBulk(formData: FormData): Promise<void> {
   revalidateAppViews();
 }
 
-/** テンプレート／他の予定の項目を、予定の準備リストに追加する（同じ種類・同じ名前はスキップ）。 */
-async function addSeedItemsToEvent(
-  userId: string,
-  eventId: string,
-  seeds: TemplateSeed[],
-): Promise<number> {
-  const event = await prisma.event.findFirst({
-    where: { id: eventId, userId },
-    include: {
-      checklistItems: { select: { kind: true, title: true, sortOrder: true } },
-    },
-  });
-  if (!event) return 0;
-
-  const existing = new Set(
-    event.checklistItems.map((c) => `${c.kind}:${normTitle(c.title)}`),
-  );
-  const nextSort: Record<string, number> = {};
-  for (const c of event.checklistItems) {
-    nextSort[c.kind] = Math.max(nextSort[c.kind] ?? 0, c.sortOrder + 1);
-  }
-
-  const fresh = seeds.filter(
-    (s) => s.title.trim() && !existing.has(`${s.kind}:${normTitle(s.title)}`),
-  );
-  if (fresh.length === 0) return 0;
-
-  const data = fresh.map((s) => {
-    const so = nextSort[s.kind] ?? 0;
-    nextSort[s.kind] = so + 1;
-    return {
-      eventId,
-      kind: s.kind,
-      title: s.title.trim().slice(0, 120),
-      notifyLeadMinutes: s.notifyLeadMinutes,
-      isUserAdded: true,
-      sortOrder: so,
-    };
-  });
-
-  // コピー元にあってこの予定の枠順に無いユーザー枠は、枠順にも足す
-  const order = parseSectionOrder(event.sectionOrder);
-  const missing = [
-    ...new Set(
-      fresh
-        .map((s) => s.kind)
-        .filter((k) => !isBuiltinSection(k) && !order.includes(k)),
-    ),
-  ];
-
-  await prisma.$transaction([
-    prisma.checklistItem.createMany({ data }),
-    ...(missing.length
-      ? [
-          prisma.event.update({
-            where: { id: eventId },
-            data: {
-              sectionOrder: stringifySectionOrder([...order, ...missing]),
-            },
-          }),
-        ]
-      : []),
-  ]);
-
-  await markAutoManaged(eventId);
-  const twinIds = await resolveNameGroupOnEdit(eventId);
-  after(() => {
-    void syncEventDescription(eventId);
-    for (const id of twinIds) void syncEventDescription(id);
-  });
-  revalidateAppViews(eventId);
-  return fresh.length;
-}
-
 /**
  * スマホのキーボードのマイクで話した自由文を AI で振り分け、
  * 準備すること・持ち物・必要な枠 に分けて予定の準備リストへ追加する。
@@ -2252,7 +2173,7 @@ export async function buildListFromDictation(input: {
     };
   }
 
-  const seeds: TemplateSeed[] = [
+  const seeds: SeedItem[] = [
     ...parsed.task.map((t) => ({
       kind: "task",
       title: t,
@@ -2368,15 +2289,19 @@ export async function applyTemplateToEvent(formData: FormData): Promise<void> {
   if (!template) return;
   trackEvent(userId, "feature:template-apply");
 
+  // template.kind をそのまま使う（task/belonging に強制しない）。ユーザーが「その他（新しい枠）」
+  // で作った名前付きリストは、その枠名のまま = 別の枠として独立して追加される
+  // （addSeedItemsToEvent が枠順への追加まで面倒を見る）。
   await addSeedItemsToEvent(
     userId,
     eventId,
     template.items.map((it) => ({
-      kind: it.kind === "belonging" ? "belonging" : "task",
+      kind: it.kind,
       title: it.title,
       notifyLeadMinutes: it.notifyLeadMinutes ?? null,
     })),
   );
+  revalidateAppViews(eventId);
 }
 
 /** 他の（過去の）予定の準備リストを、この予定にコピーする。 */
@@ -2411,6 +2336,7 @@ export async function copyListFromEvent(formData: FormData): Promise<void> {
     .filter((it) => !filterByKind || it.kind === onlyKind);
 
   await addSeedItemsToEvent(userId, eventId, picked);
+  revalidateAppViews(eventId);
 }
 
 /** テンプレートの名前を変更する。 */

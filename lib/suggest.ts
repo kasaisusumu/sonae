@@ -1,7 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { extractEventFeature, type EventFeatureData } from "@/lib/features";
 import { generateBaseChecklist, type GeneratedBase } from "@/lib/generate";
-import { recallBaseChecklist } from "@/lib/recall";
+import {
+  recallBaseChecklist,
+  type RecalledCustomSectionSeed,
+} from "@/lib/recall";
 import { parseLead } from "@/lib/lead-time";
 import { matchEventToSlotType } from "@/lib/pattern-classify";
 import {
@@ -227,12 +230,24 @@ async function buildPatternItems(
   return out;
 }
 
+export interface BuildChecklistResult {
+  items: BuiltItem[];
+  /**
+   * 似た過去予定で「そのまま使われていた」名前付きリスト由来の枠（task/belonging 以外）。
+   * `items` には含めない（AI 再生成の対象＝task/belonging とは別経路で保存するため）。
+   * `lib/checklist.ts` の `generateAndSaveChecklist` が `addSeedItemsToEvent` に渡す。
+   */
+  customSectionSeeds: RecalledCustomSectionSeed[];
+}
+
 /**
  * 予定の準備リスト（準備すること＋持ち物）を組み立てる。
  * 一般ベース → 確定ルール強制適用 → 仮ルールは提案 → 上限で間引き。
  * 学習が薄いカテゴリ・パターンではベースがほぼそのまま出る。
  */
-export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem[]> {
+export async function buildChecklistForEvent(
+  eventId: string,
+): Promise<BuildChecklistResult> {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: { category: true },
@@ -280,7 +295,7 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
   );
 
   // 似た予定で「準備リストを全部消した」と学習済み → 何も出さない（提案も無し）。
-  if (recalled?.cleared) return [];
+  if (recalled?.cleared) return { items: [], customSectionSeeds: [] };
 
   const [gen, taskRules, belongingRules] = await Promise.all([
     recalled
@@ -332,5 +347,8 @@ export async function buildChecklistForEvent(eventId: string): Promise<BuiltItem
     (it) => !existingKeys.has(`${it.kind}:${norm(it.title)}`),
   );
 
-  return [...composed, ...dedupedPatternItems];
+  return {
+    items: [...composed, ...dedupedPatternItems],
+    customSectionSeeds: recalled?.customSectionSeeds ?? [],
+  };
 }

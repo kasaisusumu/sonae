@@ -1,7 +1,13 @@
+import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildChecklistForEvent, type BuiltItem } from "@/lib/suggest";
 import { syncEventDescription } from "@/lib/description-sync";
 import { parseLeads, stringifyLeads } from "@/lib/lead-time";
+import {
+  isBuiltinSection,
+  parseSectionOrder,
+  stringifySectionOrder,
+} from "@/lib/sections";
 
 export interface DraftItem {
   title: string;
@@ -97,7 +103,7 @@ export async function generateAndSaveChecklist(
     }
   }
 
-  const items = await buildChecklistForEvent(eventId);
+  const { items, customSectionSeeds } = await buildChecklistForEvent(eventId);
   const rows = persistData(eventId, items, comments);
   await prisma.$transaction([
     // 作り直すのは組み込みの2枠（準備すること・持ち物）だけ。
@@ -113,6 +119,17 @@ export async function generateAndSaveChecklist(
       ? [prisma.checklistItem.createMany({ data: rows })]
       : []),
   ]);
+
+  // 似た過去予定で「そのまま使われていた」名前付きリストは、別の枠として引き継ぐ
+  // （task/belonging の作り直しとは別経路。addSeedItemsToEvent は同じ枠・同じ名前は
+  // スキップするので、既にこの予定にある内容と重複はしない）。
+  if (customSectionSeeds.length > 0) {
+    const ev = await prisma.event.findUnique({
+      where: { id: eventId },
+      select: { userId: true },
+    });
+    if (ev) await addSeedItemsToEvent(ev.userId, eventId, customSectionSeeds);
+  }
 
   // 生成しても中身が空（似た予定で「何も出さない」を学習済み 等）なら、
   // 全消し扱いにして、次回以降ムダに再生成しない。
@@ -304,6 +321,100 @@ export async function resolveNameGroupOnEdit(
     return [];
   }
   return propagateListToNameGroup(eventId);
+}
+
+export type SeedItem = {
+  /** "task" / "belonging" / ユーザーが足した枠名（＝表示名そのもの） */
+  kind: string;
+  title: string;
+  notifyLeadMinutes: number | null;
+};
+
+/**
+ * テンプレート適用・他の予定からのコピー・似た予定からの名前付きリスト自動再利用など、
+ * 「項目をまとめて予定の準備リストに足す」処理の共通部分（同じ枠・同じ名前はスキップ）。
+ * ユーザーが足した枠（買うもの等）で、その予定の枠順にまだ無ければ枠順にも追加する
+ * （＝別枠として独立して表示される）。
+ * `revalidatePath` は呼ばない（Server Action からも通常の描画中からも呼べるようにするため）。
+ * Server Action 側で必要なら呼び出し元が revalidateAppViews 等を別途呼ぶこと。
+ */
+export async function addSeedItemsToEvent(
+  userId: string,
+  eventId: string,
+  seeds: SeedItem[],
+): Promise<number> {
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    include: {
+      checklistItems: { select: { kind: true, title: true, sortOrder: true } },
+    },
+  });
+  if (!event) return 0;
+
+  const existing = new Set(
+    event.checklistItems.map((c) => `${c.kind}:${normTitle(c.title)}`),
+  );
+  const nextSort: Record<string, number> = {};
+  for (const c of event.checklistItems) {
+    nextSort[c.kind] = Math.max(nextSort[c.kind] ?? 0, c.sortOrder + 1);
+  }
+
+  const fresh = seeds.filter(
+    (s) => s.title.trim() && !existing.has(`${s.kind}:${normTitle(s.title)}`),
+  );
+  if (fresh.length === 0) return 0;
+
+  const data = fresh.map((s) => {
+    const so = nextSort[s.kind] ?? 0;
+    nextSort[s.kind] = so + 1;
+    return {
+      eventId,
+      kind: s.kind,
+      title: s.title.trim().slice(0, 120),
+      notifyLeadMinutes: s.notifyLeadMinutes,
+      isUserAdded: true,
+      sortOrder: so,
+    };
+  });
+
+  // コピー元にあってこの予定の枠順に無いユーザー枠は、枠順にも足す
+  const order = parseSectionOrder(event.sectionOrder);
+  const missing = [
+    ...new Set(
+      fresh
+        .map((s) => s.kind)
+        .filter((k) => !isBuiltinSection(k) && !order.includes(k)),
+    ),
+  ];
+
+  await prisma.$transaction([
+    prisma.checklistItem.createMany({ data }),
+    ...(missing.length
+      ? [
+          prisma.event.update({
+            where: { id: eventId },
+            data: {
+              sectionOrder: stringifySectionOrder([...order, ...missing]),
+            },
+          }),
+        ]
+      : []),
+  ]);
+
+  await prisma.event.updateMany({
+    where: { id: eventId, autoManaged: false },
+    data: { autoManaged: true },
+  });
+  await prisma.event.updateMany({
+    where: { id: eventId, listReviewedAt: null },
+    data: { listReviewedAt: new Date() },
+  });
+  const twinIds = await resolveNameGroupOnEdit(eventId);
+  after(() => {
+    void syncEventDescription(eventId);
+    for (const id of twinIds) void syncEventDescription(id);
+  });
+  return fresh.length;
 }
 
 /** 同名・未編集の予定が既にリストを持っていれば、そのイベント id を返す。 */

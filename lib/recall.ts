@@ -3,6 +3,12 @@ import type { EventFeatureData, TimeBucket } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
 import { norm, type GeneratedItem } from "@/lib/learning";
 
+export interface RecalledCustomSectionSeed {
+  kind: string;
+  title: string;
+  notifyLeadMinutes: number | null;
+}
+
 export interface RecalledBase {
   tasks: GeneratedItem[];
   belongings: GeneratedItem[];
@@ -11,6 +17,13 @@ export interface RecalledBase {
   exact: boolean;
   /** 似た過去予定で「準備リストを全部消した」と学習済み → 何も出さない。 */
   cleared?: boolean;
+  /**
+   * 似た過去予定で、ユーザーが足した枠（task/belonging 以外）の中身が、保存済みの
+   * 名前付きリスト（ListTemplate）とそのまま一致していた分。「そのまま使われていた」
+   * ものだけ、別の枠として今回にも引き継いでよい（ユーザー指示）。少しでも内容が
+   * 違えば（＝その場限りの手打ち枠なら）引き継がない。
+   */
+  customSectionSeeds?: RecalledCustomSectionSeed[];
 }
 
 /** タイトルを比較用に正規化する（数字・記号・「第N回」などの連番を落とす）。 */
@@ -216,10 +229,60 @@ export async function recallBaseChecklist(
         notifyLeadMinutes: i.notifyLeadMinutes,
       }));
 
+  const customSectionSeeds = await findVerbatimTemplateSeeds(
+    event.userId,
+    best.items,
+  );
+
   return {
     tasks: pick("task"),
     belongings: pick("belonging"),
     sourceEventId: best.id,
     exact: best.exact,
+    customSectionSeeds,
   };
+}
+
+/**
+ * 似た過去予定の、ユーザーが足した枠（task/belonging 以外）の中身が、保存済みの
+ * 名前付きリストと完全に一致するものだけを拾う（＝そのまま使っていた分）。
+ * 1文字でも違えば「その場限りの編集」とみなし、引き継がない（安全側）。
+ */
+async function findVerbatimTemplateSeeds(
+  userId: string,
+  pastItems: { kind: string; title: string; notifyLeadMinutes: number | null }[],
+): Promise<RecalledCustomSectionSeed[]> {
+  const byKind = new Map<string, typeof pastItems>();
+  for (const it of pastItems) {
+    if (it.kind === "task" || it.kind === "belonging") continue;
+    const arr = byKind.get(it.kind) ?? [];
+    arr.push(it);
+    byKind.set(it.kind, arr);
+  }
+  if (byKind.size === 0) return [];
+
+  const templates = await prisma.listTemplate.findMany({
+    where: { userId, kind: { in: [...byKind.keys()] } },
+    include: { items: { select: { title: true } } },
+  });
+  if (templates.length === 0) return [];
+
+  const titleSet = (items: { title: string }[]) =>
+    new Set(items.map((i) => norm(i.title)));
+  const setsEqual = (a: Set<string>, b: Set<string>) =>
+    a.size === b.size && [...a].every((x) => b.has(x));
+
+  const out: RecalledCustomSectionSeed[] = [];
+  for (const [kind, items] of byKind) {
+    const pastSet = titleSet(items);
+    if (pastSet.size === 0) continue;
+    const hit = templates.find(
+      (t) => t.kind === kind && setsEqual(titleSet(t.items), pastSet),
+    );
+    if (!hit) continue;
+    for (const it of items) {
+      out.push({ kind, title: it.title, notifyLeadMinutes: it.notifyLeadMinutes });
+    }
+  }
+  return out;
 }

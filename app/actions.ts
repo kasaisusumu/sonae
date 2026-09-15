@@ -1411,6 +1411,8 @@ export async function deleteFailureLog(formData: FormData): Promise<void> {
  *   "irrelevant"    … 今回は関係ない → 計上は取り消し。振り返り済み扱いにして一覧から下げる。
  *   "unset"         … 未選択に戻す → 計上取り消し。失敗ログ一覧で選び直す。
  * 同じボタンをもう一度押したら "unset"（トグル）。金額は聞かない（件数のみで計上）。
+ * 対策（countermeasure）フィールドが送られてきたら一緒に保存する（例: ReviewQueue の
+ * 「今回は防げた」フォーム）。フィールドが無いとき（結果だけ変えるボタン類）は現状維持。
  */
 export async function setFailureOutcome(formData: FormData): Promise<void> {
   const userId = await requireUserId();
@@ -1431,6 +1433,10 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
   });
   if (!log) return;
 
+  const rawCountermeasure = formData.get("countermeasure");
+  const hasCountermeasure = rawCountermeasure !== null;
+  const countermeasure = String(rawCountermeasure ?? "").trim() || null;
+
   if (outcome === "prevented") {
     const existing = await prisma.savingsEntry.findFirst({
       where: { userId, failureLogId },
@@ -1448,13 +1454,19 @@ export async function setFailureOutcome(formData: FormData): Promise<void> {
     }
     await prisma.failureLog.update({
       where: { id: failureLogId },
-      data: { outcome: "prevented" },
+      data: {
+        outcome: "prevented",
+        ...(hasCountermeasure ? { countermeasure } : {}),
+      },
     });
   } else {
     await prisma.savingsEntry.deleteMany({ where: { userId, failureLogId } });
     await prisma.failureLog.update({
       where: { id: failureLogId },
-      data: { outcome: outcome === "unset" ? null : outcome },
+      data: {
+        outcome: outcome === "unset" ? null : outcome,
+        ...(hasCountermeasure ? { countermeasure } : {}),
+      },
     });
   }
 

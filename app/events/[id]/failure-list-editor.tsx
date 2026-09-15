@@ -150,11 +150,25 @@ export function FailureListEditor({
   others?: FLOther[];
   variant?: "plain" | "warn";
 }) {
-  // 失敗候補（outcome === null ＝アプリが自動提案したもの）は、対策候補も
-  // 一緒に見てもらいたいので、最初から開いた状態で出す（ユーザー指定）。
-  const [openIds, setOpenIds] = useState(
-    () => new Set(initial.filter((r) => r.outcome === null).map((r) => r.id)),
-  );
+  // 提案（未確認）の間は今まで通り閉じた状態。対策候補があれば行の下に一言だけ
+  // 見せておき（下の suggested && !open の表示）、「採用」されて outcome が
+  // null → "linked" に変わった瞬間だけ自動で開く（対策を書き足しやすくするため）。
+  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
+  const prevOutcomes = useRef(new Map(initial.map((r) => [r.id, r.outcome])));
+  useEffect(() => {
+    const justAdopted = initial.filter(
+      (r) => prevOutcomes.current.get(r.id) === null && r.outcome === "linked",
+    );
+    prevOutcomes.current = new Map(initial.map((r) => [r.id, r.outcome]));
+    if (justAdopted.length === 0) return;
+    queueMicrotask(() => {
+      setOpenIds((s) => {
+        const next = new Set(s);
+        for (const r of justAdopted) next.add(r.id);
+        return next;
+      });
+    });
+  }, [initial]);
   const toggle = (id: string) =>
     setOpenIds((s) => {
       const next = new Set(s);

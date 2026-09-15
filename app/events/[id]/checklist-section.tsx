@@ -470,8 +470,10 @@ export async function ChecklistSection({
 }
 
 export function ChecklistSectionSkeleton() {
+  // ちらつき防止のためアニメーションなし（静止したプレースホルダー）。
+  // animate-pulse は明滅して見えると不評だったため使わない（今後の骨組みも同様に）。
   return (
-    <div className="animate-pulse space-y-3" aria-hidden>
+    <div className="space-y-3" aria-hidden>
       <div className="h-6 w-32 rounded bg-surface-muted" />
       <div className="space-y-2 rounded-2xl bg-surface p-4">
         {Array.from({ length: 6 }).map((_, i) => (

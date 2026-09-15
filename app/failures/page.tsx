@@ -118,9 +118,6 @@ export default async function FailuresPage() {
             聞きません（予定を選べばその予定に合わせます）。
           </InfoHint>
         </h2>
-        <div className="mt-2">
-          <FailureDictationInput />
-        </div>
         <form action={createFailureLog} className="mt-3 space-y-3">
           <FailureQuickInput />
 
@@ -145,7 +142,10 @@ export default async function FailuresPage() {
             className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
           />
 
-          <SubmitButton>記録する</SubmitButton>
+          <div className="flex flex-wrap items-center gap-2">
+            <SubmitButton>記録する</SubmitButton>
+            <FailureDictationInput />
+          </div>
         </form>
       </section>
 

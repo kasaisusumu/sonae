@@ -15,7 +15,6 @@ import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { FirstSeen } from "@/app/components/first-seen";
 import { CountermeasureField } from "@/app/components/countermeasure-field";
-import { FailureDictationInput } from "@/app/failures/failure-dictation-input";
 
 export type FLRow = {
   id: string;
@@ -448,7 +447,6 @@ export function FailureListEditor({
         >
           ＋ 追加
         </button>
-        <FailureDictationInput eventId={eventId} />
         {others.length > 0 && (
           <>
             <button

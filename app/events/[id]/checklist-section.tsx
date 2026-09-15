@@ -34,6 +34,7 @@ import { ListReminderControl } from "./list-reminder-control";
 import { AddSectionButton } from "./section-manager";
 import { SectionList, type SectionEntry } from "./section-list";
 import { DictationInput } from "./dictation-input";
+import { FailureDictationInput } from "@/app/failures/failure-dictation-input";
 import { SubmitButton } from "@/app/components/submit-button";
 
 type TplOpt = { id: string; name: string };
@@ -221,12 +222,15 @@ export async function ChecklistSection({
               この予定、うっかりはありましたか？
             </p>
             <p className="mt-0.5 text-[11px] text-muted">
-              あったら下の「＋ 追加」で一言。なければワンタップで。
+              あったら話すか、下の「＋ 追加」で一言。なければワンタップで。
             </p>
-            <form action={markNoFailure} className="mt-2">
-              <input type="hidden" name="eventId" value={event.id} />
-              <SubmitButton variant="ghost">なかった 🙆</SubmitButton>
-            </form>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <form action={markNoFailure}>
+                <input type="hidden" name="eventId" value={event.id} />
+                <SubmitButton variant="ghost">なかった 🙆</SubmitButton>
+              </form>
+              <FailureDictationInput eventId={event.id} />
+            </div>
           </div>
         ))}
 

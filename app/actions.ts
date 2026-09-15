@@ -1237,33 +1237,33 @@ export async function createFailureLog(formData: FormData): Promise<void> {
 }
 
 /**
- * 音声入力（スマホのマイクキーで話した自由文）から失敗ログを1件作る。
- * AI で「何が起きたか」と「有効だった対策」に分けてから記録する
- * （準備リストの「話して作る」と同じ考え方）。
+ * 音声入力（スマホのマイクキーで話した自由文）を、AI で「何が起きたか」と
+ * 「有効だった対策」の配列に整える（まだ保存しない）。記録は残る性質のものなので、
+ * ユーザーが内容を確認・修正してから `saveDictatedFailures` で保存する2段階にする。
  */
-export async function createFailureLogFromDictation(input: {
-  eventId: string | null;
-  text: string;
-}): Promise<{ ok: boolean; added: number; error?: string }> {
-  const userId = await requireUserId();
-  const text = String(input.text ?? "").trim();
-  if (!text) return { ok: false, added: 0, error: "内容がありません。" };
-  trackEvent(userId, "feature:failure-dictation");
+export async function previewDictatedFailures(text: string): Promise<{
+  ok: boolean;
+  items: { description: string; countermeasure: string | null }[];
+  error?: string;
+}> {
+  await requireUserId();
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed) return { ok: false, items: [], error: "内容がありません。" };
 
   const { splitDictationIntoFailures } = await import("@/lib/dictation-to-failure");
   let items;
   try {
-    items = await splitDictationIntoFailures(text);
+    items = await splitDictationIntoFailures(trimmed);
   } catch (e) {
-    console.error("[createFailureLogFromDictation] 失敗", e);
+    console.error("[previewDictatedFailures] 失敗", e);
     return {
       ok: false,
-      added: 0,
+      items: [],
       error: "うまく整えられませんでした。少し短くして試してみてください。",
     };
   }
   if (items.length === 0) {
-    return { ok: false, added: 0, error: "何が起きたか読み取れませんでした。" };
+    return { ok: false, items: [], error: "何が起きたか読み取れませんでした。" };
   }
 
   // 話した中で内容が同じものが重複したら1件にまとめる（言い直し対策）。
@@ -1274,10 +1274,32 @@ export async function createFailureLogFromDictation(input: {
     seen.add(k);
     return true;
   });
+  return { ok: true, items: unique };
+}
+
+/**
+ * `previewDictatedFailures` でユーザーが確認・修正した内容をまとめて保存する。
+ * 音声入力の失敗ログはこの2段階（整える→確認→保存）で作る。
+ */
+export async function saveDictatedFailures(input: {
+  eventId: string | null;
+  items: { description: string; countermeasure: string | null }[];
+}): Promise<{ ok: boolean; added: number; error?: string }> {
+  const userId = await requireUserId();
+  const cleanItems = (input.items ?? [])
+    .map((it) => ({
+      description: String(it.description ?? "").trim(),
+      countermeasure: String(it.countermeasure ?? "").trim() || null,
+    }))
+    .filter((it) => it.description.length > 0);
+  if (cleanItems.length === 0) {
+    return { ok: false, added: 0, error: "内容がありません。" };
+  }
+  trackEvent(userId, "feature:failure-dictation");
 
   const eventId = input.eventId ? String(input.eventId).trim() || null : null;
   let lastEventId: string | undefined;
-  for (const it of unique) {
+  for (const it of cleanItems) {
     const linkedEvent = await insertFailureLog(
       userId,
       it.description,
@@ -1287,7 +1309,7 @@ export async function createFailureLogFromDictation(input: {
     if (linkedEvent) lastEventId = linkedEvent.id;
   }
   revalidateAppViews(lastEventId);
-  return { ok: true, added: unique.length };
+  return { ok: true, added: cleanItems.length };
 }
 
 /**

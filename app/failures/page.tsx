@@ -144,7 +144,7 @@ export default async function FailuresPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <SubmitButton>記録する</SubmitButton>
-            <FailureDictationInput />
+            <FailureDictationInput events={events} />
           </div>
         </form>
       </section>

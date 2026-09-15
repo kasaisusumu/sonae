@@ -58,7 +58,7 @@ const TOURS: Tour[] = [
   {
     // 予定詳細を初めて開いたときの案内。1つずつ、他ポップアップと重ねない、
     // 導入チュートリアル完了後に出す（共通ルール）。key を上げると再表示される。
-    key: "event_v5",
+    key: "event_v6",
     match: (p) => /^\/events\/[^/]+$/.test(p),
     steps: [
       {
@@ -81,16 +81,26 @@ const TOURS: Tour[] = [
         title: "直すほど、あなた仕様に",
         body: "いる／いらないを直す・足すと学習して、次から似た予定で似たリストを最初から出します。増えすぎることはありません。",
       },
+      {
+        sel: '[data-coach="fail-dictation"]',
+        title: "🎤 声でも記録できます",
+        body: "話すだけでAIが内容と対策をまとめて記録します。マイクキーからどうぞ。",
+      },
     ],
   },
   {
-    key: "failures_v2",
+    key: "failures_v3",
     match: (p) => p === "/failures",
     steps: [
       {
         sel: '[data-coach="fail-new"]',
         title: "うっかりを記録する",
         body: "「何が起きたか」だけでOK。金額は空で大丈夫。予定に紐づけると先回りできます。",
+      },
+      {
+        sel: '[data-coach="fail-dictation"]',
+        title: "🎤 声でも記録できます",
+        body: "話すだけでAIが内容と対策をまとめて記録します。マイクキーからどうぞ。",
       },
       {
         sel: '[data-coach="fail-list"]',

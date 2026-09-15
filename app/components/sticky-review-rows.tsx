@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { setFailureOutcome } from "@/app/actions";
 import {
   FailureReviewRow,
@@ -28,6 +28,11 @@ export function StickyReviewRows({
   const freshById = new Map(rows.map((r) => [r.id, r] as const));
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
   const [, start] = useTransition();
+  // 同じ行への保存を必ず前の保存が終わってから送る（id ごとの直列キュー）。
+  // setFailureOutcome は「削除→更新」等の複数ステップなので、変更→即戻す、のように
+  // 続けて呼ぶと後から送った方が先に確定してしまい、戻したはずが変更後のまま
+  // 残ることがあった。id ごとに直前の保存を待ってから次を送るようにして防ぐ。
+  const queueRef = useRef<Record<string, Promise<void>>>({});
 
   const CONFIRM: Record<OutcomeTarget, string> = {
     prevented: "「防げた」で記録しますか？（防げた件数に積み上がります）",
@@ -43,7 +48,10 @@ export function StickyReviewRows({
     const fd = new FormData();
     fd.set("failureLogId", id);
     fd.set("outcome", t);
-    start(() => setFailureOutcome(fd));
+    const prevTask = queueRef.current[id] ?? Promise.resolve();
+    const task = prevTask.then(() => setFailureOutcome(fd)).catch(() => {});
+    queueRef.current[id] = task;
+    start(() => task);
   }
 
   if (snapshot.length === 0) {

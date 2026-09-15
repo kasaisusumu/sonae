@@ -1295,9 +1295,26 @@ export async function saveDictatedFailures(input: {
   if (cleanItems.length === 0) {
     return { ok: false, added: 0, error: "内容がありません。" };
   }
-  trackEvent(userId, "feature:failure-dictation");
 
+  // 予定を指定したのに見つからない（他人の予定・消えた予定など）なら、黙って
+  // 「紐づけない」で保存せず、はっきりエラーを返す。書き込みより前に確認することで、
+  // 中途半端な（意図と違う）レコードを作らないようにする。
   const eventId = input.eventId ? String(input.eventId).trim() || null : null;
+  if (eventId) {
+    const owns = await prisma.event.findFirst({
+      where: { id: eventId, userId },
+      select: { id: true },
+    });
+    if (!owns) {
+      return {
+        ok: false,
+        added: 0,
+        error: "選んだ予定が見つかりませんでした。もう一度選び直してください。",
+      };
+    }
+  }
+
+  trackEvent(userId, "feature:failure-dictation");
   let lastEventId: string | undefined;
   for (const it of cleanItems) {
     const linkedEvent = await insertFailureLog(

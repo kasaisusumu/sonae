@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { previewDictatedFailures, saveDictatedFailures } from "@/app/actions";
 import { formatDateOnly } from "@/lib/format";
 
-type DraftItem = { description: string; countermeasure: string };
+type Draft = { description: string; countermeasure: string };
 
 /**
  * スマホのキーボードのマイクキーで「何があった・どんな対策を考えたか」を
- * 思いつくまま話し、AI で「何が起きたか」「有効だった対策」に分ける。
- * 準備リストの `DictationInput` と同じ考え方だが、失敗ログは記録が残る性質上、
- * AI が整えた内容をその場で確認・修正してから保存する（いきなり保存しない）。
+ * 話し、AI で「何が起きたか」「有効だった対策」に分ける。失敗ログは記録が
+ * 残る性質上、整えた内容をその場で確認・修正してから保存する（いきなり保存しない）。
+ * 複数の失敗をまとめて話しても、確認するのは常に1件だけ（そのほうが確実に
+ * 見て・直してから記録できるため）。残りがあればもう一度話してもらう。
  */
 export function FailureDictationInput({
   eventId = null,
@@ -27,7 +28,8 @@ export function FailureDictationInput({
   const [phase, setPhase] = useState<"input" | "review">("input");
   const [text, setText] = useState("");
   const [selectedEventId, setSelectedEventId] = useState("");
-  const [items, setItems] = useState<DraftItem[]>([]);
+  const [draft, setDraft] = useState<Draft>({ description: "", countermeasure: "" });
+  const [moreCount, setMoreCount] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -38,7 +40,8 @@ export function FailureDictationInput({
     setPhase("input");
     setText("");
     setSelectedEventId("");
-    setItems([]);
+    setDraft({ description: "", countermeasure: "" });
+    setMoreCount(0);
     setErr(null);
   }
 
@@ -55,12 +58,12 @@ export function FailureDictationInput({
     startTransition(async () => {
       const res = await previewDictatedFailures(t);
       if (res.ok) {
-        setItems(
-          res.items.map((it) => ({
-            description: it.description,
-            countermeasure: it.countermeasure ?? "",
-          })),
-        );
+        const [first, ...rest] = res.items;
+        setDraft({
+          description: first.description,
+          countermeasure: first.countermeasure ?? "",
+        });
+        setMoreCount(rest.length);
         setPhase("review");
       } else {
         setErr(res.error ?? "うまくいきませんでした。");
@@ -68,26 +71,14 @@ export function FailureDictationInput({
     });
   }
 
-  function updateItem(i: number, patch: Partial<DraftItem>) {
-    setItems((cur) => cur.map((it, idx) => (idx === i ? { ...it, ...patch } : it)));
-  }
-
-  function removeItem(i: number) {
-    setItems((cur) => cur.filter((_, idx) => idx !== i));
-  }
-
   function confirmSave() {
     if (pending) return;
-    const cleanItems = items
-      .map((it) => ({
-        description: it.description.trim(),
-        countermeasure: it.countermeasure.trim() || null,
-      }))
-      .filter((it) => it.description.length > 0);
-    if (cleanItems.length === 0) {
+    const description = draft.description.trim();
+    if (!description) {
       setErr("内容がありません。");
       return;
     }
+    const countermeasure = draft.countermeasure.trim() || null;
     const targetEventId = eventId ?? (selectedEventId || null);
     const linkedEvent = !eventId
       ? events?.find((e) => e.id === selectedEventId)
@@ -96,17 +87,15 @@ export function FailureDictationInput({
     startTransition(async () => {
       const res = await saveDictatedFailures({
         eventId: targetEventId,
-        items: cleanItems,
+        items: [{ description, countermeasure }],
       });
       if (res.ok) {
         const where = eventId
           ? "この予定の「考えられる失敗」に追加しました。"
           : linkedEvent
-            ? `「${linkedEvent.title}」に追加しました。`
+            ? `「${linkedEvent.title}」の予定ページに追加しました。`
             : "下の「▸ 予定に紐づかない記録を見る」に追加しました。";
-        setNote(
-          `${res.added > 1 ? `${res.added}件、` : ""}記録しました。${where}`,
-        );
+        setNote(`記録しました。${where}`);
         reset();
         router.refresh();
       } else {
@@ -143,15 +132,16 @@ export function FailureDictationInput({
               <>
                 <p className="text-[11px] text-muted">
                   スマホのキーボードの<strong>マイクキー</strong>で、何があったか、
-                  思いついた対策があればそれも合わせて話してください。複数あれば
-                  まとめて話してもOK、<strong>それぞれ別々に</strong>記録します。
+                  思いついた対策があればそれも合わせて話してください。1回につき
+                  1件、確認してから記録します。複数あれば、記録したあとにもう一度
+                  話してください。
                 </p>
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   rows={4}
                   placeholder={
-                    "例: 集合時間に遅刻しちゃった。あと保険証も忘れた。次からは前日にリマインダーを設定しておこうと思う。"
+                    "例: 集合時間に遅刻しちゃった。次からは前日にリマインダーを設定しておこうと思う。"
                   }
                   className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
                 />
@@ -178,9 +168,12 @@ export function FailureDictationInput({
                 <p className="text-xs font-medium text-foreground">
                   この内容でよろしいですか？
                 </p>
-                <p className="text-[11px] text-muted">
-                  内容はその場で直せます。不要な項目は「削除」で外せます。
-                </p>
+                {moreCount > 0 && (
+                  <p className="rounded-lg bg-surface-muted px-3 py-2 text-[11px] text-muted">
+                    ほかにも話した内容があるようです。まず1件目を確認してください。
+                    残りは記録したあと、もう一度「🎤 話して記録する」からどうぞ。
+                  </p>
+                )}
 
                 {showEventPicker && (
                   <label className="block text-xs text-muted">
@@ -207,58 +200,30 @@ export function FailureDictationInput({
                   </p>
                 )}
 
-                <div className="space-y-3">
-                  {items.map((it, i) => (
-                    <div
-                      key={i}
-                      className="space-y-1.5 rounded-lg border border-border p-2.5"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[11px] text-muted">
-                          {items.length > 1 ? `${i + 1}件目` : "内容"}
-                        </span>
-                        {items.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeItem(i)}
-                            className="text-[11px] text-muted underline hover:text-warn"
-                          >
-                            削除
-                          </button>
-                        )}
-                      </div>
-                      <textarea
-                        value={it.description}
-                        onChange={(e) =>
-                          updateItem(i, { description: e.target.value })
-                        }
-                        rows={2}
-                        placeholder="何が起きたか"
-                        className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
-                      />
-                      <textarea
-                        value={it.countermeasure}
-                        onChange={(e) =>
-                          updateItem(i, { countermeasure: e.target.value })
-                        }
-                        rows={1}
-                        placeholder="有効だった対策（あれば・任意）"
-                        className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
-                      />
-                    </div>
-                  ))}
-                  {items.length === 0 && (
-                    <p className="text-[11px] text-muted">
-                      すべて削除しました。「戻る」からやり直せます。
-                    </p>
-                  )}
-                </div>
+                <textarea
+                  value={draft.description}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, description: e.target.value }))
+                  }
+                  rows={2}
+                  placeholder="何が起きたか"
+                  className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
+                />
+                <textarea
+                  value={draft.countermeasure}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, countermeasure: e.target.value }))
+                  }
+                  rows={1}
+                  placeholder="有効だった対策（あれば・任意）"
+                  className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
+                />
 
                 <div className="flex flex-wrap items-center gap-3">
                   <button
                     type="button"
                     onClick={confirmSave}
-                    disabled={pending || items.length === 0}
+                    disabled={pending || !draft.description.trim()}
                     className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface shadow-sm transition-colors hover:opacity-90 disabled:opacity-50"
                   >
                     {pending ? "記録中…" : "この内容で記録する"}

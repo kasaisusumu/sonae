@@ -959,11 +959,11 @@ export function ChecklistEditor({
             {modal === "apply" && (
               <>
                 <h3 className="text-sm font-semibold text-foreground">
-                  📋 マニュアルから{kindLabel}を追加
+                  📋 マニュアルから追加
                 </h3>
                 {templates.length === 0 ? (
                   <p className="text-xs text-muted">
-                    まだ{kindLabel}のマニュアルはありません。「⭐ 名前をつけて保存」か、マニュアルページで作成できます。
+                    まだ{kindLabel}から選べるマニュアルはありません。「⭐ 名前をつけて保存」か、マニュアルページで作成できます。
                   </p>
                 ) : (
                   <>
@@ -980,6 +980,7 @@ export function ChecklistEditor({
                       ))}
                     </select>
                     <p className="text-[11px] text-muted">
+                      その名前の新しい枠が別にできます（{kindLabel}には混ざりません）。
                       すでにある項目（同じ名前）はスキップします。
                     </p>
                   </>

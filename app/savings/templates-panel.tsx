@@ -54,7 +54,7 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
           <select
             name="kind"
             defaultValue={t.kind}
-            aria-label="どの枠に入るか"
+            aria-label="どの枠の「マニュアルから追加」に出すか"
             className="rounded-md border bg-surface px-2 py-1 text-xs"
           >
             <option value="task">準備すること</option>
@@ -108,8 +108,10 @@ export function TemplatesGroup({ templates }: { templates: TemplateDetail[] }) {
     <div className="space-y-2">
       <p className="text-xs text-muted">
         よく使う準備すること・持ち物に名前を付けて保存。予定ページの
-        「📋 マニュアル・他の予定から」でどの予定にも追加できます。名前の横の
-        （　）は、その予定でどの枠に入るかです。
+        「📋 マニュアル・他の予定から」でどの予定にも追加できます。追加すると、
+        その予定には<strong>この名前の新しい枠</strong>ができます（既存の準備すること・
+        持ち物には混ざりません）。名前の横の（　）は、予定ページのどの枠の
+        「マニュアルから追加」に出てくるかです。
       </p>
 
       {templates.length === 0 && (

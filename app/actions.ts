@@ -2354,15 +2354,16 @@ export async function applyTemplateToEvent(formData: FormData): Promise<void> {
   if (!template) return;
   trackEvent(userId, "feature:template-apply");
 
-  // template.kind をそのまま使う（task/belonging に強制しない）。ユーザーが「その他（新しい枠）」
-  // で作った名前付きリストは、その枠名のまま = 別の枠として独立して追加される
-  // （addSeedItemsToEvent が枠順への追加まで面倒を見る）。sourceTemplateId を付けておくと、
-  // あとでこの枠の中身が編集されたとき「◯◯（編集済み）」に改名する判定に使える。
+  // 「マニュアルから追加」は、元のテンプレートの枠（task/belonging を含む）に関わらず、
+  // 常にテンプレート名そのものを枠名にして、独立した別枠として追加する（ユーザー指示）。
+  // 「準備すること」「持ち物」で押しても、そこには混ざらずテンプレート名の新しい枠ができる。
+  // sourceTemplateId を付けておくと、あとでこの枠の中身が編集されたとき
+  // 「◯◯（編集済み）」に改名する判定に使える。
   await addSeedItemsToEvent(
     userId,
     eventId,
     template.items.map((it) => ({
-      kind: it.kind,
+      kind: template.name,
       title: it.title,
       notifyLeadMinutes: it.notifyLeadMinutes ?? null,
       sourceTemplateId: template.id,

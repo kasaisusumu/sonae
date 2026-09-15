@@ -262,8 +262,12 @@ async function findVerbatimTemplateSeeds(
   }
   if (byKind.size === 0) return [];
 
+  // 予定の枠キーは「マニュアルから追加」ならテンプレート名そのもの、そうでなければ
+  // テンプレートの kind（古いデータ・手打ちで同名にした場合など）のことがあるので、
+  // name・kind どちらでも一致すれば拾う。
+  const keys = [...byKind.keys()];
   const templates = await prisma.listTemplate.findMany({
-    where: { userId, kind: { in: [...byKind.keys()] } },
+    where: { userId, OR: [{ kind: { in: keys } }, { name: { in: keys } }] },
     include: { items: { select: { title: true } } },
   });
   if (templates.length === 0) return [];
@@ -278,7 +282,9 @@ async function findVerbatimTemplateSeeds(
     const pastSet = titleSet(items);
     if (pastSet.size === 0) continue;
     const hit = templates.find(
-      (t) => t.kind === kind && setsEqual(titleSet(t.items), pastSet),
+      (t) =>
+        (t.kind === kind || t.name === kind) &&
+        setsEqual(titleSet(t.items), pastSet),
     );
     if (!hit) continue;
     for (const it of items) {

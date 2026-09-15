@@ -23,6 +23,9 @@ model User {
   // PWA を「ホーム画面に追加」すると localStorage が別ストレージになり
   // チュートリアルが再表示されるため、完了状態はサーバー側でも持つ。
   tutorialSeenAt DateTime?
+  // 説明欄のリンクから開いたときに出す「直接編集できます」案内を、
+  // 「今後表示しない」で消したかどうか。null の間は毎回表示する。
+  descLinkHintDismissedAt DateTime?
 
   googleAccount  UserGoogleAccount?
   categories     Category[]

@@ -73,8 +73,8 @@ function Visual({ id }: { id: string }): ReactNode {
 
 【持ち物】 1/3
 ☑ 充電器（1日前）
-☐ モバイルバッテリー
-☐ 常備薬
+・モバイルバッテリー
+・常備薬
 ---`}
         </pre>
       );
@@ -82,13 +82,13 @@ function Visual({ id }: { id: string }): ReactNode {
       return (
         <div className={`${box} space-y-1 text-xs`}>
           <div className="flex items-center gap-2">
-            <span className="flex-1">☐ モバイルバッテリー</span>
+            <span className="flex-1">・モバイルバッテリー</span>
             <span className="rounded-md border border-border px-1.5 text-[10px] text-muted">
               ∨
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="flex-1">☐ 常備薬</span>
+            <span className="flex-1">・常備薬</span>
             <span className="text-[10px] text-teal-dark">🔔1日前</span>
             <span className="rounded-md border border-teal/40 bg-teal-soft px-1.5 text-[10px] text-teal-dark">
               ∧

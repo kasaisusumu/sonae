@@ -61,7 +61,8 @@ export async function syncEventDescription(eventId: string): Promise<void> {
 
   const failures = await getEventDescriptionFailures(eventId);
 
-  const url = `${appBaseUrl()}/events/${eventId}`;
+  // src=cal: 説明欄のこのリンクから開いたときだけ、直接編集の説明ポップアップを出す。
+  const url = `${appBaseUrl()}/events/${eventId}?src=cal`;
   const description = composeDescription(
     event.memo,
     url,

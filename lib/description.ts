@@ -28,7 +28,11 @@ function oneLine(s: string): string {
 }
 
 const CHECK_DONE = "☑";
-const CHECK_TODO = "☐";
+// 未完了は「・」で表す（チェックボックス記号だと Google カレンダー上で
+// 追加の行が書きにくいため。「・」で始めて書けば新しい未完了項目として
+// パースされる＝表示と手入力の記法を揃えている。lib/description.ts の
+// BOX_OR_BULLET / parseSonaeBlock 参照）。
+const CHECK_TODO = "・";
 // コメント行の字下げ（半角スペース）。行頭が空白の行はコメントとして扱う。
 const COMMENT_INDENT = "    ";
 
@@ -72,7 +76,7 @@ function bullet(it: DescItem): string {
 
 /**
  * ブロック本文（リンク＋準備すること＋持ち物）。プレーンテキスト。
- * 完了項目は行頭を「☑」、未完了は「☐」で示す（HTML の装飾は入れない）。
+ * 完了項目は行頭を「☑」、未完了は「・」で示す（HTML の装飾は入れない）。
  * HTML を入れると Google カレンダーの編集画面で書式警告やカクつきが出るため。
  */
 /** 未チェックを上、チェック済みを下へ（同グループ内の並びは維持＝安定ソート）。 */

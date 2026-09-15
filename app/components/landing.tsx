@@ -52,9 +52,9 @@ function LearnMock() {
           1回目・一般的なリスト
         </p>
         <ul className="mt-1.5 space-y-1 text-[11px] text-muted">
-          <li>☐ 着替え</li>
-          <li>☐ 充電器</li>
-          <li>☐ 名刺</li>
+          <li>・着替え</li>
+          <li>・充電器</li>
+          <li>・名刺</li>
         </ul>
       </div>
       <div aria-hidden className="mx-auto text-lg text-border">
@@ -80,8 +80,8 @@ function LearnMock() {
           次の似た予定・あなた仕様
         </p>
         <ul className="mt-1.5 space-y-1 text-[11px] text-muted">
-          <li>☐ 着替え</li>
-          <li>☐ 充電器</li>
+          <li>・着替え</li>
+          <li>・充電器</li>
           <li className="text-foreground">☑ 常備薬</li>
           <li className="text-foreground">☑ モバイルバッテリー</li>
         </ul>

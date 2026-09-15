@@ -1765,6 +1765,19 @@ export async function markTutorialSeen(): Promise<void> {
   });
 }
 
+/**
+ * 説明欄のリンクから開いたときの「直接編集できます」案内を、
+ * 「今後表示しない」で消したことを記録する（呼ばなければ毎回表示され続ける）。
+ */
+export async function dismissDescLinkHint(): Promise<void> {
+  const userId = await requireUserId();
+  await prisma.user.updateMany({
+    where: { id: userId, descLinkHintDismissedAt: null },
+    data: { descLinkHintDismissedAt: new Date() },
+  });
+  void trackFeatureUse("popup:desc-link-hint:dismiss");
+}
+
 // ─────────────────────────────────────────────
 // 通知（Web Push）購読の登録・解除
 // ─────────────────────────────────────────────

@@ -11,6 +11,7 @@ import {
   ChecklistSectionSkeleton,
 } from "./checklist-section";
 import { ScrollToHash } from "./scroll-to-hash";
+import { DescLinkHint } from "./desc-link-hint";
 import { InfoHint } from "@/app/components/info-hint";
 import { trackEvent } from "@/lib/track";
 
@@ -19,10 +20,13 @@ export const maxDuration = 60;
 
 export default async function EventDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ src?: string }>;
 }) {
   const { id } = await params;
+  const { src } = await searchParams;
   const user = await getCurrentUser();
   if (!user) redirect("/");
   trackEvent(user.id, "page:/events/[id]");
@@ -39,6 +43,10 @@ export default async function EventDetailPage({
   ]);
   if (!event) notFound();
 
+  // 説明欄のリンク（?src=cal）から来たときだけ、直接編集の案内を出す。
+  // 「今後表示しない」が押されるまでは、毎回このリンクで来るたびに表示する。
+  const showDescLinkHint = src === "cal" && !user.descLinkHintDismissedAt;
+
   const categoryNames = Array.from(
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
   );
@@ -46,6 +54,7 @@ export default async function EventDetailPage({
   return (
     <div className="space-y-6">
       <ScrollToHash />
+      <DescLinkHint show={showDescLinkHint} />
       <Link
         href="/events"
         className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground no-underline shadow-sm transition-colors hover:bg-surface-muted active:bg-surface-muted"

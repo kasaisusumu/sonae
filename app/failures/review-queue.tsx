@@ -27,7 +27,7 @@ const OUTCOME_LABEL: Record<string, string> = {
 /** まだ結果が決まっていない失敗の「今回どうでした？」。予定詳細ページの振り返りと同じ形式。 */
 function PendingChoice({ log }: { log: RQLog }) {
   const [countermeasure, setCountermeasure] = useState(log.countermeasure ?? "");
-  const [, start] = useTransition();
+  const [pending, start] = useTransition();
 
   function submit(outcome: string, confirmMsg: string, withCountermeasure = false) {
     if (!window.confirm(confirmMsg)) return;
@@ -53,28 +53,31 @@ function PendingChoice({ log }: { log: RQLog }) {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
+          disabled={pending}
           onClick={() =>
             submit("prevented", "「防げた」で記録しますか？（防げた件数に積み上がります）", true)
           }
-          className="rounded-lg bg-foreground px-3.5 py-1.5 text-sm font-semibold text-surface hover:opacity-90"
+          className="rounded-lg bg-foreground px-3.5 py-1.5 text-sm font-semibold text-surface hover:opacity-90 disabled:opacity-50"
         >
           今回は防げた 🎉
         </button>
         <button
           type="button"
+          disabled={pending}
           onClick={() =>
             submit("not_prevented", "「防げなかった」で記録しますか？")
           }
-          className="rounded-lg border border-warn/50 bg-surface px-3.5 py-1.5 text-sm font-medium text-warn hover:bg-warn-soft"
+          className="rounded-lg border border-warn/50 bg-surface px-3.5 py-1.5 text-sm font-medium text-warn hover:bg-warn-soft disabled:opacity-50"
         >
           今回もやってしまった 😢
         </button>
         <button
           type="button"
+          disabled={pending}
           onClick={() =>
             submit("irrelevant", "「今回は関係ない」で記録しますか？")
           }
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:border-foreground/40 hover:text-foreground"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
         >
           今回は関係ない
         </button>

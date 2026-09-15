@@ -310,7 +310,9 @@ export async function ChecklistSection({
     ? sections
     : [FAILURE_LOG_KEY, ...sections];
 
-  const tplByKind = (k: "task" | "belonging"): TplOpt[] =>
+  // ユーザーが足した枠（買うもの等）の名前付きリストも、その枠名が一致すれば拾う
+  // （組み込みの2枠に限らない。「引き出す」も別枠として独立させるため）。
+  const tplByKind = (k: string): TplOpt[] =>
     allTemplates
       .filter((t) => t.kind === k)
       .map((t) => ({ id: t.id, name: t.name }));
@@ -410,9 +412,7 @@ export async function ChecklistSection({
                   kind={key}
                   label={sectionLabel(key)}
                   rows={rows}
-                  templates={
-                    builtin ? tplByKind(key as "task" | "belonging") : []
-                  }
+                  templates={tplByKind(key)}
                   pastEvents={
                     builtin ? pastByKind(key as "task" | "belonging") : []
                   }

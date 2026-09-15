@@ -216,6 +216,15 @@ model ChecklistItem {
   suggestionType   String?
   suggestionRuleId String? // 元になった LearnedRule.id
   suggestionValue  String? // timing 提案のときの提案タイミング / pattern_analogy の確定タイトル
+
+  // この項目が名前付きリスト（ListTemplate）の適用・そのままの自動再利用で追加された
+  // ものなら、その元テンプレート。saveChecklist で保存し直すたびに（他フィールドと違い）
+  // 引き継がない＝「そのまま」でいられた最初の1回だけの印。中身の編集（タイトルの
+  // 追加/削除）を検知して枠名を「◯◯（編集済み）」に変える判定に使う。
+  sourceTemplateId String?
+  sourceTemplate   ListTemplate? @relation(fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+
+  @@index([sourceTemplateId])
 }
 
 // ── 学習ロジック（spec 9.2）: EventFeature + EditRecord + LearnedRule ──
@@ -387,6 +396,7 @@ model ListTemplate {
   updatedAt     DateTime @updatedAt
 
   items ListTemplateItem[]
+  seededChecklistItems ChecklistItem[]
 
   @@unique([userId, kind, name])
   @@index([userId])

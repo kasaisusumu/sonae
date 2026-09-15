@@ -7,6 +7,7 @@ export interface RecalledCustomSectionSeed {
   kind: string;
   title: string;
   notifyLeadMinutes: number | null;
+  sourceTemplateId: string;
 }
 
 export interface RecalledBase {
@@ -281,7 +282,12 @@ async function findVerbatimTemplateSeeds(
     );
     if (!hit) continue;
     for (const it of items) {
-      out.push({ kind, title: it.title, notifyLeadMinutes: it.notifyLeadMinutes });
+      out.push({
+        kind,
+        title: it.title,
+        notifyLeadMinutes: it.notifyLeadMinutes,
+        sourceTemplateId: hit.id,
+      });
     }
   }
   return out;

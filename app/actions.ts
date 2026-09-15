@@ -21,6 +21,7 @@ import {
   normTitle,
   primeNotifiedChecklists,
   propagateListToNameGroup,
+  renameSectionKind,
   resolveNameGroupOnEdit,
   type SeedItem,
 } from "@/lib/checklist";
@@ -540,13 +541,6 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   });
   if (!event) return;
 
-  // ユーザーが足した枠なら、予定の枠順に確実に含めておく（説明欄・学習と整合）。
-  const curOrder = parseSectionOrder(event.sectionOrder);
-  const nextOrder =
-    isBuiltinSection(kind) || curOrder.includes(kind)
-      ? curOrder
-      : [...curOrder, kind];
-
   const cleanItems = input.items
     .map((it) => ({
       title: it.title.trim(),
@@ -585,6 +579,42 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     }
   }
 
+  // 名前付きリストそのまま（sourceTemplateId 付き）の枠で、タイトルの追加・削除が
+  // 実際にあったら（メモ・チェック・通知だけの変更では変えない）、この予定だけ枠名を
+  // 「元のリスト名（編集済み）」に変える（ユーザー指示）。組み込みの2枠は対象外。
+  // `added` は isUserAdded な行を毎回含む（学習用）ので、ここではタイトル集合だけで
+  // 厳密に「本当に新しいタイトルか」を見る。
+  const genuinelyNewTitleCount = [...nextTitles].filter(
+    (t) => !prevByTitle.has(t),
+  ).length;
+  const titleSetChanged = removed.length > 0 || genuinelyNewTitleCount > 0;
+  let effectiveKind = kind;
+  if (titleSetChanged && !isBuiltinSection(kind)) {
+    const srcTemplateId = prev.find((p) => p.sourceTemplateId)?.sourceTemplateId;
+    if (srcTemplateId) {
+      const srcTemplate = await prisma.listTemplate.findUnique({
+        where: { id: srcTemplateId },
+        select: { name: true },
+      });
+      if (srcTemplate) {
+        effectiveKind = `${srcTemplate.name}（編集済み）`.slice(0, 80);
+      }
+    }
+  }
+  const renamed = effectiveKind !== kind;
+
+  // ユーザーが足した枠なら、予定の枠順に確実に含めておく（説明欄・学習と整合）。
+  // 改名するときは、旧キーの位置に新キーを差し替える（新キーが既に別枠として
+  // 存在するなら、そちらに合流させて旧キーは順序から外す）。
+  const curOrder = parseSectionOrder(event.sectionOrder);
+  const nextOrder = renamed
+    ? curOrder.includes(effectiveKind)
+      ? curOrder.filter((k) => k !== kind)
+      : curOrder.map((k) => (k === kind ? effectiveKind : k))
+    : isBuiltinSection(kind) || curOrder.includes(kind)
+      ? curOrder
+      : [...curOrder, kind];
+
   // この種別の非提案項目だけ入れ替え（提案行・他種別は残す）
   const maxOrder = Math.max(
     0,
@@ -608,7 +638,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
             p && (p.notifyLeadMinutes ?? null) === it.notifyLeadMinutes;
           return {
             eventId: input.eventId,
-            kind,
+            kind: effectiveKind,
             title: it.title,
             timingLabel: p ? p.timingLabel : null,
             comment: it.comment,
@@ -617,7 +647,10 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
             notifyLeadMinutes: it.notifyLeadMinutes,
             // リード時間が変わっていなければ送信済みフラグを引き継ぐ（再送しない）
             notifiedAt: leadUnchanged ? (p?.notifiedAt ?? null) : null,
-            sortOrder: (kind === "task" ? 0 : maxOrder + 1) + i,
+            sortOrder: (effectiveKind === "task" ? 0 : maxOrder + 1) + i,
+            // 改名した＝ここから先は独自編集なので「テンプレートのまま」の印を外す。
+            // 改名していなければ、まだ「そのまま」の状態なので印を引き継ぐ。
+            sourceTemplateId: renamed ? null : (p?.sourceTemplateId ?? null),
           };
         }),
       }),
@@ -631,16 +664,34 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
       }),
     );
   }
-  // 消えた項目（削除・改名）のメモ画像を後始末する。残った項目のスロットは追従。
-  // 全削除のときは、この種別の画像を丸ごと消す。
-  ops.push(
-    prisma.checklistItemImage.deleteMany({
-      where:
-        survivingSlots.length > 0
-          ? { eventId: input.eventId, kind, slot: { notIn: survivingSlots } }
-          : { eventId: input.eventId, kind },
-    }),
-  );
+  if (renamed) {
+    // 改名: 残る項目のメモ画像は新しい枠名へ移してから、旧枠名に残った分
+    // （削除された項目の分）を消す。
+    if (survivingSlots.length > 0) {
+      ops.push(
+        prisma.checklistItemImage.updateMany({
+          where: { eventId: input.eventId, kind, slot: { in: survivingSlots } },
+          data: { kind: effectiveKind },
+        }),
+      );
+    }
+    ops.push(
+      prisma.checklistItemImage.deleteMany({
+        where: { eventId: input.eventId, kind },
+      }),
+    );
+  } else {
+    // 消えた項目（削除・改名）のメモ画像を後始末する。残った項目のスロットは追従。
+    // 全削除のときは、この種別の画像を丸ごと消す。
+    ops.push(
+      prisma.checklistItemImage.deleteMany({
+        where:
+          survivingSlots.length > 0
+            ? { eventId: input.eventId, kind, slot: { notIn: survivingSlots } }
+            : { eventId: input.eventId, kind },
+      }),
+    );
+  }
   await prisma.$transaction(ops);
 
   // 全種別を通じて非提案項目が 0 になったか＝「リストを全部消した」状態。
@@ -671,7 +722,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
       await recordEdit({
         eventId: event.id,
         categoryId: event.categoryId,
-        itemKind: kind,
+        itemKind: effectiveKind,
         feature: extractEventFeature({
           title: event.title,
           memo: event.memo,
@@ -1945,13 +1996,14 @@ function readKind(v: unknown): "task" | "belonging" {
 }
 
 /**
- * 予定の「いま」のリストのうち、指定した種類（準備すること or 持ち物）だけを
- * 名前を付けてテンプレート保存する。テンプレートは種類ごとに分ける。
+ * 予定の「いま」のリストのうち、指定した枠（準備すること／持ち物／ユーザーが足した枠）
+ * だけを名前を付けてテンプレート保存する。テンプレートは枠ごとに分ける。
  */
 export async function saveListAsTemplate(formData: FormData): Promise<void> {
   const userId = await requireUserId();
   const eventId = String(formData.get("eventId") ?? "");
-  const kind = readKind(formData.get("kind"));
+  // 組み込みの2枠に限らず、いま編集中の枠キーをそのまま使う（task/belonging に強制しない）。
+  const kind = String(formData.get("kind") ?? "").trim() || "task";
   const name = String(formData.get("name") ?? "")
     .trim()
     .slice(0, 60);
@@ -1962,17 +2014,15 @@ export async function saveListAsTemplate(formData: FormData): Promise<void> {
     where: { id: eventId, userId },
     include: {
       checklistItems: {
-        where: { isSuggested: false },
+        where: { isSuggested: false, kind },
         orderBy: { sortOrder: "asc" },
-        select: { kind: true, title: true, notifyLeadMinutes: true },
+        select: { title: true, notifyLeadMinutes: true },
       },
     },
   });
   if (!event) return;
 
-  const picked = event.checklistItems.filter(
-    (it) => (it.kind === "belonging" ? "belonging" : "task") === kind,
-  );
+  const picked = event.checklistItems;
   if (picked.length === 0) return;
 
   const create = picked.map((it, i) => ({
@@ -1982,11 +2032,26 @@ export async function saveListAsTemplate(formData: FormData): Promise<void> {
     sortOrder: i,
   }));
 
-  await prisma.listTemplate.upsert({
+  const template = await prisma.listTemplate.upsert({
     where: { userId_kind_name: { userId, kind, name } },
     update: { sourceEventId: eventId, items: { deleteMany: {}, create } },
     create: { userId, kind, name, sourceEventId: eventId, items: { create } },
   });
+
+  // この予定の枠自体を、名前を付けたリストの名前に合わせる（ユーザー指示）。組み込みの
+  // 2枠（準備すること／持ち物）はそれ自体の意味を変えてしまうため改名の対象外にする。
+  if (!isBuiltinSection(kind) && kind !== name) {
+    await renameSectionKind(eventId, kind, name, {
+      setSourceTemplateId: template.id,
+    });
+  } else {
+    // 改名しない場合も、以後の編集検知（枠名を「◯◯（編集済み）」にする判定）のため
+    // 「いまはテンプレートのまま」の印だけ付けておく。
+    await prisma.checklistItem.updateMany({
+      where: { eventId, kind, isSuggested: false },
+      data: { sourceTemplateId: template.id },
+    });
+  }
 
   revalidateAppViews(eventId);
 }
@@ -2291,7 +2356,8 @@ export async function applyTemplateToEvent(formData: FormData): Promise<void> {
 
   // template.kind をそのまま使う（task/belonging に強制しない）。ユーザーが「その他（新しい枠）」
   // で作った名前付きリストは、その枠名のまま = 別の枠として独立して追加される
-  // （addSeedItemsToEvent が枠順への追加まで面倒を見る）。
+  // （addSeedItemsToEvent が枠順への追加まで面倒を見る）。sourceTemplateId を付けておくと、
+  // あとでこの枠の中身が編集されたとき「◯◯（編集済み）」に改名する判定に使える。
   await addSeedItemsToEvent(
     userId,
     eventId,
@@ -2299,6 +2365,7 @@ export async function applyTemplateToEvent(formData: FormData): Promise<void> {
       kind: it.kind,
       title: it.title,
       notifyLeadMinutes: it.notifyLeadMinutes ?? null,
+      sourceTemplateId: template.id,
     })),
   );
   revalidateAppViews(eventId);
@@ -2320,18 +2387,26 @@ export async function copyListFromEvent(formData: FormData): Promise<void> {
       checklistItems: {
         where: { isSuggested: false },
         orderBy: { sortOrder: "asc" },
-        select: { kind: true, title: true, notifyLeadMinutes: true },
+        select: {
+          kind: true,
+          title: true,
+          notifyLeadMinutes: true,
+          sourceTemplateId: true,
+        },
       },
     },
   });
   if (!source) return;
   trackEvent(userId, "feature:copy-from-event");
 
+  // コピー元の項目がさらに名前付きリスト由来なら、その紐付けも引き継ぐ
+  // （そのままコピーしただけ＝「そのまま使っている」ため）。
   const picked = source.checklistItems
     .map((it) => ({
       kind: it.kind,
       title: it.title,
       notifyLeadMinutes: it.notifyLeadMinutes ?? null,
+      sourceTemplateId: it.sourceTemplateId,
     }))
     .filter((it) => !filterByKind || it.kind === onlyKind);
 

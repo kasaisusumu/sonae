@@ -328,6 +328,8 @@ export type SeedItem = {
   kind: string;
   title: string;
   notifyLeadMinutes: number | null;
+  /** この項目の元になった名前付きリスト（ListTemplate.id）。分かれば渡す（任意）。 */
+  sourceTemplateId?: string | null;
 };
 
 /**
@@ -374,6 +376,7 @@ export async function addSeedItemsToEvent(
       notifyLeadMinutes: s.notifyLeadMinutes,
       isUserAdded: true,
       sortOrder: so,
+      sourceTemplateId: s.sourceTemplateId ?? null,
     };
   });
 
@@ -415,6 +418,54 @@ export async function addSeedItemsToEvent(
     for (const id of twinIds) void syncEventDescription(id);
   });
   return fresh.length;
+}
+
+/**
+ * ある予定の1つの枠（kind）を、別のキーに改名する。sectionOrder の該当キー・対象の
+ * ChecklistItem.kind・ChecklistItemImage.kind をまとめて付け替える（中身は動かさない）。
+ * `newKind` が既にその予定の別枠として存在する場合は、その枠に合流する（順序からは
+ * 旧キーを外すだけ）。`setSourceTemplateId` を渡すと、移した項目の `sourceTemplateId` も
+ * 更新する（渡さなければ既存の値のまま）。
+ */
+export async function renameSectionKind(
+  eventId: string,
+  oldKind: string,
+  newKind: string,
+  opts: { setSourceTemplateId?: string | null } = {},
+): Promise<void> {
+  if (!oldKind || !newKind || oldKind === newKind) return;
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { sectionOrder: true },
+  });
+  if (!event) return;
+
+  const order = parseSectionOrder(event.sectionOrder);
+  const nextOrder = order.includes(newKind)
+    ? order.filter((k) => k !== oldKind)
+    : order.map((k) => (k === oldKind ? newKind : k));
+
+  const itemData: { kind: string; sourceTemplateId?: string | null } = {
+    kind: newKind,
+  };
+  if ("setSourceTemplateId" in opts) {
+    itemData.sourceTemplateId = opts.setSourceTemplateId ?? null;
+  }
+
+  await prisma.$transaction([
+    prisma.checklistItem.updateMany({
+      where: { eventId, kind: oldKind },
+      data: itemData,
+    }),
+    prisma.checklistItemImage.updateMany({
+      where: { eventId, kind: oldKind },
+      data: { kind: newKind },
+    }),
+    prisma.event.update({
+      where: { id: eventId },
+      data: { sectionOrder: stringifySectionOrder(nextOrder) },
+    }),
+  ]);
 }
 
 /** 同名・未編集の予定が既にリストを持っていれば、そのイベント id を返す。 */

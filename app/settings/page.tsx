@@ -206,7 +206,9 @@ export default async function SettingsPage() {
             />
           </label>
           <div className="sm:col-span-2">
-            <SubmitButton>送信する</SubmitButton>
+            <SubmitButton confirm="この内容でフィードバックを送信しますか？">
+              送信する
+            </SubmitButton>
           </div>
         </form>
 

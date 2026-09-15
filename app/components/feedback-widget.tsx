@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { submitFeedback } from "@/app/actions";
+import { ConfirmButton } from "@/app/components/confirm-button";
 
 export function FeedbackWidget() {
   const pathname = usePathname();
@@ -50,12 +51,12 @@ export function FeedbackWidget() {
         placeholder="ひとこと（任意）"
         className="w-40 rounded-md border bg-background px-2 py-1 text-foreground"
       />
-      <button
-        type="submit"
+      <ConfirmButton
+        message="この内容でフィードバックを送信しますか？"
         className="rounded-md bg-foreground px-3 py-1 font-medium text-surface"
       >
         送信
-      </button>
+      </ConfirmButton>
       <button
         type="button"
         onClick={() => setOpen(false)}

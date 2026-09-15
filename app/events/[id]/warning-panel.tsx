@@ -7,6 +7,7 @@ import {
 import { formatDateOnly } from "@/lib/format";
 import { LEAD_PRESETS } from "@/lib/lead-time";
 import { SubmitButton } from "@/app/components/submit-button";
+import { CountermeasureField } from "@/app/components/countermeasure-field";
 import { RetroOutcomeSelect } from "./retro-outcome-select";
 import type { EventWarning } from "@/lib/failures";
 
@@ -136,16 +137,11 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                   <form action={markPrevented} className="space-y-1.5">
                     <input type="hidden" name="eventId" value={event.id} />
                     <input type="hidden" name="failureLogId" value={log.id} />
-                    <label className="block text-[11px] text-muted">
-                      有効だった対策（あれば・任意）
-                      <textarea
-                        name="countermeasure"
-                        rows={2}
-                        defaultValue={log.countermeasure ?? ""}
-                        placeholder="例: 前日にリマインダーを設定した"
-                        className="mt-0.5 w-full rounded-md border bg-background px-2 py-1 text-xs text-foreground"
-                      />
-                    </label>
+                    <CountermeasureField
+                      label="有効だった対策（あれば・任意）"
+                      defaultValue={log.countermeasure}
+                      className="w-full rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+                    />
                     <SubmitButton>
                       {isPast ? "今回は防げた 🎉" : "これは防げた 🎉"}
                     </SubmitButton>

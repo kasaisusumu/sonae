@@ -10,8 +10,10 @@ import {
   type FRRow,
 } from "@/app/components/failure-review-row";
 import { StickyReviewRows } from "@/app/components/sticky-review-rows";
+import { CountermeasureField } from "@/app/components/countermeasure-field";
 import { trackEvent } from "@/lib/track";
 import { FailureQuickInput } from "./failure-quick-input";
+import { FailureDictationInput } from "./failure-dictation-input";
 import { ReviewQueue, type RQLog } from "./review-queue";
 
 type LogRow = {
@@ -116,6 +118,9 @@ export default async function FailuresPage() {
             聞きません（予定を選べばその予定に合わせます）。
           </InfoHint>
         </h2>
+        <div className="mt-2">
+          <FailureDictationInput />
+        </div>
         <form action={createFailureLog} className="mt-3 space-y-3">
           <FailureQuickInput />
 
@@ -135,15 +140,10 @@ export default async function FailuresPage() {
             </select>
           </label>
 
-          <label className="block text-xs text-muted">
-            有効だった対策（あれば・任意）
-            <textarea
-              name="countermeasure"
-              rows={2}
-              placeholder="例: 前日にリマインダーを設定した"
-              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
-            />
-          </label>
+          <CountermeasureField
+            label="有効だった対策（あれば・任意）"
+            className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm"
+          />
 
           <SubmitButton>記録する</SubmitButton>
         </form>

@@ -39,6 +39,8 @@ export const FEATURE_KEYS: TrackedKey[] = [
   { key: "feature:clear-section", label: "枠を全部消す" },
   { key: "feature:add-item", label: "準備リストに項目を追加" },
   { key: "feature:template-tidy-add", label: "名前付きマニュアル: AIで整えて追加（音声入力）" },
+  { key: "feature:failure-dictation", label: "失敗ログを話して記録する（音声入力）" },
+  { key: "feature:countermeasure-tidy", label: "対策をAIで整える（音声入力）" },
 ];
 
 /** ⓘ（InfoHint）の説明ポップアップ。開かれた回数を数える。 */

@@ -5,6 +5,7 @@ import { deleteFailureLog, setFailureOutcome } from "@/app/actions";
 import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { InfoHint } from "@/app/components/info-hint";
+import { CountermeasureField } from "@/app/components/countermeasure-field";
 import { RetroOutcomeSelect } from "@/app/events/[id]/retro-outcome-select";
 
 export type RQLog = {
@@ -42,16 +43,13 @@ function PendingChoice({ log }: { log: RQLog }) {
       <p className="text-xs text-muted">
         今回はどうでしたか？ どれか押すだけでOKです。
       </p>
-      <label className="block text-[11px] text-muted">
-        有効だった対策（あれば・任意）
-        <textarea
-          rows={1}
-          value={countermeasure}
-          onChange={(e) => setCountermeasure(e.target.value)}
-          placeholder="例: 前日にリマインダーを設定した"
-          className="mt-0.5 w-full rounded-md border bg-background px-2 py-1 text-xs text-foreground"
-        />
-      </label>
+      <CountermeasureField
+        label="有効だった対策（あれば・任意）"
+        defaultValue={countermeasure}
+        onValue={setCountermeasure}
+        rows={1}
+        className="w-full rounded-md border bg-background px-2 py-1 text-xs text-foreground"
+      />
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

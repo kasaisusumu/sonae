@@ -1142,19 +1142,15 @@ export async function seedFailureGoals(labels: string[]): Promise<void> {
 }
 
 /**
- * 「うっかり失敗」を記録する。必須は「何が起きたか」だけ。
- * 金額・日付・カテゴリは聞かない（予定に紐づけた場合はその予定の日・カテゴリを使う）。
- * 有効だった対策は任意（空欄でもOK。あとから書き足せる）。
+ * 「うっかり失敗」を1件作る中核処理（ひとこと記録する／音声入力どちらも共通）。
+ * 予定に紐づくなら、その予定の特徴シグネチャ・カテゴリ・日付を使う。
  */
-export async function createFailureLog(formData: FormData): Promise<void> {
-  const userId = await requireUserId();
-  const description = String(formData.get("description") ?? "").trim();
-  const countermeasure = String(formData.get("countermeasure") ?? "").trim() || null;
-  const eventId = String(formData.get("eventId") ?? "").trim() || null;
-
-  if (!description) return;
-  trackEvent(userId, "feature:failure-quick-record");
-
+async function insertFailureLog(
+  userId: string,
+  description: string,
+  countermeasure: string | null,
+  eventId: string | null,
+): Promise<{ id: string } | null> {
   const linkedEvent = eventId
     ? await prisma.event.findFirst({
         where: { id: eventId, userId },
@@ -1169,7 +1165,6 @@ export async function createFailureLog(formData: FormData): Promise<void> {
       })
     : null;
 
-  // 予定に紐づくなら、その予定の特徴シグネチャをその場で確定（学習と同じ粒度）
   const featureSig = linkedEvent
     ? featureSignature(
         extractEventFeature({
@@ -1201,7 +1196,74 @@ export async function createFailureLog(formData: FormData): Promise<void> {
     await markAutoManaged(eid);
     after(() => void syncEventDescription(eid));
   }
+  return linkedEvent ? { id: linkedEvent.id } : null;
+}
+
+/**
+ * 「うっかり失敗」を記録する。必須は「何が起きたか」だけ。
+ * 金額・日付・カテゴリは聞かない（予定に紐づけた場合はその予定の日・カテゴリを使う）。
+ * 有効だった対策は任意（空欄でもOK。あとから書き足せる）。
+ */
+export async function createFailureLog(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const description = String(formData.get("description") ?? "").trim();
+  const countermeasure = String(formData.get("countermeasure") ?? "").trim() || null;
+  const eventId = String(formData.get("eventId") ?? "").trim() || null;
+  if (!description) return;
+  trackEvent(userId, "feature:failure-quick-record");
+
+  const linkedEvent = await insertFailureLog(userId, description, countermeasure, eventId);
   revalidateAppViews(linkedEvent?.id);
+}
+
+/**
+ * 音声入力（スマホのマイクキーで話した自由文）から失敗ログを1件作る。
+ * AI で「何が起きたか」と「有効だった対策」に分けてから記録する
+ * （準備リストの「話して作る」と同じ考え方）。
+ */
+export async function createFailureLogFromDictation(input: {
+  eventId: string | null;
+  text: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireUserId();
+  const text = String(input.text ?? "").trim();
+  if (!text) return { ok: false, error: "内容がありません。" };
+  trackEvent(userId, "feature:failure-dictation");
+
+  const { splitDictationIntoFailure } = await import("@/lib/dictation-to-failure");
+  let parsed;
+  try {
+    parsed = await splitDictationIntoFailure(text);
+  } catch (e) {
+    console.error("[createFailureLogFromDictation] 失敗", e);
+    return { ok: false, error: "うまく整えられませんでした。少し短くして試してみてください。" };
+  }
+  if (!parsed.description) {
+    return { ok: false, error: "何が起きたか読み取れませんでした。" };
+  }
+
+  const eventId = input.eventId ? String(input.eventId).trim() || null : null;
+  const linkedEvent = await insertFailureLog(
+    userId,
+    parsed.description,
+    parsed.countermeasure,
+    eventId,
+  );
+  revalidateAppViews(linkedEvent?.id);
+  return { ok: true };
+}
+
+/**
+ * 対策の自由文（音声入力）を短い一文に整えるだけ（DB へは書かない）。
+ * 振り返り・失敗ログ編集の「有効だった対策」欄すべてで共通利用。
+ */
+export async function tidyCountermeasureDictation(text: string): Promise<string> {
+  await requireUserId();
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed) return "";
+  void trackFeatureUse("feature:countermeasure-tidy");
+  const { tidyCountermeasureText } = await import("@/lib/dictation-to-failure");
+  return tidyCountermeasureText(trimmed);
 }
 
 /**

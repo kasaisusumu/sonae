@@ -8,6 +8,7 @@ import {
 import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { SubmitButton } from "@/app/components/submit-button";
+import { CountermeasureField } from "@/app/components/countermeasure-field";
 
 /** 「過去の失敗予測の振り返り」1 行ぶんの表示データ。 */
 export type FRRow = {
@@ -169,11 +170,9 @@ export function FailureReviewRow({
             defaultValue={l.description}
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
           />
-          <textarea
-            name="countermeasure"
+          <CountermeasureField
+            defaultValue={l.countermeasure}
             rows={1}
-            defaultValue={l.countermeasure ?? ""}
-            placeholder="有効だった対策（あれば・任意）"
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
           />
           <SubmitButton variant="ghost">更新</SubmitButton>

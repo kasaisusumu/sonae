@@ -14,6 +14,8 @@ import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { FirstSeen } from "@/app/components/first-seen";
+import { CountermeasureField } from "@/app/components/countermeasure-field";
+import { FailureDictationInput } from "@/app/failures/failure-dictation-input";
 
 export type FLRow = {
   id: string;
@@ -91,13 +93,11 @@ function RowEditForms({ r }: { r: FLRow }) {
           className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
           aria-label="失敗の内容"
         />
-        <textarea
+        <CountermeasureField
+          defaultValue={countermeasure}
+          onValue={setCountermeasure}
           rows={1}
-          value={countermeasure}
-          onChange={(e) => setCountermeasure(e.target.value)}
-          placeholder="有効だった対策（あれば・任意）"
           className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
-          aria-label="有効だった対策"
         />
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
           <select
@@ -264,9 +264,8 @@ export function FailureListEditor({
                 placeholder="何が起きた？（例: 集合時間に遅刻した）"
                 className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs"
               />
-              <input
-                name="countermeasure"
-                placeholder="有効だった対策（あれば・任意）"
+              <CountermeasureField
+                rows={1}
                 className="w-full rounded-md border bg-background px-2 py-1 text-xs"
               />
               <div className="flex flex-wrap items-center gap-2">
@@ -424,9 +423,8 @@ export function FailureListEditor({
             placeholder="何が起きた？（例: 集合時間に遅刻した）"
             className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
           />
-          <input
-            name="countermeasure"
-            placeholder="有効だった対策（あれば・任意）"
+          <CountermeasureField
+            rows={1}
             className="w-full rounded-md border bg-background px-2 py-1 text-sm"
           />
           <div className="flex flex-wrap items-center gap-2">
@@ -450,6 +448,7 @@ export function FailureListEditor({
         >
           ＋ 追加
         </button>
+        <FailureDictationInput eventId={eventId} />
         {others.length > 0 && (
           <>
             <button

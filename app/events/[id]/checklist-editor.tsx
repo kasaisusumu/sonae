@@ -15,6 +15,7 @@ import {
 import { LEAD_PRESETS, formatLead, isLeadPreset } from "@/lib/lead-time";
 import { InfoHint } from "@/app/components/info-hint";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
+import { useFlushOnHide } from "@/app/components/use-flush-on-hide";
 import { ItemImages, Linkify, type ItemImage } from "./item-media";
 
 interface Item {
@@ -250,15 +251,20 @@ export function ChecklistEditor({
   // 自動保存は「ユーザーが実際にいじった」ときだけ。文言・通知に加えて、
   // メモ（comment）の変更でも走らせる。編集が続く間は 1.8 秒ごとにタイマーが
   // 張り直され、止まったら 1 回だけ保存する。何も変えていなければ走らない。
+  function flushPendingEdit() {
+    if ((!structEdited && !commentDirty) || pending) return;
+    setStructEdited(false);
+    persist(items, true);
+  }
   useEffect(() => {
     if ((!structEdited && !commentDirty) || pending) return;
-    const t = window.setTimeout(() => {
-      setStructEdited(false);
-      persist(items, true);
-    }, 1800);
+    const t = window.setTimeout(flushPendingEdit, 1800);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, structEdited, commentDirty, pending]);
+  // 画面を離れる／アプリがバックグラウンドになる／閉じる直前は、1.8秒待たず即座に保存する
+  // （デバウンス中に離れると保存が1回も走らず変更が消えていたための対策）。
+  useFlushOnHide(flushPendingEdit);
 
   function toPayload(list: Item[], includeMemo: boolean) {
     return list

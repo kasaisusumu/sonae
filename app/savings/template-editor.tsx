@@ -5,6 +5,7 @@ import { saveTemplateItems, tidyTemplateBulkText, trackFeatureUse } from "@/app/
 import { LEAD_PRESETS, isLeadPreset } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
+import { useFlushOnHide } from "@/app/components/use-flush-on-hide";
 
 type Row = {
   key: string;
@@ -43,16 +44,21 @@ export function TemplateEditor({
     });
   }
 
+  function flushPendingEdit() {
+    if (!dirty.current) return;
+    dirty.current = false;
+    save(rows);
+  }
+
   // 文言・通知タイミングの変更は、手が止まってから自動保存。
   useEffect(() => {
     if (!dirty.current) return;
-    const t = window.setTimeout(() => {
-      dirty.current = false;
-      save(rows);
-    }, 800);
+    const t = window.setTimeout(flushPendingEdit, 800);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows]);
+  // 画面を離れる／アプリがバックグラウンドになる／閉じる直前は、待たず即座に保存する。
+  useFlushOnHide(flushPendingEdit);
 
   function patch(key: string, p: Partial<Row>) {
     dirty.current = true;

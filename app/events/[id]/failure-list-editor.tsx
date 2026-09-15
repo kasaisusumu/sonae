@@ -15,6 +15,7 @@ import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { FirstSeen } from "@/app/components/first-seen";
 import { CountermeasureField } from "@/app/components/countermeasure-field";
+import { useFlushOnHide } from "@/app/components/use-flush-on-hide";
 
 export type FLRow = {
   id: string;
@@ -58,6 +59,7 @@ function RowEditForms({ r }: { r: FLRow }) {
   const [countermeasure, setCountermeasure] = useState(r.countermeasure ?? "");
   const [pending, start] = useTransition();
   const firstRun = useRef(true);
+  const dirtyRef = useRef(false);
 
   function buildFd(over: { outcome?: string } = {}): FormData {
     const fd = new FormData();
@@ -68,18 +70,25 @@ function RowEditForms({ r }: { r: FLRow }) {
     return fd;
   }
 
+  function flushPendingEdit() {
+    if (!dirtyRef.current || pending) return;
+    dirtyRef.current = false;
+    start(() => updateFailureLog(buildFd()));
+  }
+
   // 内容・対策は入力が落ち着いてから保存（結果の select は onChange で即時）。
   useEffect(() => {
     if (firstRun.current) {
       firstRun.current = false;
       return;
     }
-    const t = window.setTimeout(() => {
-      start(() => updateFailureLog(buildFd()));
-    }, 800);
+    dirtyRef.current = true;
+    const t = window.setTimeout(flushPendingEdit, 800);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desc, countermeasure]);
+  // 画面を離れる／アプリがバックグラウンドになる／閉じる直前は、待たず即座に保存する。
+  useFlushOnHide(flushPendingEdit);
 
   return (
     <>

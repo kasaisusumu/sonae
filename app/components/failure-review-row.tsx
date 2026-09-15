@@ -33,15 +33,18 @@ function OutcomeButton({
   active,
   label,
   onOutcome,
+  pending,
 }: {
   logId: string;
   target: "prevented" | "not_prevented" | "irrelevant";
   active: boolean;
   label: string;
   onOutcome?: (t: OutcomeTarget) => void;
+  /** この行の直前の変更がまだ保存中（次を押せると、先に送った変更を追い越すことがある）。 */
+  pending?: boolean;
 }) {
   const base =
-    "rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors";
+    "rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50";
   const cls = active
     ? "bg-foreground text-surface"
     : "border border-border bg-surface text-muted hover:border-foreground/40 hover:text-foreground";
@@ -53,6 +56,7 @@ function OutcomeButton({
     return (
       <button
         type="button"
+        disabled={pending}
         onClick={() => onOutcome(next)}
         className={`${base} ${cls}`}
       >
@@ -82,10 +86,13 @@ export function FailureReviewRow({
   log: l,
   reviewable = true,
   onOutcome,
+  outcomePending = false,
 }: {
   log: FRRow;
   reviewable?: boolean;
   onOutcome?: (t: OutcomeTarget) => void;
+  /** この行の結果変更が保存中（連打で追い越されるのを防ぐため、その間ボタンを止める）。 */
+  outcomePending?: boolean;
 }) {
   const meta = (
     <p className="mt-1 text-xs text-muted">
@@ -135,6 +142,7 @@ export function FailureReviewRow({
             active={l.outcome === "prevented"}
             label="🛡️ 防げた"
             onOutcome={onOutcome}
+            pending={outcomePending}
           />
           <OutcomeButton
             logId={l.id}
@@ -142,6 +150,7 @@ export function FailureReviewRow({
             active={l.outcome === "not_prevented"}
             label="😓 防げなかった"
             onOutcome={onOutcome}
+            pending={outcomePending}
           />
           <OutcomeButton
             logId={l.id}
@@ -149,6 +158,7 @@ export function FailureReviewRow({
             active={l.outcome === "irrelevant"}
             label="今回は関係ない"
             onOutcome={onOutcome}
+            pending={outcomePending}
           />
         </div>
       ) : (

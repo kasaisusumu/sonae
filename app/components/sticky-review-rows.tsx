@@ -27,11 +27,14 @@ export function StickyReviewRows({
   const [snapshot] = useState(() => rows);
   const freshById = new Map(rows.map((r) => [r.id, r] as const));
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
+  // この行の変更が保存中の間、その行の結果ボタンを止める（下の注記参照）。
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
   const [, start] = useTransition();
   // 同じ行への保存を必ず前の保存が終わってから送る（id ごとの直列キュー）。
-  // setFailureOutcome は「削除→更新」等の複数ステップなので、変更→即戻す、のように
-  // 続けて呼ぶと後から送った方が先に確定してしまい、戻したはずが変更後のまま
-  // 残ることがあった。id ごとに直前の保存を待ってから次を送るようにして防ぐ。
+  // setFailureOutcome は「削除→更新」等の複数ステップなので、変更→即さらに変更、のように
+  // 続けて呼ぶと後から送った方が先に確定するとは限らず、1回目の内容のまま残ることがあった。
+  // 直列キューに加えて、保存中はその行の結果ボタン自体を押せなくする（disabled）ことで、
+  // そもそも1つの行に対して2つの保存が同時に飛ばないようにする（二重の対策）。
   const queueRef = useRef<Record<string, Promise<void>>>({});
 
   const CONFIRM: Record<OutcomeTarget, string> = {
@@ -45,11 +48,23 @@ export function StickyReviewRows({
     if (!window.confirm(CONFIRM[t])) return;
     const next = t === "unset" ? null : t;
     setOverrides((o) => ({ ...o, [id]: next }));
+    setPendingIds((s) => new Set(s).add(id));
     const fd = new FormData();
     fd.set("failureLogId", id);
     fd.set("outcome", t);
     const prevTask = queueRef.current[id] ?? Promise.resolve();
-    const task = prevTask.then(() => setFailureOutcome(fd)).catch(() => {});
+    const task = prevTask
+      .then(() => setFailureOutcome(fd))
+      .catch(() => {})
+      .then(() => {
+        // ボタンが disabled の間は次の保存が積まれないので、常にこの id の最後の保存。
+        setPendingIds((s) => {
+          if (!s.has(id)) return s;
+          const n = new Set(s);
+          n.delete(id);
+          return n;
+        });
+      });
     queueRef.current[id] = task;
     start(() => task);
   }
@@ -68,6 +83,7 @@ export function StickyReviewRows({
             key={s.id || `x${i}`}
             log={{ ...r, outcome }}
             onOutcome={(t) => handleOutcome(s.id, t)}
+            outcomePending={pendingIds.has(s.id)}
           />
         );
       })}

@@ -121,9 +121,12 @@ export async function generateAndSaveChecklist(
   ]);
 
   // 似た過去予定で「そのまま使われていた」名前付きリストは、別の枠として引き継ぐ
-  // （task/belonging の作り直しとは別経路。addSeedItemsToEvent は同じ枠・同じ名前は
-  // スキップするので、既にこの予定にある内容と重複はしない）。
-  if (customSectionSeeds.length > 0) {
+  // （task/belonging の作り直しとは別経路）。ただし「作り直す」（force=true、
+  // 組み込みの2枠だけを作り直す操作）では行わない。force のたびに引き継ぐと、
+  // ユーザーがこの予定でその枠を消した／編集したあとに「作り直す」を押しただけで
+  // 勝手に元の内容が復活してしまう（ユーザー指定で修正）。最初の1回（count=0 から
+  // 生成するとき）だけの挙動にする。
+  if (!opts.force && customSectionSeeds.length > 0) {
     const ev = await prisma.event.findUnique({
       where: { id: eventId },
       select: { userId: true },

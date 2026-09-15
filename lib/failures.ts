@@ -318,21 +318,31 @@ export async function getWarningForEvent(
 
   const feature = featureOf(event);
 
-  const logs: LogRow[] = await prisma.failureLog.findMany({
-    where: {
-      userId: event.userId,
-      categoryId: event.categoryId,
-      outcome: { not: "irrelevant" }, // 「今回は関係ない」は先回り警告に使わない
-    },
-    orderBy: { occurredAt: "desc" },
-    select: LOG_SELECT,
-  });
+  const [logs, dismissed] = await Promise.all([
+    prisma.failureLog.findMany({
+      where: {
+        userId: event.userId,
+        categoryId: event.categoryId,
+        outcome: { not: "irrelevant" }, // 「今回は関係ない」は先回り警告に使わない
+      },
+      orderBy: { occurredAt: "desc" },
+      select: LOG_SELECT,
+    }),
+    // この予定で「消す」（今回は関係ない・削除）と却下済みの内容は、以後この予定では
+    // 出さない。ここで除いておかないと、アプリ側では消えたのに（説明欄の「予想される
+    // 失敗」など）他の表示に残り続けてしまう。
+    prisma.failureDismissal.findMany({
+      where: { eventId: event.id },
+      select: { descKey: true },
+    }),
+  ]);
 
   if (logs.length === 0) return null;
 
-  const strong = logs.filter((l) =>
-    logApplies(l, event.title, event.recurringEventId, feature),
-  );
+  const dismissedKeys = new Set(dismissed.map((d) => d.descKey));
+  const strong = logs
+    .filter((l) => logApplies(l, event.title, event.recurringEventId, feature))
+    .filter((l) => !dismissedKeys.has(clusterKey(l.description)));
 
   // 終わった予定の「振り返り（今回どうでした？）」で出すのは、その予定に
   // 登録された失敗だけ。カテゴリ全体の記録（eventId なし）は、確認のたびに
@@ -428,10 +438,23 @@ export async function getUpcomingWarnings(userId: string): Promise<EventWarning[
     select: LOG_SELECT,
   });
   const logIds = logs.map((l) => l.id);
-  const savings = await prisma.savingsEntry.findMany({
-    where: { failureLogId: { in: logIds }, confirmedByUser: true },
-    select: { failureLogId: true, eventId: true },
-  });
+  const [savings, dismissals] = await Promise.all([
+    prisma.savingsEntry.findMany({
+      where: { failureLogId: { in: logIds }, confirmedByUser: true },
+      select: { failureLogId: true, eventId: true },
+    }),
+    // 予定ごとに「消す」と却下済みの内容は、以後その予定では出さない（getWarningForEvent と同じ）。
+    prisma.failureDismissal.findMany({
+      where: { eventId: { in: risky.map((e) => e.id) } },
+      select: { eventId: true, descKey: true },
+    }),
+  ]);
+  const dismissedByEvent = new Map<string, Set<string>>();
+  for (const d of dismissals) {
+    const set = dismissedByEvent.get(d.eventId) ?? new Set<string>();
+    set.add(d.descKey);
+    dismissedByEvent.set(d.eventId, set);
+  }
   const preventedCountByLogId = new Map<string, number>();
   const preventedByEvent = new Map<string, Set<string>>();
   for (const s of savings) {
@@ -458,9 +481,10 @@ export async function getUpcomingWarnings(userId: string): Promise<EventWarning[
   const out: EventWarning[] = [];
   for (const e of risky) {
     const feature = featureOf(e);
-    const applicable = (logsByCat.get(e.categoryId!) ?? []).filter((l) =>
-      logApplies(l, e.title, e.recurringEventId, feature),
-    );
+    const dismissedKeys = dismissedByEvent.get(e.id);
+    const applicable = (logsByCat.get(e.categoryId!) ?? [])
+      .filter((l) => logApplies(l, e.title, e.recurringEventId, feature))
+      .filter((l) => !dismissedKeys?.has(clusterKey(l.description)));
     if (applicable.length === 0) continue;
 
     const clusters = buildClusters(

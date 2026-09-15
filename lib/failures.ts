@@ -748,8 +748,8 @@ export async function suggestFailureLogsForEvent(
 
 export interface EventDescriptionFailures {
   isPast: boolean;
-  /** 終了前だけ: 予想される失敗の内容（過去に似た予定であったもの）。 */
-  anticipated: string[];
+  /** 終了前だけ: 予想される失敗の内容（過去に似た予定であったもの）＋対策候補。 */
+  anticipated: { text: string; countermeasure: string | null }[];
   /** 終了後だけ: 今回は回避できた失敗（内容＋有効だった対策）。 */
   avoided: { text: string; countermeasure: string | null }[];
   /** 終了後だけ: 今回起きてしまった失敗の内容。 */
@@ -803,18 +803,18 @@ export async function getEventDescriptionFailures(
 
   if (!past) {
     const seen = new Set<string>();
-    const anticipated: string[] = [];
-    const add = (raw: string) => {
+    const anticipated: { text: string; countermeasure: string | null }[] = [];
+    const add = (raw: string, countermeasure?: string | null) => {
       const t = raw.trim();
       const k = norm(t);
       if (!t || seen.has(k)) return;
       seen.add(k);
-      anticipated.push(t);
+      anticipated.push({ text: t, countermeasure: countermeasure?.trim() || null });
     };
-    for (const c of warning?.logs ?? []) add(c.description);
+    for (const c of warning?.logs ?? []) add(c.description, c.countermeasure);
     for (const l of linked) {
       if (l.outcome !== "irrelevant" && l.outcome !== "prevented") {
-        add(l.description);
+        add(l.description, l.countermeasure);
       }
     }
     return {

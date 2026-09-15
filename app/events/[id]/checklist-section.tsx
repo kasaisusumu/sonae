@@ -6,13 +6,16 @@ import { ensureChecklistForEvent, normTitle } from "@/lib/checklist";
 import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
-import { getWarningForEvent } from "@/lib/failures";
+import { getWarningForEvent, ensureSuggestedFailures } from "@/lib/failures";
 import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
 import { parseLeads } from "@/lib/lead-time";
-import { markListReviewed, generateChecklistForEvent } from "@/app/actions";
-import { Suspense } from "react";
+import {
+  markListReviewed,
+  generateChecklistForEvent,
+  markNoFailure,
+} from "@/app/actions";
 import {
   FAILURE_LOG_KEY,
   isBuiltinSection,
@@ -21,7 +24,11 @@ import {
 } from "@/lib/sections";
 import { InfoHint } from "@/app/components/info-hint";
 import { ChecklistEditor } from "./checklist-editor";
-import { EventFailureLog } from "./event-failure-log";
+import {
+  FailureListEditor,
+  type FLOther,
+  type FLRow,
+} from "./failure-list-editor";
 import { WarningPanel } from "./warning-panel";
 import { ListReminderControl } from "./list-reminder-control";
 import { AddSectionButton } from "./section-manager";
@@ -142,6 +149,95 @@ export async function ChecklistSection({
     });
     after(() => syncEventDescription(event.id));
   }
+
+  // 失敗ログ（考えられる失敗）。以前は <Suspense> で別コンポーネントに切り出して
+  // いたが、自動保存のたびの再検証でその Suspense 境界だけ再サスペンドし、
+  // 中の FailureListEditor がまるごと作り直されて開閉状態が消える不具合が
+  // あったため、ChecklistSection 本体の非同期処理に統合した（ChecklistEditor と
+  // 同じ扱いにして、他の枠と同じく再検証をまたいで状態が保たれるようにする）。
+  if (!needsManualGenerate) {
+    await ensureSuggestedFailures(event.id, event.userId);
+  }
+  const [linkedFailures, otherFailures, failureEv] = await Promise.all([
+    prisma.failureLog.findMany({
+      where: { userId: event.userId, eventId: event.id },
+      orderBy: { occurredAt: "desc" },
+      select: {
+        id: true,
+        description: true,
+        outcome: true,
+        countermeasure: true,
+        occurredAt: true,
+      },
+    }),
+    prisma.failureLog.findMany({
+      where: { userId: event.userId, eventId: { not: event.id } },
+      orderBy: { occurredAt: "desc" },
+      take: 80,
+      select: {
+        id: true,
+        description: true,
+        occurredAt: true,
+        event: { select: { title: true } },
+      },
+    }),
+    prisma.event.findFirst({
+      where: { id: event.id, userId: event.userId },
+      select: { eventDatetime: true, endDatetime: true, noFailureAt: true },
+    }),
+  ]);
+  const linkedFailureDesc = new Set(
+    linkedFailures.map((l) => l.description.trim()),
+  );
+  const otherFailureCandidates: FLOther[] = otherFailures
+    .filter((o) => !linkedFailureDesc.has(o.description.trim()))
+    .map((o) => ({
+      id: o.id,
+      description: o.description,
+      occurredAt: o.occurredAt,
+      eventTitle: o.event?.title ?? null,
+    }));
+  const failureIsPast =
+    !!failureEv &&
+    (failureEv.endDatetime ?? failureEv.eventDatetime) <= new Date();
+  const askFailureOutcome = failureIsPast && linkedFailures.length === 0;
+  const failureLogNode = (
+    <div id="failure-check" className="scroll-mt-4 space-y-2">
+      {askFailureOutcome &&
+        (failureEv?.noFailureAt ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-surface-muted p-3 text-xs text-muted">
+            <span>「失敗はなかった」で記録済み。</span>
+            <form action={markNoFailure}>
+              <input type="hidden" name="eventId" value={event.id} />
+              <input type="hidden" name="undo" value="1" />
+              <button type="submit" className="underline hover:text-foreground">
+                取り消す
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-surface-muted p-3">
+            <p className="text-xs font-medium text-foreground">
+              この予定、うっかりはありましたか？
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted">
+              あったら下の「＋ 追加」で一言。なければワンタップで。
+            </p>
+            <form action={markNoFailure} className="mt-2">
+              <input type="hidden" name="eventId" value={event.id} />
+              <SubmitButton variant="ghost">なかった 🙆</SubmitButton>
+            </form>
+          </div>
+        ))}
+
+      <FailureListEditor
+        eventId={event.id}
+        label="考えられる失敗"
+        initial={linkedFailures as FLRow[]}
+        others={otherFailureCandidates}
+      />
+    </div>
+  );
 
   const feature = extractEventFeature({
     title: event.title,
@@ -296,15 +392,7 @@ export async function ChecklistSection({
                 key,
                 label: "考えられる失敗",
                 builtin: true, // 名前変更・削除はさせない
-                node: (
-                  <Suspense fallback={null}>
-                    <EventFailureLog
-                      eventId={event.id}
-                      userId={event.userId}
-                      skipSuggest={needsManualGenerate}
-                    />
-                  </Suspense>
-                ),
+                node: failureLogNode,
               };
             }
             const builtin = isBuiltinSection(key);

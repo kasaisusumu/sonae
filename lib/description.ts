@@ -96,8 +96,8 @@ function progress(items: DescItem[]): string {
 
 /** 失敗まわりの追記（リンクの下・準備リストの前に置く情報セクション）。 */
 export interface DescFailureSections {
-  /** 予定終了前: 予想される（＝過去に似た予定であった）失敗の内容。 */
-  anticipated?: string[];
+  /** 予定終了前: 予想される（＝過去に似た予定であった）失敗の内容と対策候補。 */
+  anticipated?: { text: string; countermeasure: string | null }[];
   /** 予定終了後: 今回は回避できた失敗（内容と、有効だった対策）。 */
   avoided?: { text: string; countermeasure: string | null }[];
   /** 予定終了後: 今回起きてしまった失敗の内容。 */
@@ -126,7 +126,12 @@ function failureLines(f: DescFailureSections | undefined): string[] {
   const out: string[] = [];
   if (f.anticipated && f.anticipated.length > 0) {
     out.push("", "【予想される失敗】");
-    for (const t of f.anticipated) out.push(`⚠ ${oneLine(t)}`);
+    for (const a of f.anticipated) {
+      out.push(`⚠ ${oneLine(a.text)}`);
+      if (a.countermeasure) {
+        out.push(`${COMMENT_INDENT}対策: ${oneLine(a.countermeasure)}`);
+      }
+    }
   }
   if (f.avoided && f.avoided.length > 0) {
     out.push("", "【回避した失敗】");

@@ -1,9 +1,48 @@
-/* 私のマニュアル「そなえ」さん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v11 */
+/* 私のマニュアル「そなえ」さん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v12 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
+
+// 通知タップの行き先を IndexedDB にも控えておく（postMessage/navigate() が効かない保険）。
+// PWA（特に iOS）はバックグラウンドの窓の JS が一時停止していて、通知タップで
+// フォアグラウンドに戻っても postMessage をすぐには処理できないことがある。
+// その場合でもアプリ側（sw-register.tsx）が可視化のたびに IndexedDB を見て
+// 「読んだら消す」1件キューとして拾えるようにする。
+function rememberPendingNav(url) {
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open("sonae-nav", 1);
+      req.onupgradeneeded = () => {
+        if (!req.result.objectStoreNames.contains("kv")) {
+          req.result.createObjectStore("kv");
+        }
+      };
+      req.onsuccess = () => {
+        const db = req.result;
+        try {
+          const tx = db.transaction("kv", "readwrite");
+          tx.objectStore("kv").put({ url, at: Date.now() }, "pending");
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => {
+            db.close();
+            resolve();
+          };
+        } catch {
+          db.close();
+          resolve();
+        }
+      };
+      req.onerror = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
 
 // 通知の tag から行き先 URL を復元する（payload に url が無かったときの保険）。
 // 送信側（lib/notify-items.ts, lib/sync.ts, lib/failures.ts, app/actions.ts）の
@@ -56,6 +95,10 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     (async () => {
+      // まず行き先を IndexedDB に控える（他の手段がすべて効かなくても、
+      // アプリが次に見えるようになったときに拾える保険）。
+      await rememberPendingNav(targetHref);
+
       const all = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,

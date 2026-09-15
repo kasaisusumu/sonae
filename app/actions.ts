@@ -1224,33 +1224,50 @@ export async function createFailureLog(formData: FormData): Promise<void> {
 export async function createFailureLogFromDictation(input: {
   eventId: string | null;
   text: string;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; added: number; error?: string }> {
   const userId = await requireUserId();
   const text = String(input.text ?? "").trim();
-  if (!text) return { ok: false, error: "内容がありません。" };
+  if (!text) return { ok: false, added: 0, error: "内容がありません。" };
   trackEvent(userId, "feature:failure-dictation");
 
-  const { splitDictationIntoFailure } = await import("@/lib/dictation-to-failure");
-  let parsed;
+  const { splitDictationIntoFailures } = await import("@/lib/dictation-to-failure");
+  let items;
   try {
-    parsed = await splitDictationIntoFailure(text);
+    items = await splitDictationIntoFailures(text);
   } catch (e) {
     console.error("[createFailureLogFromDictation] 失敗", e);
-    return { ok: false, error: "うまく整えられませんでした。少し短くして試してみてください。" };
+    return {
+      ok: false,
+      added: 0,
+      error: "うまく整えられませんでした。少し短くして試してみてください。",
+    };
   }
-  if (!parsed.description) {
-    return { ok: false, error: "何が起きたか読み取れませんでした。" };
+  if (items.length === 0) {
+    return { ok: false, added: 0, error: "何が起きたか読み取れませんでした。" };
   }
 
+  // 話した中で内容が同じものが重複したら1件にまとめる（言い直し対策）。
+  const seen = new Set<string>();
+  const unique = items.filter((it) => {
+    const k = it.description.toLowerCase().replace(/\s+/g, "");
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
   const eventId = input.eventId ? String(input.eventId).trim() || null : null;
-  const linkedEvent = await insertFailureLog(
-    userId,
-    parsed.description,
-    parsed.countermeasure,
-    eventId,
-  );
-  revalidateAppViews(linkedEvent?.id);
-  return { ok: true };
+  let lastEventId: string | undefined;
+  for (const it of unique) {
+    const linkedEvent = await insertFailureLog(
+      userId,
+      it.description,
+      it.countermeasure,
+      eventId,
+    );
+    if (linkedEvent) lastEventId = linkedEvent.id;
+  }
+  revalidateAppViews(lastEventId);
+  return { ok: true, added: unique.length };
 }
 
 /**

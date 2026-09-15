@@ -30,7 +30,7 @@ export function FailureDictationInput({
     startTransition(async () => {
       const res = await createFailureLogFromDictation({ eventId, text: t });
       if (res.ok) {
-        setNote("記録しました。");
+        setNote(res.added > 1 ? `${res.added}件、記録しました。` : "記録しました。");
         setText("");
         router.refresh();
       } else {
@@ -63,15 +63,15 @@ export function FailureDictationInput({
             </h3>
             <p className="text-[11px] text-muted">
               スマホのキーボードの<strong>マイクキー</strong>で、何があったか、
-              思いついた対策があればそれも合わせて話してください。
-              「何が起きたか」と「有効だった対策」にAIで分けて記録します。
+              思いついた対策があればそれも合わせて話してください。複数あれば
+              まとめて話してもOK、<strong>それぞれ別々に</strong>記録します。
             </p>
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={4}
               placeholder={
-                "例: 集合時間に遅刻しちゃった。次からは前日にリマインダーを設定しておこうと思う。"
+                "例: 集合時間に遅刻しちゃった。あと保険証も忘れた。次からは前日にリマインダーを設定しておこうと思う。"
               }
               className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
             />

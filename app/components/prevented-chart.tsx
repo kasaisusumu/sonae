@@ -134,12 +134,17 @@ export function PreventedChart({ series }: { series: SavingsSeries }) {
                     tappable ? "（タップで内訳）" : ""
                   }`}
                 >
+                  {d.count > 0 && (
+                    <span className="whitespace-nowrap text-[9px] leading-none text-chart-count">
+                      {d.count}
+                    </span>
+                  )}
                   <span
                     className="w-full max-w-[16px] rounded-t bg-chart-count"
                     style={{
                       height: Math.max(
                         d.count > 0 ? 3 : 0,
-                        Math.round((d.count / maxCount) * (H - 16)),
+                        Math.round((d.count / maxCount) * (H - 28)),
                       ),
                     }}
                   />

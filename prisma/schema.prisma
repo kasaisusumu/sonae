@@ -38,6 +38,9 @@ model User {
   failureDismissals FailureDismissal[]
   activityMinutes   ActivityMinute[]
   featureEvents     FeatureEvent[]
+  futureMessages    FutureMessage[]
+  eventFutureMessages EventFutureMessage[]
+  messageProposalRecords MessageProposalRecord[]
 }
 
 // Web Push の購読情報（1 ユーザーが複数端末を持てる）
@@ -149,6 +152,13 @@ model Event {
   listReminderNotifiedAt  DateTime?
   // ユーザーが明示的にリマインドを変えた日時。null = まだ既定のまま（学習で上書きしてよい）。
   listReminderTouchedAt   DateTime?
+  // 「未来の自分へのメッセージ」の AI 判定（genre_ai / similar_ai）を、この予定に対して
+  // 一度試したか（結果の有無に関わらず）。予定ごとに 1 回だけに抑えるためのキャッシュ。
+  // キーワード／ジャンル関連語／カテゴリ一致（安価な判定）はこれと無関係に毎回試す。
+  futureMessageCheckedAt DateTime?
+  // 予定後の「メッセージを更新しませんか？」通知を送った日時（旧 postFailureCheckNotifiedAt
+  // に相当。1予定1回の送信管理。cron から呼ぶ notifyPendingMessageReviews が使う）。
+  messageReviewNotifiedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -159,6 +169,8 @@ model Event {
   editRecords    EditRecord[]
   failureDismissals FailureDismissal[]
   checklistItemImages ChecklistItemImage[]
+  futureMessageLinks EventFutureMessage[]
+  messageProposalRecords MessageProposalRecord[]
 
   @@index([userId, recurringEventId])
   // 招待・共有された予定は Google 側で複数ユーザーの予定に同じ googleEventId が
@@ -427,4 +439,85 @@ model FailureDismissal {
 
   @@unique([eventId, descKey])
   @@index([userId])
+}
+
+// ── 未来の自分へのメッセージ（spec: 未来の自分へのメッセージ機能） ──
+// 失敗ログ機能は全廃したが、上のテーブル（FailureLog / SavingsEntry /
+// FailureDismissal）と Event.noFailureAt 等の既存列はあえて削除せず未使用のまま
+// 残している（本番昇格時に段階移行できるように。コード・UI からの参照だけを外す）。
+
+// 「いつ入るか分からない予定」のために先に書いておくメッセージ。全クエリで
+// userId を条件に含めること（他ユーザーの行を横断で返す finaMany を書かない）。
+model FutureMessage {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  // 以下すべて JSON 文字列（Postgres の配列型ではなく、既存 schema の他モデル
+  // ―EventFeature.keywords 等―に合わせて string[] の JSON エンコードで統一）。
+  keywords      String @default("[]") // json string[]
+  genres        String @default("[]") // json string[]。ユーザー指定のジャンル（例「飲み会系」）。最大5個
+  genreKeywords String @default("[]") // json {genre:string, terms:string[]}[]。AIがジャンルから展開した関連語（編集可）
+  categoryIds   String @default("[]") // json string[]（Category.id）。空なら未指定
+  // "similar"（似た予定で提案）| "keyword"（キーワード一致のみ、既定）| "once"（今回だけ、確定後 archivedAt をセット）
+  scope       String    @default("keyword")
+  archivedAt  DateTime? // "once" 確定時、または手動アーカイブでセット
+  // どんな種類の予定向けかのAI生成の短い説明（similar_ai 判定の事前フィルタ・few-shot に使う）
+  contextSummary   String?
+  sourceEventTitle String?
+  sourceCategoryId String?
+  confirmedCount  Int       @default(0)
+  lastConfirmedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  eventLinks EventFutureMessage[]
+  proposals  MessageProposalRecord[]
+
+  @@index([userId])
+}
+
+// 予定 × メッセージ の結びつき（一致判定の結果・提示状態）。
+model EventFutureMessage {
+  id        String        @id @default(cuid())
+  eventId   String
+  event     Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  messageId String
+  message   FutureMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // "shown"（提示中）| "removed"（この予定からだけ外した）| "confirmed"（予定後に確定）| "skipped"（今回は更新しない）
+  status      String    @default("shown")
+  // "keyword" | "genre_keyword" | "genre_ai" | "category" | "similar_ai" | "manual"
+  matchedBy   String
+  matchReason String?
+  notifiedAt       DateTime? // 一致時のプッシュ（1予定1回）
+  reviewNotifiedAt DateTime? // 予定後の確定うながしプッシュ（1予定1回）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, messageId])
+  @@index([userId])
+  @@index([messageId])
+}
+
+// 予定後の確定カードで「提案した内容」と「最終的にユーザーが確定した内容」の記録。
+// 次回以降の提案（初期選択・修正されにくい根拠文）をそのユーザー自身の傾向から
+// 改善するための学習データ。他ユーザーのデータは一切参照しない。
+model MessageProposalRecord {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId    String
+  message      FutureMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  eventId      String
+  event        Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  proposed     String // json {body,keywords,genres,categoryIds,scope}
+  final        String // json {body,keywords,genres,categoryIds,scope}
+  fieldChanged String // json {body,keywords,genres,categoryIds,scope}（各 boolean）
+  acceptedAsIs Boolean @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([messageId])
 }

@@ -10,7 +10,6 @@ import { InfoHint } from "@/app/components/info-hint";
 import { SubmitButton } from "@/app/components/submit-button";
 import { EventSearch, type SearchRow } from "./event-search";
 import { eventDateKey, eventDateLabel, eventHaystack } from "./haystack";
-import { getUpcomingWarnings } from "@/lib/failures";
 import { APP_NAME } from "@/lib/app-info";
 import { trackEvent } from "@/lib/track";
 
@@ -24,7 +23,7 @@ export default async function EventsPage({
   if (!user) redirect("/");
   trackEvent(user.id, "page:/events");
 
-  const [categories, events, linkedLogs, warnings] = await Promise.all([
+  const [categories, events] = await Promise.all([
     prisma.category.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "asc" },
@@ -38,48 +37,16 @@ export default async function EventsPage({
         eventDatetime: true,
         source: true,
         categoryId: true,
-        failureWarningAckAt: true,
         memo: true,
         category: { select: { name: true } },
         checklistItems: { select: { isDone: true, title: true } },
       },
     }),
-    // この予定に付いている失敗ログ（紐付け＝赤／未確認＝黄）。
-    prisma.failureLog.findMany({
-      where: {
-        userId: user.id,
-        eventId: { not: null },
-        OR: [{ outcome: "linked" }, { outcome: null }],
-      },
-      select: { eventId: true, outcome: true },
-    }),
-    // 失敗ログはまだ無いが、似た予定・カテゴリで先回り提案が出ている
-    // ＝「失敗の可能性あり」（黄）。ackEventWarning で却下済みは含まれない。
-    getUpcomingWarnings(user.id),
   ]);
 
   const categoryNames = Array.from(
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
   );
-  const linkedEventIds = new Set(
-    linkedLogs
-      .filter((l) => l.outcome === "linked")
-      .map((l) => l.eventId)
-      .filter((v): v is string => !!v),
-  );
-  const suspectedEventIds = new Set<string>([
-    ...warnings.map((w) => w.event.id),
-    ...linkedLogs
-      .filter((l) => l.outcome === null)
-      .map((l) => l.eventId)
-      .filter((v): v is string => !!v),
-  ]);
-  const riskOf = (id: string): "linked" | "suspected" | undefined =>
-    linkedEventIds.has(id)
-      ? "linked"
-      : suspectedEventIds.has(id)
-        ? "suspected"
-        : undefined;
   const account = user.googleAccount;
   const now = new Date();
   const upcoming = events.filter((e) => e.eventDatetime >= now);
@@ -182,13 +149,7 @@ export default async function EventsPage({
                 haystack: eventHaystack(ev, now),
                 dateKey: eventDateKey(ev.eventDatetime),
                 dateLabel: eventDateLabel(ev.eventDatetime, now),
-                node: (
-                  <EventRow
-                    ev={ev}
-                    categoryNames={categoryNames}
-                    risk={riskOf(ev.id)}
-                  />
-                ),
+                node: <EventRow ev={ev} categoryNames={categoryNames} />,
               }),
             )}
           />
@@ -228,7 +189,6 @@ function EventRow({
   ev,
   categoryNames,
   past,
-  risk,
 }: {
   ev: {
     id: string;
@@ -240,8 +200,6 @@ function EventRow({
   };
   categoryNames: string[];
   past?: boolean;
-  /** linked=この予定に「紐付け」した失敗ログあり（赤）／suspected=提案・未確認（黄）／なし=非表示 */
-  risk?: "linked" | "suspected";
 }) {
   const total = ev.checklistItems.length;
   const done = ev.checklistItems.filter((c) => c.isDone).length;
@@ -262,19 +220,7 @@ function EventRow({
       />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-foreground">
-            {ev.title}
-            {risk === "linked" && (
-              <span className="ml-2 rounded bg-warn-soft px-1.5 py-0.5 text-[10px] font-medium text-warn">
-                登録された失敗あり
-              </span>
-            )}
-            {risk === "suspected" && (
-              <span className="ml-2 rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                失敗の可能性あり
-              </span>
-            )}
-          </p>
+          <p className="font-medium text-foreground">{ev.title}</p>
           <p className="text-xs text-muted">
             {formatDateShort(ev.eventDatetime)}
             {ev.source === "google" ? " ・ Google" : " ・ 手動"}

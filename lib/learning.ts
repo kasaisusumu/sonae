@@ -496,14 +496,6 @@ export interface LeafListItem {
   notifyLeadMinutes: number | null;
 }
 
-export interface LeafFailure {
-  id: string;
-  description: string; // 全文（切らない）
-  occurredAt: Date;
-  countermeasure: string | null;
-  outcome: string | null; // "prevented" | "not_prevented" | null
-}
-
 export interface LeafSection {
   key: string; // "task" | "belonging" | 任意の枠名
   label: string; // 表示名
@@ -520,7 +512,6 @@ export interface NameTreeLeaf {
   situationLabel: string;
   keywords: string[];
   sections: LeafSection[];
-  failures: LeafFailure[];
   /** この予定は準備リストを空にしている（「内容なし」として学習）。 */
   cleared: boolean;
 }
@@ -591,7 +582,6 @@ interface RawLeaf {
   cleared: boolean; // 準備リストを空にしている（「内容なし」）
   keywords: string[];
   sections: LeafSection[];
-  failures: LeafFailure[];
 }
 
 type RawNode = { children: Map<string, RawNode>; leaves: RawLeaf[] };
@@ -620,11 +610,6 @@ function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
   return [...groups.values()]
     .map((g) => {
       const rep = g[0];
-      const seen = new Set<string>();
-      const failures = g
-        .flatMap((x) => x.failures)
-        .filter((f) => (seen.has(f.id) ? false : (seen.add(f.id), true)))
-        .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
       return {
         eventId: rep.eventId,
         siblingEventIds: g.slice(1).map((x) => x.eventId),
@@ -641,7 +626,6 @@ function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
               : describeSignature(rep.sig).text,
         keywords: rep.keywords,
         sections: rep.sections,
-        failures,
         cleared: rep.cleared,
       } satisfies NameTreeLeaf;
     })
@@ -712,7 +696,6 @@ export async function getLearningNameTree(userId: string): Promise<{
             },
             // 準備リストを空にした予定も「内容なし」として学習内容に出す。
             { listCleared: true },
-            { failureLogs: { some: {} } },
           ],
         },
         orderBy: { eventDatetime: "desc" },
@@ -743,16 +726,6 @@ export async function getLearningNameTree(userId: string): Promise<{
               isDone: true,
               notifyLeadMinutes: true,
               isUserAdded: true,
-            },
-          },
-          failureLogs: {
-            orderBy: { occurredAt: "desc" },
-            select: {
-              id: true,
-              description: true,
-              occurredAt: true,
-              countermeasure: true,
-              outcome: true,
             },
           },
         },
@@ -814,13 +787,6 @@ export async function getLearningNameTree(userId: string): Promise<{
           cleared: ev.listCleared,
           keywords: evKw.get(ev.id) ?? [],
           sections,
-          failures: ev.failureLogs.map((f) => ({
-            id: f.id,
-            description: f.description,
-            occurredAt: f.occurredAt,
-            countermeasure: f.countermeasure,
-            outcome: f.outcome,
-          })),
         };
 
         const path = orderKeywords(evKw.get(ev.id) ?? [], freq);

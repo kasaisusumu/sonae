@@ -15,6 +15,7 @@ import { sendPushToUser } from "@/lib/push";
 import { hashDescription, stripSonaeBlock } from "@/lib/description";
 import { applyInboundDescription } from "@/lib/description-inbound";
 import { primeNotifiedChecklists } from "@/lib/checklist";
+import { ensureFutureMessageMatchesForEvent } from "@/lib/future-messages";
 
 export interface SyncResult {
   newEvents: {
@@ -490,5 +491,16 @@ export async function syncAndNotify(
     userId,
     opts?.generateBudget ?? 3,
   );
+
+  // 未来の自分へのメッセージの一致判定（取り込み時）。AI 判定は件数を絞って
+  // 予算内で試す（1件ずつ await するので、多すぎるとタイムアウトの原因になる）。
+  const MESSAGE_MATCH_AI_BUDGET = 5;
+  let aiBudget = MESSAGE_MATCH_AI_BUDGET;
+  for (const ev of result.newEvents) {
+    const allowAi = aiBudget > 0;
+    await ensureFutureMessageMatchesForEvent(ev.id, { allowAi }).catch(() => {});
+    if (allowAi) aiBudget--;
+  }
+
   return { ...result, generated };
 }

@@ -2,19 +2,17 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { previewDictatedFailures, saveDictatedFailures } from "@/app/actions";
+import { previewDictatedMessages, saveDictatedMessages } from "@/app/actions";
 import { formatDateOnly } from "@/lib/format";
 
-type Draft = { description: string; countermeasure: string };
+type Draft = { body: string; keywords: string; genres: string };
 
 /**
- * スマホのキーボードのマイクキーで「何があった・どんな対策を考えたか」を
- * 話し、AI で「何が起きたか」「有効だった対策」に分ける。失敗ログは記録が
- * 残る性質上、整えた内容をその場で確認・修正してから保存する（いきなり保存しない）。
- * 複数の失敗をまとめて話しても、確認するのは常に1件だけ（そのほうが確実に
- * 見て・直してから記録できるため）。残りがあればもう一度話してもらう。
+ * スマホのキーボードのマイクキーで「いつか思い出したいこと」を話し、AI で
+ * 本文・キーワード・ジャンルに分ける。その場で確認・修正してから保存する
+ * （いきなり保存しない）。複数話しても、確認するのは常に1件ずつ。
  */
-export function FailureDictationInput({
+export function MessageDictationInput({
   eventId = null,
   events,
 }: {
@@ -28,7 +26,7 @@ export function FailureDictationInput({
   const [phase, setPhase] = useState<"input" | "review">("input");
   const [text, setText] = useState("");
   const [selectedEventId, setSelectedEventId] = useState("");
-  const [draft, setDraft] = useState<Draft>({ description: "", countermeasure: "" });
+  const [draft, setDraft] = useState<Draft>({ body: "", keywords: "", genres: "" });
   const [moreCount, setMoreCount] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -40,7 +38,7 @@ export function FailureDictationInput({
     setPhase("input");
     setText("");
     setSelectedEventId("");
-    setDraft({ description: "", countermeasure: "" });
+    setDraft({ body: "", keywords: "", genres: "" });
     setMoreCount(0);
     setErr(null);
   }
@@ -56,12 +54,13 @@ export function FailureDictationInput({
     if (!t || pending) return;
     setErr(null);
     startTransition(async () => {
-      const res = await previewDictatedFailures(t);
+      const res = await previewDictatedMessages(t);
       if (res.ok) {
         const [first, ...rest] = res.items;
         setDraft({
-          description: first.description,
-          countermeasure: first.countermeasure ?? "",
+          body: first.body,
+          keywords: first.keywords.join("、"),
+          genres: first.genres.join("、"),
         });
         setMoreCount(rest.length);
         setPhase("review");
@@ -73,28 +72,33 @@ export function FailureDictationInput({
 
   function confirmSave() {
     if (pending) return;
-    const description = draft.description.trim();
-    if (!description) {
+    const body = draft.body.trim();
+    if (!body) {
       setErr("内容がありません。");
       return;
     }
-    const countermeasure = draft.countermeasure.trim() || null;
     const targetEventId = eventId ?? (selectedEventId || null);
     const linkedEvent = !eventId
       ? events?.find((e) => e.id === selectedEventId)
       : null;
     setErr(null);
     startTransition(async () => {
-      const res = await saveDictatedFailures({
+      const res = await saveDictatedMessages({
         eventId: targetEventId,
-        items: [{ description, countermeasure }],
+        items: [
+          {
+            body,
+            keywords: draft.keywords.split(/[、,，]/).map((s) => s.trim()).filter(Boolean),
+            genres: draft.genres.split(/[、,，]/).map((s) => s.trim()).filter(Boolean),
+          },
+        ],
       });
       if (res.ok) {
         const where = eventId
-          ? "この予定の「考えられる失敗」に追加しました。"
+          ? "この予定の「未来の自分へ」に追加しました。"
           : linkedEvent
             ? `「${linkedEvent.title}」の予定ページに追加しました。`
-            : "下の「▸ 予定に紐づかない記録を見る」に追加しました。";
+            : "下の「▸ 登録したメッセージを見る」に追加しました。";
         setNote(`記録しました。${where}`);
         reset();
         router.refresh();
@@ -108,7 +112,7 @@ export function FailureDictationInput({
     <>
       <button
         type="button"
-        data-coach="fail-dictation"
+        data-coach="message-dictation"
         onClick={openPopup}
         className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground hover:bg-surface-muted"
       >
@@ -131,18 +135,15 @@ export function FailureDictationInput({
             {phase === "input" ? (
               <>
                 <p className="text-[11px] text-muted">
-                  スマホのキーボードの<strong>マイクキー</strong>で、何があったか、
-                  思いついた対策があればそれも合わせて話してください。1回につき
-                  1件、確認してから記録します。複数あれば、記録したあとにもう一度
-                  話してください。
+                  スマホのキーボードの<strong>マイクキー</strong>で、次に思い出したい
+                  ことを話してください。1回につき1件、確認してから記録します。
+                  複数あれば、記録したあとにもう一度話してください。
                 </p>
                 <textarea
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   rows={4}
-                  placeholder={
-                    "例: 集合時間に遅刻しちゃった。次からは前日にリマインダーを設定しておこうと思う。"
-                  }
+                  placeholder="例: 田中さんとは前回のギブアンドテイクがあるから、次に会うときは忘れない。"
                   className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
                 />
                 <div className="flex flex-wrap items-center gap-3">
@@ -183,9 +184,7 @@ export function FailureDictationInput({
                       onChange={(e) => setSelectedEventId(e.target.value)}
                       className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
                     >
-                      <option value="">
-                        — 紐づけない（カテゴリ全体の記録）—
-                      </option>
+                      <option value="">— 紐づけない（あとで一致すれば自動で結びつきます）—</option>
                       {events!.map((e) => (
                         <option key={e.id} value={e.id}>
                           {formatDateOnly(e.eventDatetime)} {e.title}
@@ -201,21 +200,22 @@ export function FailureDictationInput({
                 )}
 
                 <textarea
-                  value={draft.description}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, description: e.target.value }))
-                  }
+                  value={draft.body}
+                  onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
                   rows={2}
-                  placeholder="何が起きたか"
+                  placeholder="次に思い出したいこと"
                   className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
                 />
-                <textarea
-                  value={draft.countermeasure}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, countermeasure: e.target.value }))
-                  }
-                  rows={1}
-                  placeholder="有効だった対策（あれば・任意）"
+                <input
+                  value={draft.keywords}
+                  onChange={(e) => setDraft((d) => ({ ...d, keywords: e.target.value }))}
+                  placeholder="キーワード（読点区切り・任意）"
+                  className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
+                />
+                <input
+                  value={draft.genres}
+                  onChange={(e) => setDraft((d) => ({ ...d, genres: e.target.value }))}
+                  placeholder="ジャンル（〇〇系。読点区切り・任意）"
                   className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
                 />
 
@@ -223,7 +223,7 @@ export function FailureDictationInput({
                   <button
                     type="button"
                     onClick={confirmSave}
-                    disabled={pending || !draft.description.trim()}
+                    disabled={pending || !draft.body.trim()}
                     className="rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-surface shadow-sm transition-colors hover:opacity-90 disabled:opacity-50"
                   >
                     {pending ? "記録中…" : "この内容で記録する"}

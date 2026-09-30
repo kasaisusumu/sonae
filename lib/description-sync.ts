@@ -6,7 +6,7 @@ import {
   stripSonaeBlock,
 } from "@/lib/description";
 import { resolveSections } from "@/lib/sections";
-import { getEventDescriptionFailures } from "@/lib/failures";
+import { getEventDescriptionMessages } from "@/lib/future-messages";
 
 /**
  * 予定の説明欄に、そなえの準備リスト（リンク＋箇条書き）を書き込む。
@@ -59,7 +59,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
     event.checklistItems.map((c) => c.kind),
   );
 
-  const failures = await getEventDescriptionFailures(eventId);
+  const futureMessages = await getEventDescriptionMessages(eventId);
 
   // src=cal: 説明欄のこのリンクから開いたときだけ、直接編集の説明ポップアップを出す。
   const url = `${appBaseUrl()}/events/${eventId}?src=cal`;
@@ -73,15 +73,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
       isDone: c.isDone,
       comment: c.comment,
     })),
-    {
-      unreviewed,
-      sections,
-      failures: {
-        anticipated: failures.anticipated,
-        avoided: failures.avoided,
-        occurred: failures.occurred,
-      },
-    },
+    { unreviewed, sections, futureMessages },
   );
   const hash = hashDescription(description);
   if (hash === event.lastWrittenHash) return;

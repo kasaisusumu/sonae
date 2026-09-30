@@ -90,19 +90,19 @@ function LearnMock() {
   );
 }
 
-/** 見せ所② 失敗ログ → 節約額。 */
-function FailMock() {
+/** 見せ所② 未来の自分へのメッセージ → 一致時のお知らせ。 */
+function MessageMock() {
   return (
     <div className="mt-6 grid gap-2.5 text-left sm:grid-cols-[1.25fr_auto_1fr] sm:items-center">
-      <div className="rounded-xl border border-warn/30 bg-warn-soft p-3.5 shadow-sm">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-warn">
-          失敗ログ・一言でOK
+      <div className="rounded-xl border border-teal/30 bg-teal-soft p-3.5 shadow-sm">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-teal-dark">
+          未来の自分へ・一言でOK
         </p>
         <p className="mt-1.5 text-[12px] font-medium text-foreground">
-          保険証を忘れて再受診に…
+          前回のギブアンドテイクを忘れない
         </p>
         <p className="mt-1 text-[10px] text-muted">
-          → 次の「通院」予定で、前日に先回りのお知らせ
+          → 「田中さん」の予定が入ったら、その場でお知らせ
         </p>
       </div>
       <div aria-hidden className="mx-auto text-lg text-border">
@@ -111,12 +111,11 @@ function FailMock() {
       </div>
       <div className="rounded-xl bg-gradient-to-br from-foreground to-foreground/85 p-3.5 text-white shadow-[0_10px_30px_-12px_rgba(0,0,0,0.5)]">
         <p className="text-[10px] uppercase tracking-wide text-white/60">
-          今月 防げた件数
+          💌 未来の自分へのメッセージ
         </p>
-        <p className="mt-1 text-[26px] font-bold tabular-nums leading-none">
-          4件
+        <p className="mt-1 text-[13px] font-medium leading-snug">
+          「田中さん」に、未来の自分からのメッセージがあります
         </p>
-        <p className="mt-1 text-[10px] text-white/55">防げたうっかり 4 件</p>
       </div>
     </div>
   );
@@ -194,19 +193,18 @@ export function Landing({
         <LearnMock />
       </section>
 
-      {/* ── 見せ所② 失敗ログ → 節約額 ── */}
+      {/* ── 見せ所② 未来の自分へのメッセージ ── */}
       <section className="mt-20 sm:mt-28">
         <Eyebrow index="02">見せ所</Eyebrow>
         <h2 className="mt-3 text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-          うっかりを一度書けば、次は先回り。防げた額も見える
+          いつ入るか分からない予定にも、先に一言を残せる
         </h2>
         <p className="mt-3 max-w-lg text-[14px] leading-relaxed text-muted">
-          「保険証を忘れた」「予約し忘れた」を一言メモするだけ。似た予定が来たら事前にお知らせ。
-          予定のあと「防げた？」に答えると、避けられた損失（推定）が
-          <strong className="text-foreground">「◯◯円 防げた」</strong>
-          として積み上がって見えます。ミスが減って、成果も残ります。
+          「前回のギブアンドテイクを忘れない」を一言メモするだけ。人・場所・ジャンルの
+          どれかが一致する予定が入ったら、その場でお知らせします。予定のあと確認すれば、
+          次回はもっと直す量が減っていきます。
         </p>
-        <FailMock />
+        <MessageMock />
       </section>
 
       {/* ── 仕組み ── */}
@@ -269,7 +267,7 @@ export function Landing({
           まずは1つ、予定をつないでみる
         </h2>
         <p className="mx-auto mt-2 max-w-xs text-[13px] leading-relaxed text-muted">
-          直すほど当たる準備リストと、先回りする失敗ログを、今日から。
+          直すほど当たる準備リストと、未来の自分へのメッセージを、今日から。
         </p>
         <div className="mt-5">
           <CtaButton loggedout={loggedout} />

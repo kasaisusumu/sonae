@@ -23,7 +23,7 @@ import {
  * 無ければ /api/auth/google?dest=admin に飛ばす。lib/admin-auth.ts 参照）。
  * フィードバック（WTP アンケート）に加え、利用者ごとのアナリティクス
  * （オンボーディング進捗・利用時間・使用量）と全体サマリーを見られる。
- * 個々の失敗ログ・準備リストの中身は載せない（件数・金額などの集計のみ）。
+ * 個々のメッセージ・準備リストの中身は載せない（件数などの集計のみ）。
  */
 export const dynamic = "force-dynamic";
 
@@ -240,9 +240,9 @@ export default async function AdminPage({
     users,
     feedback,
     eventCount,
-    failureLogCount,
+    messageCount,
     checklistEvents,
-    savingsByUser,
+    confirmedByUser,
     activityByUser,
     activityByUserDay,
     usageByKeyUser,
@@ -256,7 +256,7 @@ export default async function AdminPage({
         _count: {
           select: {
             events: true,
-            failureLogs: true,
+            futureMessages: true,
             pushSubscriptions: true,
             feedback: true,
           },
@@ -268,17 +268,18 @@ export default async function AdminPage({
       include: { user: { select: { id: true, email: true, name: true } } },
     }),
     prisma.event.count(),
-    prisma.failureLog.count(),
+    prisma.futureMessage.count(),
     // 準備リストの項目が1件でもある予定を持つユーザー（=はじめかたの「リスト確認」済み）。
     prisma.event.findMany({
       where: { checklistItems: { some: {} } },
       select: { userId: true },
       distinct: ["userId"],
     }),
-    prisma.savingsEntry.groupBy({
+    // 提案をそのまま／修正して確定した回数（メッセージの「育て」具合の参考値）。
+    prisma.eventFutureMessage.groupBy({
       by: ["userId"],
-      where: { confirmedByUser: true },
-      _sum: { amountYen: true },
+      where: { status: "confirmed" },
+      _count: { _all: true },
     }),
     // 利用時間（累計＝行数）＋最終アクセス。
     prisma.activityMinute.groupBy({
@@ -299,8 +300,8 @@ export default async function AdminPage({
   ]);
 
   const hasChecklistSet = new Set(checklistEvents.map((e) => e.userId));
-  const savingsMap = new Map(
-    savingsByUser.map((s) => [s.userId, s._sum.amountYen ?? 0]),
+  const confirmedMap = new Map(
+    confirmedByUser.map((s) => [s.userId, s._count._all]),
   );
   const activityMap = new Map(
     activityByUser.map((a) => [
@@ -361,8 +362,8 @@ export default async function AdminPage({
       steps,
       onboardingDone,
       eventCount: u._count.events,
-      failureLogCount: u._count.failureLogs,
-      savingsYen: savingsMap.get(u.id) ?? 0,
+      messageCount: u._count.futureMessages,
+      confirmedCount: confirmedMap.get(u.id) ?? 0,
       todayMinutes: byDay?.get(todayKey) ?? 0,
       totalMinutes: activity?.totalMinutes ?? 0,
       activeDays,
@@ -420,7 +421,7 @@ export default async function AdminPage({
         <h1 className="text-xl font-semibold tracking-tight">管理（運営者のみ）</h1>
         <p className="mt-1 text-sm text-muted">
           このページは ADMIN_EMAIL に一致するアカウントだけが開けます。
-          個々の失敗ログ・準備リストの中身は表示せず、件数や利用時間などの集計のみ扱います。
+          個々のメッセージ・準備リストの中身は表示せず、件数や利用時間などの集計のみ扱います。
         </p>
       </div>
 
@@ -431,7 +432,7 @@ export default async function AdminPage({
           {[
             ["ユーザー数", String(users.length)],
             ["取り込んだ予定数", String(eventCount)],
-            ["失敗ログ数", String(failureLogCount)],
+            ["未来の自分へのメッセージ数", String(messageCount)],
             ["今日アクティブ（DAU）", `${dau} / ${users.length}`],
             ["直近7日アクティブ（WAU）", `${wau} / ${users.length}`],
             [
@@ -491,8 +492,8 @@ export default async function AdminPage({
                   はじめかた
                 </th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">予定</th>
-                <th className="whitespace-nowrap px-3 py-2 font-medium">失敗ログ</th>
-                <th className="whitespace-nowrap px-3 py-2 font-medium">節約額</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">メッセージ</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">確定回数</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">
                   今日の利用
                 </th>
@@ -538,10 +539,10 @@ export default async function AdminPage({
                     {r.eventCount}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums">
-                    {r.failureLogCount}
+                    {r.messageCount}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums">
-                    {formatYen(r.savingsYen)}
+                    {r.confirmedCount}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                     {formatMinutes(r.todayMinutes)}

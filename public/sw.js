@@ -1,4 +1,4 @@
-/* 私のマニュアル「そなえ」さん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v12 */
+/* 私のマニュアル「そなえ」さん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v13 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -45,12 +45,14 @@ function rememberPendingNav(url) {
 }
 
 // 通知の tag から行き先 URL を復元する（payload に url が無かったときの保険）。
-// 送信側（lib/notify-items.ts, lib/sync.ts, lib/failures.ts, app/actions.ts）の
+// 送信側（lib/notify-items.ts, lib/sync.ts, lib/future-messages.ts, app/actions.ts）の
 // tag 命名と必ず対応させること。
 function urlFromTag(tag) {
   if (!tag) return null;
-  let m = tag.match(/^failcheck-(.+)$/);
-  if (m) return "/events/" + m[1] + "#failure-check";
+  let m = tag.match(/^futuremsg-(.+)$/);
+  if (m) return "/events/" + m[1] + "#message-review";
+  m = tag.match(/^msgreview-(.+)$/);
+  if (m) return "/failures#review";
   m = tag.match(/^(?:event|prep|listreminder)-(.+)$/);
   if (m) return "/events/" + m[1];
   // 繰り返し予定の通知は series-<recurringEventId>。個別の予定 id は SW からは

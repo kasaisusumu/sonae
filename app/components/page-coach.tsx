@@ -24,18 +24,13 @@ const FLAG_PREFIX = "mm_coach_";
 
 const TOURS: Tour[] = [
   {
-    key: "home_v5",
+    key: "home_v6",
     match: (p) => p === "/",
     steps: [
       {
         sel: '[data-coach="menu"]',
         title: "困ったら左上の ☰",
         body: "使い方・チュートリアル・注意・ページ移動は、いつでもここから開けます。",
-      },
-      {
-        sel: '[data-coach="savings"]',
-        title: "防げた分の見える化",
-        body: "「防げた」と選んだ失敗の推定額の合計です（参考値）。下のグラフは棒をタップで内訳。",
       },
     ],
   },
@@ -58,7 +53,7 @@ const TOURS: Tour[] = [
   {
     // 予定詳細を初めて開いたときの案内。1つずつ、他ポップアップと重ねない、
     // 導入チュートリアル完了後に出す（共通ルール）。key を上げると再表示される。
-    key: "event_v6",
+    key: "event_v7",
     match: (p) => /^\/events\/[^/]+$/.test(p),
     steps: [
       {
@@ -82,30 +77,30 @@ const TOURS: Tour[] = [
         body: "いる／いらないを直す・足すと学習して、次から似た予定で似たリストを最初から出します。増えすぎることはありません。",
       },
       {
-        sel: '[data-coach="fail-dictation"]',
-        title: "🎤 声でも記録できます",
-        body: "話すだけでAIが内容と対策をまとめて記録します。マイクキーからどうぞ。",
+        sel: '[data-coach="future-message"]',
+        title: "💌 未来の自分へ",
+        body: "いつか思い出したいことを書いておくと、次に似た予定が入ったときに知らせます。",
       },
     ],
   },
   {
-    key: "failures_v3",
+    key: "messages_v1",
     match: (p) => p === "/failures",
     steps: [
       {
-        sel: '[data-coach="fail-new"]',
-        title: "うっかりを記録する",
-        body: "「何が起きたか」だけでOK。金額は空で大丈夫。予定に紐づけると先回りできます。",
+        sel: '[data-coach="message-new"]',
+        title: "メッセージを書く",
+        body: "予定が未定でも書けます。キーワード・ジャンルが一致する予定が入ったとき、自動で知らせます。",
       },
       {
-        sel: '[data-coach="fail-dictation"]',
+        sel: '[data-coach="message-dictation"]',
         title: "🎤 声でも記録できます",
-        body: "話すだけでAIが内容と対策をまとめて記録します。マイクキーからどうぞ。",
+        body: "話すだけでAIが本文・キーワード・ジャンルをまとめます。マイクキーからどうぞ。",
       },
       {
-        sel: '[data-coach="fail-list"]',
-        title: "防げた／防げなかった",
-        body: "結果を選べます。「防げた」にしたものだけ、ホームの節約額に積み上がります。",
+        sel: '[data-coach="message-list"]',
+        title: "登録した内容を確認・編集",
+        body: "いつでも直したり、過去に移したり、削除したりできます。",
       },
     ],
   },
@@ -232,7 +227,7 @@ export function PageCoach({
     };
     const anotherPopup = () =>
       !!document.querySelector(
-        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-prevent-goals]",
+        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen]",
       );
 
     const start = () => {

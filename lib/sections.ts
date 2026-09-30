@@ -11,7 +11,9 @@ export const BUILTIN_SECTIONS = ["task", "belonging"] as const;
  * 先頭が "@" のキーは実データの枠ではない目印。sectionOrder には保存されるが、
  * 説明欄・学習など実枠を扱う所では isRealSection で除外する。
  */
-export const FAILURE_LOG_KEY = "@faillog";
+export const FUTURE_MESSAGE_KEY = "@futuremsg";
+/** 旧「考えられる失敗」枠の後方互換キー。読み込み時に除去する（失敗ログ機能は全廃済み）。 */
+const LEGACY_FAILURE_LOG_KEY = "@faillog";
 export function isRealSection(key: string): boolean {
   return !!key && !key.startsWith("@");
 }
@@ -39,12 +41,14 @@ export function sectionKeyFromLabel(label: string): string {
   return LABEL_TO_KEY[t] ?? t;
 }
 
-/** JSON 文字列を string[] にパース。壊れていたら既定の 2 枠。 */
+/** JSON 文字列を string[] にパース。壊れていたら既定の 2 枠。旧「考えられる失敗」枠キーは読み捨てる。 */
 export function parseSectionOrder(raw: string | null | undefined): string[] {
   try {
     const a = JSON.parse(raw ?? "[]");
     if (Array.isArray(a)) {
-      const out = a.filter((x): x is string => typeof x === "string" && !!x);
+      const out = a
+        .filter((x): x is string => typeof x === "string" && !!x)
+        .filter((x) => x !== LEGACY_FAILURE_LOG_KEY);
       if (out.length > 0) return dedupe(out);
     }
   } catch {

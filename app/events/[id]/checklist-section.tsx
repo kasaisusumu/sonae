@@ -6,35 +6,31 @@ import { ensureChecklistForEvent, normTitle } from "@/lib/checklist";
 import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
-import { getWarningForEvent, ensureSuggestedFailures } from "@/lib/failures";
+import {
+  ensureFutureMessageMatchesForEvent,
+  getMessagesForEvent,
+  getPendingMessageReviewsForEvent,
+} from "@/lib/future-messages";
+import { buildMessageProposal } from "@/lib/message-proposal";
 import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
 import { parseLeads } from "@/lib/lead-time";
+import { markListReviewed, generateChecklistForEvent } from "@/app/actions";
 import {
-  markListReviewed,
-  generateChecklistForEvent,
-  markNoFailure,
-} from "@/app/actions";
-import {
-  FAILURE_LOG_KEY,
+  FUTURE_MESSAGE_KEY,
   isBuiltinSection,
   resolveSections,
   sectionLabel,
 } from "@/lib/sections";
 import { InfoHint } from "@/app/components/info-hint";
 import { ChecklistEditor } from "./checklist-editor";
-import {
-  FailureListEditor,
-  type FLOther,
-  type FLRow,
-} from "./failure-list-editor";
-import { WarningPanel } from "./warning-panel";
+import { FutureMessageEditor, type EMRow } from "./future-message-editor";
+import { MessageReviewCard } from "@/app/components/message-review-card";
 import { ListReminderControl } from "./list-reminder-control";
 import { AddSectionButton } from "./section-manager";
 import { SectionList, type SectionEntry } from "./section-list";
 import { DictationInput } from "./dictation-input";
-import { FailureDictationInput } from "@/app/failures/failure-dictation-input";
 import { SubmitButton } from "@/app/components/submit-button";
 
 type TplOpt = { id: string; name: string };
@@ -108,7 +104,6 @@ export async function ChecklistSection({
     endDatetime: Date | null;
     categoryId: string | null;
     recurringEventId: string | null;
-    failureWarningAckAt: Date | null;
     listReminderLeads: string;
     // 連携時に取り込んだ既存の予定は false。この間は開いても自動生成しない
     // （下の「準備リストを作る」ボタンを押したときだけ生成する）。
@@ -151,96 +146,28 @@ export async function ChecklistSection({
     after(() => syncEventDescription(event.id));
   }
 
-  // 失敗ログ（考えられる失敗）。以前は <Suspense> で別コンポーネントに切り出して
-  // いたが、自動保存のたびの再検証でその Suspense 境界だけ再サスペンドし、
-  // 中の FailureListEditor がまるごと作り直されて開閉状態が消える不具合が
-  // あったため、ChecklistSection 本体の非同期処理に統合した（ChecklistEditor と
-  // 同じ扱いにして、他の枠と同じく再検証をまたいで状態が保たれるようにする）。
+  // 未来の自分へのメッセージ。以前の「考えられる失敗」枠と同じ理由で、
+  // ChecklistSection 本体の非同期処理に統合している（Suspense 境界を分けると
+  // 自動保存のたびの再検証でエディタの開閉状態が消えるため）。
   if (!needsManualGenerate) {
-    await ensureSuggestedFailures(event.id, event.userId);
+    await ensureFutureMessageMatchesForEvent(event.id, { allowAi: true });
   }
-  const [linkedFailures, otherFailures, failureEv] = await Promise.all([
-    prisma.failureLog.findMany({
-      where: { userId: event.userId, eventId: event.id },
-      orderBy: { occurredAt: "desc" },
-      select: {
-        id: true,
-        description: true,
-        outcome: true,
-        countermeasure: true,
-        occurredAt: true,
-      },
-    }),
-    prisma.failureLog.findMany({
-      where: { userId: event.userId, eventId: { not: event.id } },
-      orderBy: { occurredAt: "desc" },
-      take: 80,
-      select: {
-        id: true,
-        description: true,
-        occurredAt: true,
-        event: { select: { title: true } },
-      },
-    }),
-    prisma.event.findFirst({
-      where: { id: event.id, userId: event.userId },
-      select: { eventDatetime: true, endDatetime: true, noFailureAt: true },
-    }),
-  ]);
-  const linkedFailureDesc = new Set(
-    linkedFailures.map((l) => l.description.trim()),
-  );
-  const otherFailureCandidates: FLOther[] = otherFailures
-    .filter((o) => !linkedFailureDesc.has(o.description.trim()))
-    .map((o) => ({
-      id: o.id,
-      description: o.description,
-      occurredAt: o.occurredAt,
-      eventTitle: o.event?.title ?? null,
-    }));
-  const failureIsPast =
-    !!failureEv &&
-    (failureEv.endDatetime ?? failureEv.eventDatetime) <= new Date();
-  const askFailureOutcome = failureIsPast && linkedFailures.length === 0;
-  const failureLogNode = (
-    <div id="failure-check" className="scroll-mt-4 space-y-2">
-      {askFailureOutcome &&
-        (failureEv?.noFailureAt ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-surface-muted p-3 text-xs text-muted">
-            <span>「失敗はなかった」で記録済み。</span>
-            <form action={markNoFailure}>
-              <input type="hidden" name="eventId" value={event.id} />
-              <input type="hidden" name="undo" value="1" />
-              <button type="submit" className="underline hover:text-foreground">
-                取り消す
-              </button>
-            </form>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-border bg-surface-muted p-3">
-            <p className="text-xs font-medium text-foreground">
-              この予定、うっかりはありましたか？
-            </p>
-            <p className="mt-0.5 text-[11px] text-muted">
-              あったら話すか、下の「＋ 追加」で一言。なければワンタップで。
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <form action={markNoFailure}>
-                <input type="hidden" name="eventId" value={event.id} />
-                <SubmitButton variant="ghost">なかった 🙆</SubmitButton>
-              </form>
-              <FailureDictationInput eventId={event.id} />
-            </div>
-          </div>
-        ))}
-
-      <FailureListEditor
-        eventId={event.id}
-        label="考えられる失敗"
-        initial={linkedFailures as FLRow[]}
-        others={otherFailureCandidates}
-      />
-    </div>
+  const linkedMessages = await getMessagesForEvent(event.id, event.userId);
+  const futureMessageNode = (
+    <FutureMessageEditor
+      eventId={event.id}
+      initial={linkedMessages.map(
+        (m): EMRow => ({
+          id: m.id,
+          messageId: m.messageId,
+          body: m.body,
+          keywords: m.keywords,
+          genres: m.genres,
+          scope: m.scope,
+          matchReason: m.matchReason,
+        }),
+      )}
+    />
   );
 
   const feature = extractEventFeature({
@@ -250,7 +177,8 @@ export async function ChecklistSection({
     endDatetime: event.endDatetime,
   });
   const [
-    warning,
+    pendingReviews,
+    categories,
     taskRules,
     belongingRules,
     reviewState,
@@ -258,7 +186,12 @@ export async function ChecklistSection({
     pastEventsRaw,
     itemImages,
   ] = await Promise.all([
-    getWarningForEvent(event),
+    getPendingMessageReviewsForEvent(event.id, event.userId),
+    prisma.category.findMany({
+      where: { userId: event.userId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, name: true },
+    }),
     getApplicableRules(event.categoryId, feature, "task"),
     getApplicableRules(event.categoryId, feature, "belonging"),
     prisma.event.findUnique({
@@ -279,6 +212,24 @@ export async function ChecklistSection({
       select: { id: true, kind: true, slot: true, data: true, width: true, height: true },
     }),
   ]);
+  const reviewCards = await Promise.all(
+    pendingReviews.map(async (r) => ({
+      review: r,
+      proposal: await buildMessageProposal({
+        userId: event.userId,
+        eventTitle: event.title,
+        eventMemo: event.memo,
+        categoryId: event.categoryId,
+        current: {
+          body: r.body,
+          keywords: r.keywords,
+          genres: r.genres,
+          categoryIds: r.categoryIds,
+          scope: r.scope,
+        },
+      }),
+    })),
+  );
   const forced = [...taskRules, ...belongingRules].filter((r) => r.forced);
   const rows = items as unknown as Row[];
 
@@ -304,11 +255,11 @@ export async function ChecklistSection({
     reviewState?.sectionOrder ?? null,
     items.map((i) => i.kind),
   );
-  // 「この予定の失敗ログ」もリスト枠として並べ替え対象にする。
+  // 「未来の自分へ」もリスト枠として並べ替え対象にする。
   // まだ並べ替えたことがなければ、話して作るのすぐ下（先頭）に置く。
-  const orderedKeys = sections.includes(FAILURE_LOG_KEY)
+  const orderedKeys = sections.includes(FUTURE_MESSAGE_KEY)
     ? sections
-    : [FAILURE_LOG_KEY, ...sections];
+    : [FUTURE_MESSAGE_KEY, ...sections];
 
   // ユーザーが足した枠（買うもの等）の名前付きリストも、その枠名が一致すれば拾う
   // （組み込みの2枠に限らない。「引き出す」も別枠として独立させるため）。
@@ -333,11 +284,17 @@ export async function ChecklistSection({
 
   return (
     <>
-      {/* 「過去に失敗の記録があります」の警告はやめて、ページ上部の失敗ログ提案に一本化。
-          終わった予定の振り返り（今回はどうでしたか？）だけ残す。 */}
-      {warning && warning.isPast && (
-        <div id="failure-review" className="scroll-mt-4">
-          <WarningPanel warning={warning} />
+      {reviewCards.length > 0 && (
+        <div id="message-review" className="scroll-mt-4 space-y-4">
+          {reviewCards.map(({ review, proposal }) => (
+            <MessageReviewCard
+              key={review.linkId}
+              linkId={review.linkId}
+              eventTitle={review.eventTitle}
+              categoryOptions={categories}
+              proposal={proposal}
+            />
+          ))}
         </div>
       )}
 
@@ -365,7 +322,7 @@ export async function ChecklistSection({
               連携時に取り込んだ予定です。準備リストはまだ作っていません
               <InfoHint id="checklist-generate-existing">
                 自分で予定に入れる前からあった予定は、開いても自動では作りません。
-                このボタンを押すと、今この場で準備リスト・考えられる失敗を作ります。
+                このボタンを押すと、今この場で準備リストを作り、未来の自分へのメッセージとの一致も確認します。
               </InfoHint>
             </p>
             <form action={generateChecklistForEvent}>
@@ -393,12 +350,12 @@ export async function ChecklistSection({
         <SectionList
           eventId={event.id}
           entries={orderedKeys.map((key): SectionEntry => {
-            if (key === FAILURE_LOG_KEY) {
+            if (key === FUTURE_MESSAGE_KEY) {
               return {
                 key,
-                label: "考えられる失敗",
+                label: "未来の自分へ",
                 builtin: true, // 名前変更・削除はさせない
-                node: failureLogNode,
+                node: futureMessageNode,
               };
             }
             const builtin = isBuiltinSection(key);

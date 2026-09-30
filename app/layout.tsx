@@ -4,14 +4,13 @@ import Link from "next/link";
 import "./globals.css";
 import { getSessionUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { reviewPendingFailureWhere } from "@/lib/failures";
+import { pendingMessageReviewWhere } from "@/lib/future-messages";
 import { APP_NAME, APP_TAGLINE, APP_DESCRIPTION } from "@/lib/app-info";
 import { FeedbackWidget } from "@/app/components/feedback-widget";
 import { LogoutButton } from "@/app/components/logout-button";
 import { SwRegister } from "@/app/components/sw-register";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { LiveSync } from "@/app/components/live-sync";
-import { PreventGoals } from "@/app/components/prevent-goals";
 import { Tutorial } from "@/app/components/tutorial";
 import { PageCoach } from "@/app/components/page-coach";
 import { NotifyNag } from "@/app/components/notify-nag";
@@ -80,7 +79,7 @@ export default async function RootLayout({
   const uid = await getSessionUserId();
   const isLoggedIn = uid !== null;
 
-  // 「結果記録待ち」の失敗ログ数（ナビにドットを出す）。1 件の軽い count。
+  // 「結果記録待ち」のメッセージ数（ナビにドットを出す）。1 件の軽い count。
   let pendingReview = 0;
   let tutorialDone = false;
   let hasPushSubscription = false;
@@ -90,7 +89,7 @@ export default async function RootLayout({
       // 予定が「終わっている」= (endDatetime ?? eventDatetime) <= now。
       // 以前は eventDatetime だけで判定していたため、開始済みだが未終了の予定
       // （長い予定・終日予定など）で「ドットは出るのに操作対象が無い」状態になっていた。
-      prisma.failureLog.count({ where: reviewPendingFailureWhere(uid) }),
+      prisma.eventFutureMessage.count({ where: pendingMessageReviewWhere(uid) }),
       prisma.user.findUnique({
         where: { id: uid },
         select: { tutorialSeenAt: true },
@@ -108,7 +107,6 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <SwRegister />
         {isLoggedIn ? <LiveSync /> : null}
-        {isLoggedIn ? <PreventGoals /> : null}
         {isLoggedIn ? <Tutorial tutorialDone={tutorialDone} /> : null}
         {isLoggedIn ? <PageCoach tutorialDone={tutorialDone} /> : null}
         {isLoggedIn ? (
@@ -135,7 +133,7 @@ export default async function RootLayout({
               <nav className="hidden items-center gap-1 text-sm sm:flex">
                 {[
                   ["/events", "予定"],
-                  ["/failures", "失敗ログ"],
+                  ["/failures", "未来の自分へ"],
                   ["/savings", "マニュアル"],
                   ["/settings", "設定"],
                 ].map(([href, label]) => (

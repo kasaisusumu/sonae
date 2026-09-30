@@ -16,10 +16,6 @@ import { LeafBody, type LeafItem, type LeafSectionData } from "./leaf-body";
 import { TemplatesGroup } from "./templates-panel";
 import { DeleteCategoryButton } from "./tree-delete-button";
 import { trackEvent } from "@/lib/track";
-import {
-  FailureListEditor,
-  type FLRow,
-} from "@/app/events/[id]/failure-list-editor";
 
 function Keywords({ words }: { words: string[] }) {
   if (words.length === 0) return null;
@@ -108,20 +104,10 @@ function EventLeaf({
           <span className="ml-1 font-normal text-muted">
             {leaf.situationLabel}
           </span>
-          {leaf.failures.length > 0 && (
-            <span className="ml-1 text-warn">⚠{leaf.failures.length}</span>
-          )}
           <Keywords words={leaf.keywords} />
         </>
       }
     >
-      {/* 失敗ログは一番上に。予定詳細と同じ形式でその場編集・追加できる。 */}
-      <FailureListEditor
-        eventId={leaf.eventId}
-        label="失敗ログ"
-        variant="warn"
-        initial={leaf.failures satisfies FLRow[]}
-      />
       {leaf.mergedCount > 1 && !leaf.cleared && (
         <p className="mb-2 mt-3 flex items-center gap-1 text-[11px] text-muted">
           同じ名前の未編集 {leaf.mergedCount} 件をまとめて編集

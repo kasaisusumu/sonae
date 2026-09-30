@@ -68,8 +68,8 @@ function Visual({ id }: { id: string }): ReactNode {
 --- ${APP_NAME} ---
 準備リスト: https://…
 
-【予想される失敗】
-⚠ 集合時間に遅刻した
+【未来の自分へ】
+💌 前回のギブアンドテイクを忘れない
 
 【持ち物】 1/3
 ☑ 充電器（1日前）
@@ -179,19 +179,6 @@ function Visual({ id }: { id: string }): ReactNode {
           </span>
         </div>
       );
-    case "failure":
-      return (
-        <div className="space-y-1 rounded-lg border border-warn/30 bg-warn-soft p-3 text-xs">
-          <p className="font-medium text-warn">こんな失敗もあり得ます</p>
-          <p className="text-muted">集合時間に遅刻した</p>
-          <div className="flex flex-wrap gap-2 text-[10px] text-muted">
-            <span>◯まだ</span>
-            <span>◯防げた</span>
-            <span>◯防げなかった</span>
-            <span>◯今回は関係ない</span>
-          </div>
-        </div>
-      );
     case "done":
       return <div className="py-2 text-center text-5xl">🎉</div>;
   }
@@ -210,14 +197,9 @@ export function Tutorial({ tutorialDone = false }: { tutorialDone?: boolean }) {
     };
     window.addEventListener(EVENT, show);
     try {
-      // 「防ぎたい失敗」の初回プロンプトが先。それが終わってから自動表示する
-      //（終了時に mm:open-tutorial を投げてくれる）。手動再生は EVENT で常に可能。
-      // 完了状態はサーバー側でも持つ（PWA でも再表示しないため）。
-      if (
-        !tutorialDone &&
-        !localStorage.getItem(KEY) &&
-        localStorage.getItem("mm_prevent_goals_v1")
-      ) {
+      // ログイン直後、最初に出す案内。完了状態はサーバー側でも持つ
+      //（PWA でも再表示しないため）。手動再生は EVENT で常に可能。
+      if (!tutorialDone && !localStorage.getItem(KEY)) {
         queueMicrotask(show);
       }
     } catch {

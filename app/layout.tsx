@@ -35,6 +35,11 @@ export const metadata: Metadata = {
   title: pageTitle,
   description: APP_DESCRIPTION,
   manifest: "/manifest.webmanifest",
+  // テスト環境（NOINDEX=true）は検索に出したくない（ユーザー指定）。robots.ts の
+  // クロール拒否と合わせて、ページ単位の noindex も付ける（二重の対策）。
+  ...(process.env.NOINDEX === "true"
+    ? { robots: { index: false, follow: false } }
+    : {}),
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

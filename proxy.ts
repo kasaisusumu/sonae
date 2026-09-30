@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-// lib/session.ts は prisma などを読み込むため middleware(Edge) からは import しない。
-// 定数だけここに持つ（値は lib/session.ts と一致させること）。
+// lib/session.ts は prisma などを読み込むため proxy（旧 middleware。Next.js 16 で改名。
+// 既定で Node.js ランタイムだが、prisma 等の重い依存は持ち込まない方針は変わらず）から
+// import しない。定数だけここに持つ（値は lib/session.ts と一致させること）。
 const COOKIE_NAME = "sonae_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 180; // 180 日
 
@@ -11,7 +12,7 @@ const SESSION_MAX_AGE = 60 * 60 * 24 * 180; // 180 日
  * → 明示的にログアウトしない限り勝手にログアウトされず、データは常に同じアカウントに紐づく。
  * 署名の検証は読み取り時（lib/session）に行うので、ここでは値をそのまま延長するだけ。
  */
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const res = NextResponse.next();
   const current = req.cookies.get(COOKIE_NAME)?.value;
   if (current) {

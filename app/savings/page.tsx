@@ -94,6 +94,7 @@ function EventLeaf({
         isDone: it.isDone,
         isUserAdded: it.isUserAdded,
         notifyLeadMinutes: it.notifyLeadMinutes,
+        scope: it.scope,
       }))
       // 未チェックを上・チェック済みを下（安定ソート）
       .sort((a, b) => (a.isDone ? 1 : 0) - (b.isDone ? 1 : 0)),

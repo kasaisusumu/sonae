@@ -16,6 +16,7 @@ export interface LeafItem {
   isDone: boolean;
   isUserAdded: boolean;
   notifyLeadMinutes: number | null;
+  scope?: { scope: string; status: string; reason: string | null } | null;
 }
 
 export interface LeafSectionData {

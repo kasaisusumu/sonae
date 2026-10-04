@@ -8,6 +8,7 @@ import {
   WILDCARD_SIGNATURE,
 } from "@/lib/signature";
 import { resolveSections, sectionLabel } from "@/lib/sections";
+import { normTitle } from "@/lib/text-norm";
 import { classifyItemPattern } from "@/lib/pattern-classify";
 import {
   LINKED_MESSAGE_STATUSES,
@@ -499,6 +500,8 @@ export interface LeafListItem {
   isDone: boolean;
   isUserAdded: boolean;
   notifyLeadMinutes: number | null;
+  /** 次回の出し方（範囲）。予定詳細と同じ表示・選び直しに使う。指定が無ければ null（自動）。 */
+  scope: { scope: string; status: string; reason: string | null } | null;
 }
 
 export interface LeafSection {
@@ -747,6 +750,11 @@ export async function getLearningNameTree(userId: string): Promise<{
               isUserAdded: true,
             },
           },
+          // 項目ごとの次回の出し方（予定詳細と同じ行を、学習内容の画面でも直せるように）
+          eventChecklistScopes: {
+            where: { action: "include", status: { not: "dropped" } },
+            select: { kind: true, normTitle: true, scope: true, status: true, reason: true },
+          },
         },
       },
     },
@@ -768,6 +776,9 @@ export async function getLearningNameTree(userId: string): Promise<{
       const root: RawNode = { children: new Map(), leaves: [] };
 
       for (const ev of c.events) {
+        const scopeByKey = new Map(
+          ev.eventChecklistScopes.map((r) => [`${r.kind}:${r.normTitle}`, r]),
+        );
         const toItem = (i: {
           id: string;
           title: string;
@@ -775,12 +786,16 @@ export async function getLearningNameTree(userId: string): Promise<{
           isDone: boolean;
           isUserAdded: boolean;
           notifyLeadMinutes: number | null;
-        }): LeafListItem => ({
+        }, kind: string): LeafListItem => ({
           id: i.id,
           title: i.title,
           comment: i.comment,
           isDone: i.isDone,
           isUserAdded: i.isUserAdded,
+          scope: (() => {
+            const r = scopeByKey.get(`${kind}:${normTitle(i.title)}`);
+            return r ? { scope: r.scope, status: r.status, reason: r.reason } : null;
+          })(),
           notifyLeadMinutes: i.notifyLeadMinutes,
         });
 
@@ -791,7 +806,7 @@ export async function getLearningNameTree(userId: string): Promise<{
             label: sectionLabel(key),
             items: ev.checklistItems
               .filter((i) => i.kind === key)
-              .map(toItem),
+              .map((i) => toItem(i, key)),
           }))
           // 組み込みの2枠は常に表示。ユーザーが足した枠は項目があるときだけ。
           .filter(

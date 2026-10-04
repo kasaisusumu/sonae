@@ -625,23 +625,43 @@ export interface EventMessageRow {
   matchedBy: MatchedBy;
   matchReason: string | null;
   confirmedCount: number;
+  eventTitle: string;
+  /** 予定が済んでいるか（振り返りを開けるかの判定。pendingMessageReviewWhere と同じ意味）。 */
+  eventEnded: boolean;
+}
+
+export interface EventInfoForMessage {
+  id: string;
+  title: string;
+  endDatetime: Date | null;
+  eventDatetime: Date;
+}
+
+/** 予定が済んでいるか（終了日時、無ければ開始日時を過ぎたら済み）。pendingMessageReviewWhere と同じ条件。 */
+export function isEventEnded(ev: EventInfoForMessage, now: Date = new Date()): boolean {
+  return (ev.endDatetime ?? ev.eventDatetime) <= now;
 }
 
 /** 予定に結びついたメッセージ（予定詳細・学習内容の両方で編集できるよう、確定後・スキップ後も含める）。 */
 export const LINKED_MESSAGE_STATUSES = ["shown", "confirmed", "skipped"] as const;
 
-export function toEventMessageRow(l: {
-  id: string;
-  eventId: string;
-  status: string;
-  matchedBy: string;
-  matchReason: string | null;
-  message: Parameters<typeof toRow>[0];
-}): EventMessageRow {
+export function toEventMessageRow(
+  l: {
+    id: string;
+    status: string;
+    matchedBy: string;
+    matchReason: string | null;
+    message: Parameters<typeof toRow>[0];
+  },
+  ev: EventInfoForMessage,
+  now: Date = new Date(),
+): EventMessageRow {
   const m = toRow(l.message);
   return {
     id: l.id,
-    eventId: l.eventId,
+    eventId: ev.id,
+    eventTitle: ev.title,
+    eventEnded: isEventEnded(ev, now),
     messageId: m.id,
     body: m.body,
     keywords: m.keywords,
@@ -661,10 +681,13 @@ export async function getMessagesForEvent(
 ): Promise<EventMessageRow[]> {
   const links = await prisma.eventFutureMessage.findMany({
     where: { eventId, userId, status: { in: [...LINKED_MESSAGE_STATUSES] } },
-    include: { message: true },
+    include: {
+      message: true,
+      event: { select: { id: true, title: true, endDatetime: true, eventDatetime: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
-  return links.map(toEventMessageRow);
+  return links.map((l) => toEventMessageRow(l, l.event));
 }
 
 /** 予定詳細の「＋ 追加」＝新規メッセージを作って、この予定にも結びつける。 */
@@ -841,6 +864,31 @@ export async function confirmMessageReview(
     }),
   ]);
   return link;
+}
+
+/** 振り返りカードの提案（AI）を作るための、現在の値と予定の情報。自分のリンクだけ返す。 */
+export async function getLinkForReview(userId: string, linkId: string) {
+  const link = await prisma.eventFutureMessage.findFirst({
+    where: { id: linkId, userId },
+    include: {
+      message: true,
+      event: { select: { title: true, memo: true, categoryId: true } },
+    },
+  });
+  if (!link) return null;
+  const m = toRow(link.message);
+  return {
+    eventTitle: link.event.title,
+    eventMemo: link.event.memo,
+    categoryId: link.event.categoryId,
+    current: {
+      body: m.body,
+      keywords: m.keywords,
+      genres: m.genres,
+      categoryIds: m.categoryIds,
+      scope: m.scope,
+    },
+  };
 }
 
 /** 「今回は更新しない」。scope は変えない。 */

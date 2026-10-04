@@ -718,6 +718,8 @@ export async function getLearningNameTree(userId: string): Promise<{
           listCustomized: true,
           listCleared: true,
           sectionOrder: true,
+          endDatetime: true,
+          eventDatetime: true,
           futureMessageLinks: {
             where: { status: { in: [...LINKED_MESSAGE_STATUSES] } },
             include: { message: true },
@@ -805,7 +807,12 @@ export async function getLearningNameTree(userId: string): Promise<{
           keywords: evKw.get(ev.id) ?? [],
           sections,
           messages: ev.futureMessageLinks.map((l) =>
-            toEventMessageRow({ ...l, eventId: ev.id }),
+            toEventMessageRow(l, {
+              id: ev.id,
+              title: ev.title,
+              endDatetime: ev.endDatetime,
+              eventDatetime: ev.eventDatetime,
+            }),
           ),
         };
 

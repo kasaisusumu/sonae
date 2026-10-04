@@ -44,8 +44,10 @@ import {
   removeMessageFromEvent,
   confirmMessageReview,
   skipMessageReview,
+  getLinkForReview,
 } from "@/lib/future-messages";
 import {
+  buildMessageProposal,
   recordProposalOutcome,
   type ProposalFields as MessageProposalFields,
   type MessageFields,
@@ -1299,6 +1301,25 @@ export async function saveDictatedMessages(input: {
   }
   revalidateAppViews(eventId ?? undefined);
   return { ok: true, added: cleanItems.length };
+}
+
+/**
+ * 済んだ予定・学習内容から振り返りを開いたときの提案（AI）を作る。
+ * 開いたときだけ呼ぶ（一覧の描画ごとに AI を呼ばないため）。自分のリンクだけ扱う。
+ */
+export async function loadMessageProposalAction(
+  linkId: string,
+): Promise<MessageProposalFields | null> {
+  const userId = await requireUserId();
+  const link = await getLinkForReview(userId, linkId);
+  if (!link) return null;
+  return buildMessageProposal({
+    userId,
+    eventTitle: link.eventTitle,
+    eventMemo: link.eventMemo,
+    categoryId: link.categoryId,
+    current: link.current,
+  });
 }
 
 /** 予定後の確定カード：「この内容で確定」／項目ごとの修正後に確定する。 */

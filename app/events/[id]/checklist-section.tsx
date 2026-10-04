@@ -213,6 +213,8 @@ export async function ChecklistSection({
           scope: m.scope,
           status: m.status,
           matchReason: m.matchReason,
+          eventTitle: m.eventTitle,
+          eventEnded: m.eventEnded,
         }),
       )}
     />

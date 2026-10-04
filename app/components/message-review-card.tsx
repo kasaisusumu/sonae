@@ -33,11 +33,17 @@ export function MessageReviewCard({
   eventTitle,
   categoryOptions,
   proposal,
+  allowSkip = true,
+  onClose,
 }: {
   linkId: string;
   eventTitle: string;
   categoryOptions: { id: string; name: string }[];
   proposal: ReviewProposal;
+  /** 予定後の確定待ち（一覧）では「今回は更新しない」を出す。済んだ予定からの振り返りでは出さない。 */
+  allowSkip?: boolean;
+  /** 指定すると「閉じる」を出す（振り返りを開いた場所から畳めるように）。 */
+  onClose?: () => void;
 }) {
   const [body, setBody] = useState(proposal.body);
   const [keywords, setKeywords] = useState(proposal.keywords.join("、"));
@@ -88,10 +94,21 @@ export function MessageReviewCard({
 
   if (done) {
     return (
-      <div className="rounded-2xl border border-border bg-surface p-4 text-sm text-muted">
-        {done === "confirmed"
-          ? `「${eventTitle}」のメッセージを更新しました。`
-          : `「${eventTitle}」は今回は更新しませんでした。`}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-surface p-4 text-sm text-muted">
+        <span>
+          {done === "confirmed"
+            ? `「${eventTitle}」のメッセージを更新しました。`
+            : `「${eventTitle}」は今回は更新しませんでした。`}
+        </span>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-muted hover:border-foreground/40 hover:text-foreground"
+          >
+            閉じる
+          </button>
+        )}
       </div>
     );
   }
@@ -232,14 +249,26 @@ export function MessageReviewCard({
         >
           この内容で確定
         </button>
-        <button
-          type="button"
-          onClick={skip}
-          disabled={pending}
-          className="rounded-lg border border-border bg-surface px-3.5 py-2 text-sm text-muted hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
-        >
-          今回は更新しない
-        </button>
+        {allowSkip && (
+          <button
+            type="button"
+            onClick={skip}
+            disabled={pending}
+            className="rounded-lg border border-border bg-surface px-3.5 py-2 text-sm text-muted hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
+          >
+            今回は更新しない
+          </button>
+        )}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={pending}
+            className="rounded-lg border border-border bg-surface px-3.5 py-2 text-sm text-muted hover:border-foreground/40 hover:text-foreground disabled:opacity-50"
+          >
+            閉じる
+          </button>
+        )}
       </div>
     </section>
   );

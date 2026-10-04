@@ -7,6 +7,7 @@ import {
 } from "@/app/actions";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
+import { ReopenableReview } from "@/app/components/message-review-reopen";
 
 /**
  * 予定に結びついた「未来の自分へ」1 件ぶん。予定詳細・学習内容（マニュアル）の両方で
@@ -23,6 +24,9 @@ export type EMRow = {
   scope: string;
   status: string;
   matchReason: string | null;
+  eventTitle: string;
+  /** 予定が済んでいるか。済んでいれば振り返り（AI 提案つき）をいつでも開ける。 */
+  eventEnded: boolean;
 };
 
 export type CategoryOption = { id: string; name: string };
@@ -196,6 +200,15 @@ export function FutureMessageRows({
                 {r.matchReason && `${r.matchReason} ・ `}
                 {SCOPE_LABEL[r.scope] ?? r.scope}
               </p>
+            )}
+            {r.eventEnded && (
+              <div className="mt-1">
+                <ReopenableReview
+                  linkId={r.id}
+                  eventTitle={r.eventTitle}
+                  categoryOptions={categoryOptions}
+                />
+              </div>
             )}
             {open && (
               <div className="mt-1.5 space-y-1 rounded-lg bg-background/60 p-2">

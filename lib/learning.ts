@@ -9,6 +9,11 @@ import {
 } from "@/lib/signature";
 import { resolveSections, sectionLabel } from "@/lib/sections";
 import { classifyItemPattern } from "@/lib/pattern-classify";
+import {
+  LINKED_MESSAGE_STATUSES,
+  toEventMessageRow,
+  type EventMessageRow,
+} from "@/lib/future-messages";
 
 export type RuleType =
   | "exclude_item"
@@ -502,6 +507,9 @@ export interface LeafSection {
   items: LeafListItem[];
 }
 
+/** 葉の予定に結びついた「未来の自分へ」（学習内容の画面から編集できる）。 */
+export type LeafMessage = EventMessageRow;
+
 /** 樹形図の葉 = 実際に学習した予定（内容が同じものはまとめて 1 つ） */
 export interface NameTreeLeaf {
   eventId: string; // 代表（最新）の予定
@@ -514,6 +522,8 @@ export interface NameTreeLeaf {
   sections: LeafSection[];
   /** この予定は準備リストを空にしている（「内容なし」として学習）。 */
   cleared: boolean;
+  /** まとめた予定ぜんぶに結びついた「未来の自分へ」。 */
+  messages: LeafMessage[];
 }
 
 /** 樹形図の枝 = 予定名の語による分岐 */
@@ -582,6 +592,7 @@ interface RawLeaf {
   cleared: boolean; // 準備リストを空にしている（「内容なし」）
   keywords: string[];
   sections: LeafSection[];
+  messages: LeafMessage[];
 }
 
 type RawNode = { children: Map<string, RawNode>; leaves: RawLeaf[] };
@@ -627,6 +638,7 @@ function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
         keywords: rep.keywords,
         sections: rep.sections,
         cleared: rep.cleared,
+        messages: g.flatMap((x) => x.messages),
       } satisfies NameTreeLeaf;
     })
     .sort((a, b) => (a.title < b.title ? -1 : a.title > b.title ? 1 : 0));
@@ -706,6 +718,11 @@ export async function getLearningNameTree(userId: string): Promise<{
           listCustomized: true,
           listCleared: true,
           sectionOrder: true,
+          futureMessageLinks: {
+            where: { status: { in: [...LINKED_MESSAGE_STATUSES] } },
+            include: { message: true },
+            orderBy: { createdAt: "asc" },
+          },
           feature: {
             select: {
               isOverseas: true,
@@ -787,6 +804,9 @@ export async function getLearningNameTree(userId: string): Promise<{
           cleared: ev.listCleared,
           keywords: evKw.get(ev.id) ?? [],
           sections,
+          messages: ev.futureMessageLinks.map((l) =>
+            toEventMessageRow({ ...l, eventId: ev.id }),
+          ),
         };
 
         const path = orderKeywords(evKw.get(ev.id) ?? [], freq);

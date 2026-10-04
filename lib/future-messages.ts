@@ -613,15 +613,46 @@ async function rematchMessageAgainstUpcomingEvents(
 
 export interface EventMessageRow {
   id: string; // EventFutureMessage.id
+  eventId: string;
   messageId: string;
   body: string;
   keywords: string[];
   genres: string[];
   categoryIds: string[];
   scope: string;
+  /** shown=これから出す / confirmed=予定後に確定済み / skipped=今回は更新しなかった */
+  status: string;
   matchedBy: MatchedBy;
   matchReason: string | null;
   confirmedCount: number;
+}
+
+/** 予定に結びついたメッセージ（予定詳細・学習内容の両方で編集できるよう、確定後・スキップ後も含める）。 */
+export const LINKED_MESSAGE_STATUSES = ["shown", "confirmed", "skipped"] as const;
+
+export function toEventMessageRow(l: {
+  id: string;
+  eventId: string;
+  status: string;
+  matchedBy: string;
+  matchReason: string | null;
+  message: Parameters<typeof toRow>[0];
+}): EventMessageRow {
+  const m = toRow(l.message);
+  return {
+    id: l.id,
+    eventId: l.eventId,
+    messageId: m.id,
+    body: m.body,
+    keywords: m.keywords,
+    genres: m.genres,
+    categoryIds: m.categoryIds,
+    scope: m.scope,
+    status: l.status,
+    matchedBy: l.matchedBy as MatchedBy,
+    matchReason: l.matchReason,
+    confirmedCount: m.confirmedCount,
+  };
 }
 
 export async function getMessagesForEvent(
@@ -629,25 +660,11 @@ export async function getMessagesForEvent(
   userId: string,
 ): Promise<EventMessageRow[]> {
   const links = await prisma.eventFutureMessage.findMany({
-    where: { eventId, userId, status: "shown" },
+    where: { eventId, userId, status: { in: [...LINKED_MESSAGE_STATUSES] } },
     include: { message: true },
     orderBy: { createdAt: "asc" },
   });
-  return links.map((l) => {
-    const m = toRow(l.message);
-    return {
-      id: l.id,
-      messageId: m.id,
-      body: m.body,
-      keywords: m.keywords,
-      genres: m.genres,
-      categoryIds: m.categoryIds,
-      scope: m.scope,
-      matchedBy: l.matchedBy as MatchedBy,
-      matchReason: l.matchReason,
-      confirmedCount: m.confirmedCount,
-    };
-  });
+  return links.map(toEventMessageRow);
 }
 
 /** 予定詳細の「＋ 追加」＝新規メッセージを作って、この予定にも結びつける。 */

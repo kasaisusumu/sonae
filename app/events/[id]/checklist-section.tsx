@@ -153,22 +153,6 @@ export async function ChecklistSection({
     await ensureFutureMessageMatchesForEvent(event.id, { allowAi: true });
   }
   const linkedMessages = await getMessagesForEvent(event.id, event.userId);
-  const futureMessageNode = (
-    <FutureMessageEditor
-      eventId={event.id}
-      initial={linkedMessages.map(
-        (m): EMRow => ({
-          id: m.id,
-          messageId: m.messageId,
-          body: m.body,
-          keywords: m.keywords,
-          genres: m.genres,
-          scope: m.scope,
-          matchReason: m.matchReason,
-        }),
-      )}
-    />
-  );
 
   const feature = extractEventFeature({
     title: event.title,
@@ -212,6 +196,27 @@ export async function ChecklistSection({
       select: { id: true, kind: true, slot: true, data: true, width: true, height: true },
     }),
   ]);
+  // 結びついたメッセージ（確定後・スキップ後も含む）は、予定詳細からいつでも編集できる。
+  const futureMessageNode = (
+    <FutureMessageEditor
+      eventId={event.id}
+      categoryOptions={categories}
+      initial={linkedMessages.map(
+        (m): EMRow => ({
+          id: m.id,
+          eventId: m.eventId,
+          messageId: m.messageId,
+          body: m.body,
+          keywords: m.keywords,
+          genres: m.genres,
+          categoryIds: m.categoryIds,
+          scope: m.scope,
+          status: m.status,
+          matchReason: m.matchReason,
+        }),
+      )}
+    />
+  );
   const reviewCards = await Promise.all(
     pendingReviews.map(async (r) => ({
       review: r,

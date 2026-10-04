@@ -33,6 +33,13 @@
   /* グラフ専用アクセント（唯一、色を残す場所）。金額＝ティール／件数＝アンバー。 */
   --chart-amount: #0f766e;
   --chart-count: #b45309;
+  /* 次回の出し方の 3 段階（チップ用。白黒基調の例外。ScopeChip だけで使う） */
+  --scope-event: #1d4ed8;
+  --scope-event-soft: #dbeafe;
+  --scope-genre: #15803d;
+  --scope-genre-soft: #dcfce7;
+  --scope-keyword: #7c3aed;
+  --scope-keyword-soft: #ede9fe;
 
   /* すりガラスのヘッダー用（不透明度モディファイアが効かない環境向けに実体トークン化） */
   --surface-translucent: color-mix(in srgb, var(--surface) 82%, transparent);
@@ -62,6 +69,12 @@
   --color-warn-soft: var(--warn-soft);
   --color-chart-amount: var(--chart-amount);
   --color-chart-count: var(--chart-count);
+  --color-scope-event: var(--scope-event);
+  --color-scope-event-soft: var(--scope-event-soft);
+  --color-scope-genre: var(--scope-genre);
+  --color-scope-genre-soft: var(--scope-genre-soft);
+  --color-scope-keyword: var(--scope-keyword);
+  --color-scope-keyword-soft: var(--scope-keyword-soft);
 
   --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);

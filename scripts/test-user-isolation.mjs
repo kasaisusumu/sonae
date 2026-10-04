@@ -16,6 +16,8 @@
  *      — lib/future-messages.ts の ensureFutureMessageMatchesForEvent
  *   ③ recallBaseChecklist（似た予定からの準備リスト再利用）の候補取得
  *      — lib/recall.ts の recallBaseChecklist
+ *   ④ 準備リストの範囲つきルール（ChecklistScopeRule）の取得
+ *      — lib/item-scope.ts の loadActiveScopeRules
  *
  * 安全装置:
  *   このスクリプトは書き込みを行うため、接続先が本番 DB でないことを
@@ -216,6 +218,39 @@ async function main() {
       "③ userB の「似た予定」再利用候補に userA の予定が出ない",
       candidatesForB.length === 0,
       `${candidatesForB.length}件見えてしまっている`,
+    );
+
+    // ── ④ 準備リストの範囲つきルール（ChecklistScopeRule）の取得 ──
+    // lib/item-scope.ts の loadActiveScopeRules(userId) と同じ where 条件
+    await prisma.checklistScopeRule.create({
+      data: {
+        userId: userA.id,
+        action: "include",
+        kind: "task",
+        normTitle: "確認用の項目",
+        title: "確認用の項目",
+        scope: "keyword",
+        keywords: JSON.stringify(["旅行"]),
+        sourceEventTitle: "ハワイ旅行",
+      },
+    });
+    const rulesForB = await prisma.checklistScopeRule.findMany({
+      where: { userId: userB.id, archivedAt: null },
+      select: { id: true },
+    });
+    check(
+      "④ userB の範囲ルール取得に userA のルールが出ない",
+      rulesForB.length === 0,
+      `${rulesForB.length}件見えてしまっている`,
+    );
+    const rulesForA = await prisma.checklistScopeRule.findMany({
+      where: { userId: userA.id, archivedAt: null },
+      select: { id: true },
+    });
+    check(
+      "④ （前提確認）userA 自身のルールは取得できる",
+      rulesForA.length === 1,
+      "テストデータの前提が崩れている可能性",
     );
 
     console.log(

@@ -52,6 +52,14 @@ import {
   type ProposalFields as MessageProposalFields,
   type MessageFields,
 } from "@/lib/message-proposal";
+import {
+  archiveScopeRule,
+  isAutoScopeDecision,
+  proposeScopesForSave,
+  setItemScope,
+  type ItemScope,
+  ITEM_SCOPES,
+} from "@/lib/item-scope";
 import { APP_NAME } from "@/lib/app-info";
 import { trackEvent } from "@/lib/track";
 import {
@@ -725,6 +733,43 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     });
   }
 
+  // 項目ごとの範囲（次回いつ出すか）を推奨・保存する。範囲が決まった項目は、
+  // 従来の自動学習（recordEdit）の対象から外す（「この予定だけ」は学習しない）。
+  // 失敗しても保存自体は済ませる（範囲はあとから直せる）。
+  let scopeDecided = new Map<string, ItemScope>();
+  if (removed.length > 0 || added.length > 0) {
+    try {
+      const cat = event.categoryId
+        ? await prisma.category.findUnique({
+            where: { id: event.categoryId },
+            select: { name: true },
+          })
+        : null;
+      scopeDecided = await proposeScopesForSave({
+        scope: {
+          userId,
+          eventId: event.id,
+          eventTitle: event.title,
+          eventMemo: event.memo,
+          categoryId: event.categoryId,
+          categoryName: cat?.name ?? "その他",
+          feature: extractEventFeature({
+            title: event.title,
+            memo: event.memo,
+            eventDatetime: event.eventDatetime,
+            endDatetime: event.endDatetime,
+          }),
+        },
+        kind: effectiveKind,
+        present: cleanItems.map((it) => it.title),
+        added: added.map((a) => a.title.trim()).filter(Boolean),
+        removed,
+      });
+    } catch (e) {
+      console.error("[saveChecklist] 範囲の推奨に失敗（保存は続行）", e);
+    }
+  }
+
   // ここから先（学習・同名グループ・説明欄同期）は「おまけ」。
   // 失敗しても保存自体は済んでいるので、500 にはせずログだけ残す。
   try {
@@ -744,11 +789,14 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
           eventDatetime: event.eventDatetime,
           endDatetime: event.endDatetime,
         }),
-        removed: uniq(removed),
+        removed: uniq(removed).filter((t) =>
+          isAutoScopeDecision(scopeDecided, "exclude", t),
+        ),
         added: added.filter(
           (a, i, arr) =>
             !!a.title.trim() &&
-            arr.findIndex((x) => x.title.trim() === a.title.trim()) === i,
+            arr.findIndex((x) => x.title.trim() === a.title.trim()) === i &&
+            isAutoScopeDecision(scopeDecided, "include", a.title),
         ),
         retimed: [],
         renotified,
@@ -1320,6 +1368,62 @@ export async function loadMessageProposalAction(
     categoryId: link.categoryId,
     current: link.current,
   });
+}
+
+/**
+ * 準備リストの項目の「次回いつ出すか」をチップから選び直す。
+ * 自分の予定の、いま残っている項目だけ対象にする。
+ */
+export async function setItemScopeAction(input: {
+  eventId: string;
+  kind: string;
+  title: string;
+  scope: string;
+}): Promise<{ ok: boolean }> {
+  const userId = await requireUserId();
+  const scope = (ITEM_SCOPES as readonly string[]).includes(input.scope)
+    ? (input.scope as ItemScope)
+    : null;
+  const title = String(input.title ?? "").trim();
+  if (!scope || !title) return { ok: false };
+
+  const event = await prisma.event.findFirst({
+    where: { id: input.eventId, userId },
+    include: { category: { select: { name: true } } },
+  });
+  if (!event) return { ok: false };
+
+  trackEvent(userId, "feature:item-scope-choose");
+  await setItemScope({
+    scope: {
+      userId,
+      eventId: event.id,
+      eventTitle: event.title,
+      eventMemo: event.memo,
+      categoryId: event.categoryId,
+      categoryName: event.category?.name ?? "その他",
+      feature: extractEventFeature({
+        title: event.title,
+        memo: event.memo,
+        eventDatetime: event.eventDatetime,
+        endDatetime: event.endDatetime,
+      }),
+    },
+    kind: String(input.kind || "task"),
+    title,
+    chosen: scope,
+  });
+  revalidateAppViews(event.id);
+  return { ok: true };
+}
+
+/** 範囲ルールを外す（学習内容の一覧から。確認ポップアップは画面側で出す）。 */
+export async function archiveScopeRuleAction(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  const ruleId = String(formData.get("ruleId") ?? "");
+  if (!ruleId) return;
+  await archiveScopeRule(userId, ruleId);
+  revalidateAppViews();
 }
 
 /** 予定後の確定カード：「この内容で確定」／項目ごとの修正後に確定する。 */

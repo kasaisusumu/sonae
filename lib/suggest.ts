@@ -6,6 +6,9 @@ import {
   type RecalledCustomSectionSeed,
 } from "@/lib/recall";
 import { parseLead } from "@/lib/lead-time";
+import { stripSonaeBlock } from "@/lib/description";
+import { applyScopeDecisions, resolveScopeRules } from "@/lib/scope-match";
+import { loadActiveScopeRules } from "@/lib/item-scope";
 import { matchEventToSlotType } from "@/lib/pattern-classify";
 import {
   getApplicableRules,
@@ -347,8 +350,32 @@ export async function buildChecklistForEvent(
     (it) => !existingKeys.has(`${it.kind}:${norm(it.title)}`),
   );
 
+  // 項目ごとの範囲つきルール（「この予定だけ」以外の指定）を最後に当てる。
+  // 範囲ルールは自動学習（LearnedRule）より優先する。
+  const scopeRules = await loadActiveScopeRules(event.userId);
+  const decisions = resolveScopeRules(scopeRules, {
+    text: `${event.title}\n${stripSonaeBlock(event.memo)}`,
+    categoryId: event.categoryId,
+    feature,
+  });
+  const items = applyScopeDecisions(
+    [...composed, ...dedupedPatternItems],
+    decisions,
+    (d): BuiltItem => ({
+      kind: d.kind,
+      title: d.title,
+      timingLabel: null,
+      notifyLeadMinutes: null,
+      isSuggested: false,
+      suggestionType: null,
+      suggestionRuleId: null,
+      suggestionValue: null,
+      priority: 1,
+    }),
+  );
+
   return {
-    items: [...composed, ...dedupedPatternItems],
+    items,
     customSectionSeeds: recalled?.customSectionSeeds ?? [],
   };
 }

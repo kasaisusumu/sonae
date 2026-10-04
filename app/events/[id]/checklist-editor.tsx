@@ -9,6 +9,7 @@ import {
   saveChecklist,
   saveListAsTemplate,
   setItemNotifyLead,
+  setItemScopeAction,
   toggleChecklistItemDone,
   trackFeatureUse,
 } from "@/app/actions";
@@ -17,6 +18,15 @@ import { InfoHint } from "@/app/components/info-hint";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { useFlushOnHide } from "@/app/components/use-flush-on-hide";
 import { ItemImages, Linkify, type ItemImage } from "./item-media";
+import { ScopeChip, SCOPE_CHOICES } from "@/app/components/scope-chip";
+import type { ItemScope } from "@/lib/item-scope";
+
+/** 項目の「次回の出し方」（範囲）。予定ごとの指定（EventChecklistScope）から来る。 */
+interface ScopeInfo {
+  scope: string;
+  status: string; // proposed | chosen
+  reason: string | null;
+}
 
 interface Item {
   key: string;
@@ -28,6 +38,7 @@ interface Item {
   notifyLeadMinutes: number | null; // 予定開始の何分前に通知するか。null = 通知なし
   notifyCustom: boolean; // カスタム入力（日・時・分）を出しているか（UIのみ）
   images: ItemImage[];
+  scope: ScopeInfo | null;
 }
 
 interface InitialItem {
@@ -38,6 +49,7 @@ interface InitialItem {
   isUserAdded: boolean;
   notifyLeadMinutes: number | null;
   images?: ItemImage[];
+  scope?: ScopeInfo | null;
 }
 
 const DEFAULT_LEAD = 180; // 3時間前
@@ -117,6 +129,7 @@ export function ChecklistEditor({
         notifyCustom:
           it.notifyLeadMinutes != null && !isLeadPreset(it.notifyLeadMinutes),
         images: it.images ?? [],
+        scope: it.scope ?? null,
       })),
     [initialItems],
   );
@@ -393,6 +406,7 @@ export function ChecklistEditor({
         notifyLeadMinutes: null,
         notifyCustom: false,
         images: [],
+        scope: null,
       },
     ]);
     setSaved(false);
@@ -424,6 +438,7 @@ export function ChecklistEditor({
         notifyLeadMinutes: null,
         notifyCustom: false,
         images: [],
+        scope: null,
       })),
     ];
     setItems(merged);
@@ -467,6 +482,32 @@ export function ChecklistEditor({
   const [tplName, setTplName] = useState("");
   const [applyId, setApplyId] = useState("");
   const [copyId, setCopyId] = useState("");
+  // 範囲を選び直した直後に、保存の反映を待たず表示を変えるための一時の値（項目の key ごと）
+  const [scopeOverride, setScopeOverride] = useState<Record<string, ItemScope>>({});
+
+  /** 画面に出す範囲（選び直した直後の一時の値を優先）。範囲の指定が無い項目は「自動」。 */
+  function shownScope(it: Item): ItemScope {
+    return scopeOverride[it.key] ?? ((it.scope?.scope as ItemScope) || "auto");
+  }
+  function shownStatus(it: Item): "chosen" | "proposed" {
+    if (scopeOverride[it.key]) return "chosen";
+    return it.scope?.status === "chosen" ? "chosen" : "proposed";
+  }
+
+  /** 項目の範囲を選び直す。未保存の編集を先に保存してから、この項目の範囲を保存する。 */
+  function chooseScope(it: Item, scope: ItemScope) {
+    setScopeOverride((prev) => ({ ...prev, [it.key]: scope }));
+    startTransition(async () => {
+      await flushPending();
+      await setItemScopeAction({
+        eventId,
+        kind,
+        title: it.title.trim(),
+        scope,
+      });
+      router.refresh();
+    });
+  }
 
   async function flushPending() {
     if (dirty) {
@@ -639,15 +680,25 @@ export function ChecklistEditor({
                   className="mt-1 h-5 w-5 shrink-0 accent-[var(--teal)]"
                   aria-label="完了"
                 />
-                <textarea
-                  value={it.title}
-                  onChange={(e) => update(it.key, { title: e.target.value })}
-                  rows={1}
-                  placeholder={`${kindLabel}を書く`}
-                  className={`min-w-0 flex-1 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg leading-snug [field-sizing:content] hover:border-border focus:border-border focus:bg-background ${
-                    it.isDone ? "text-muted line-through" : ""
-                  }`}
-                />
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <textarea
+                    value={it.title}
+                    onChange={(e) => update(it.key, { title: e.target.value })}
+                    rows={1}
+                    placeholder={`${kindLabel}を書く`}
+                    className={`block w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg leading-snug [field-sizing:content] hover:border-border focus:border-border focus:bg-background ${
+                      it.isDone ? "text-muted line-through" : ""
+                    }`}
+                  />
+                  {it.title.trim() && (
+                    <ScopeChip
+                      scope={shownScope(it)}
+                      status={shownStatus(it)}
+                      onClick={() => toggleOpen(it.key)}
+                      className="ml-1 max-w-full"
+                    />
+                  )}
+                </div>
                 {it.isUserAdded && (
                   <span className="mt-1.5 hidden shrink-0 rounded bg-accent-soft px-1 text-[10px] text-teal-dark sm:inline">
                     追加
@@ -690,6 +741,38 @@ export function ChecklistEditor({
               {/* 詳細（チップを押したときだけ）：通知タイミング・メモ・削除 */}
               {open && (
                 <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
+                  {/* 次回の出し方（範囲）。選ぶと、次に同じ条件の予定を作ったときの扱いが変わる */}
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-muted">次回の出し方</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SCOPE_CHOICES.map((sc) => {
+                        const selected = shownScope(it) === sc;
+                        return (
+                          <button
+                            key={sc}
+                            type="button"
+                            aria-pressed={selected}
+                            onClick={() => chooseScope(it, sc)}
+                            className={`rounded-full ${
+                              selected ? "ring-2 ring-foreground/30" : "opacity-70 hover:opacity-100"
+                            }`}
+                          >
+                            <ScopeChip
+                              scope={sc}
+                              status="chosen"
+                              className="pointer-events-none"
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11px] text-muted">
+                      {shownStatus(it) === "proposed"
+                        ? "AI の提案のまま適用中です。選び直すと、その内容になります。"
+                        : "選んだ内容で、次に同じ条件の予定を作ったときに扱います。"}
+                      {it.scope?.reason && `（${it.scope.reason}）`}
+                    </p>
+                  </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
                     <span className="shrink-0">通知</span>
                     <select

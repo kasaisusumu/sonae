@@ -3,6 +3,7 @@ import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ensureChecklistForEvent, normTitle } from "@/lib/checklist";
+import { loadEventScopeMap, type ItemScope } from "@/lib/item-scope";
 import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
@@ -50,6 +51,8 @@ type Row = {
   suggestionValue: string | null;
 };
 
+type ScopeEntry = { scope: ItemScope; status: string; reason: string | null };
+
 function KindBlock({
   eventId,
   kind,
@@ -58,6 +61,7 @@ function KindBlock({
   templates,
   pastEvents,
   imagesBySlot,
+  scopes,
 }: {
   eventId: string;
   kind: string;
@@ -66,6 +70,7 @@ function KindBlock({
   templates: TplOpt[];
   pastEvents: PastOpt[];
   imagesBySlot: Map<string, ItemImg[]>;
+  scopes: Map<string, ScopeEntry>;
 }) {
   const mine = rows.filter((r) => r.kind === kind);
   const normal = mine.filter((r) => !r.isSuggested);
@@ -86,6 +91,7 @@ function KindBlock({
           isUserAdded: c.isUserAdded,
           notifyLeadMinutes: c.notifyLeadMinutes,
           images: imagesBySlot.get(normTitle(c.title)) ?? [],
+          scope: scopes.get(`${kind}:${normTitle(c.title)}`) ?? null,
         }))}
       />
     </div>
@@ -282,6 +288,8 @@ export async function ChecklistSection({
         count: k === "belonging" ? e.belongingCount : e.taskCount,
       }))
       .filter((e) => e.count > 0);
+  // 項目ごとの「次回の出し方」（範囲）。項目の保存のたびに作り直されても、タイトルで引けるように。
+  const scopeMap = await loadEventScopeMap(event.userId, event.id);
   const unreviewed =
     !!reviewState &&
     !reviewState.listReviewedAt &&
@@ -381,6 +389,7 @@ export async function ChecklistSection({
                     builtin ? pastByKind(key as "task" | "belonging") : []
                   }
                   imagesBySlot={imagesByKind.get(key) ?? EMPTY_IMG_MAP}
+                  scopes={scopeMap}
                 />
               ),
             };

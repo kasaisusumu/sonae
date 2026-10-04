@@ -9,6 +9,7 @@ import {
 import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
+import { ScopeChip, messageScopeToItemScope } from "@/app/components/scope-chip";
 
 export type MLMessage = {
   id: string;
@@ -22,11 +23,6 @@ export type MLMessage = {
   upcomingEvents: { eventId: string; title: string; eventDatetime: Date }[];
 };
 
-const SCOPE_LABEL: Record<string, string> = {
-  keyword: "キーワード一致のみ",
-  similar: "似た予定で提案",
-  once: "今回だけ",
-};
 
 function EditableRow({
   m,
@@ -66,7 +62,7 @@ function EditableRow({
         <div className="min-w-0 flex-1">
           <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
           <p className="mt-1 text-xs text-muted">
-            {SCOPE_LABEL[m.scope] ?? m.scope}
+            <ScopeChip scope={messageScopeToItemScope(m.scope)} className="mr-1" />
             {m.confirmedCount > 0 ? ` ・ ${m.confirmedCount}回更新` : ""}
           </p>
         </div>

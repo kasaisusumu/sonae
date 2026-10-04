@@ -42,6 +42,7 @@ export const FEATURE_KEYS: TrackedKey[] = [
   { key: "feature:message-quick-record", label: "未来の自分へ: ひとこと記録する" },
   { key: "feature:message-dictation", label: "未来の自分へ: 話して記録する（音声入力）" },
   { key: "feature:message-review-confirm", label: "未来の自分へ: 確定カードで確定" },
+  { key: "feature:item-scope-choose", label: "準備リスト: 項目の次回の出し方を選び直す" },
 ];
 
 /** ⓘ（InfoHint）の説明ポップアップ。開かれた回数を数える。 */

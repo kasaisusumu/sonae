@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normTitle } from "@/lib/text-norm";
 import { buildChecklistForEvent, type BuiltItem } from "@/lib/suggest";
 import { syncEventDescription } from "@/lib/description-sync";
 import { parseLeads, stringifyLeads } from "@/lib/lead-time";
@@ -205,8 +206,7 @@ export async function applyLearnedListReminder(eventId: string): Promise<void> {
   });
 }
 
-export const normTitle = (s: string) =>
-  s.toLowerCase().replace(/\s+/g, "").trim();
+export { normTitle } from "@/lib/text-norm";
 
 /** ある予定のチェックリスト（提案含む全部）を、別の予定にそのままコピーする（AI 不要）。 */
 async function copyChecklistItems(

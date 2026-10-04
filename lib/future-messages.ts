@@ -67,7 +67,7 @@ function toHiragana(s: string): string {
 export function normalizeMatchText(s: string): string {
   return toHiragana(s.normalize("NFKC").toLowerCase());
 }
-function includesNorm(haystack: string, needle: string): boolean {
+export function includesNorm(haystack: string, needle: string): boolean {
   const n = needle.trim();
   if (!n) return false;
   return normalizeMatchText(haystack).includes(normalizeMatchText(n));

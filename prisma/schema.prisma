@@ -41,6 +41,8 @@ model User {
   futureMessages    FutureMessage[]
   eventFutureMessages EventFutureMessage[]
   messageProposalRecords MessageProposalRecord[]
+  checklistScopeRules ChecklistScopeRule[]
+  eventChecklistScopes EventChecklistScope[]
 }
 
 // Web Push の購読情報（1 ユーザーが複数端末を持てる）
@@ -171,6 +173,7 @@ model Event {
   checklistItemImages ChecklistItemImage[]
   futureMessageLinks EventFutureMessage[]
   messageProposalRecords MessageProposalRecord[]
+  eventChecklistScopes EventChecklistScope[]
 
   @@index([userId, recurringEventId])
   // 招待・共有された予定は Google 側で複数ユーザーの予定に同じ googleEventId が
@@ -520,4 +523,58 @@ model MessageProposalRecord {
 
   @@index([userId])
   @@index([messageId])
+}
+
+/// 準備リストの項目を「次回いつ出すか」の範囲つきルール（追加のみ・既存の LearnedRule とは別）。
+/// action: include（この条件の予定では出す）/ exclude（出さない）。
+/// scope: genre（ジャンル・カテゴリ）/ keyword（キーワード）/ similar（似た予定＝特徴の署名一致）。
+model ChecklistScopeRule {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action           String
+  kind             String
+  normTitle        String
+  title            String
+  scope            String
+  genres           String   @default("[]")
+  genreKeywords    String   @default("[]")
+  keywords         String   @default("[]")
+  categoryIds      String   @default("[]")
+  signature        String?
+  sourceEventId    String?
+  sourceEventTitle String?
+  reason           String?
+  archivedAt       DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  eventScopes      EventChecklistScope[]
+
+  @@index([userId, archivedAt])
+}
+
+/// 予定ごとの項目の範囲指定（項目は保存のたびに作り直されるため、(eventId, kind, normTitle) で持つ）。
+/// scope: auto（従来の自動学習）/ event_only（この予定だけ）/ genre / keyword / similar。
+/// status: proposed（AI の提案のまま適用中）/ chosen（ユーザーが選んだ）。
+model EventChecklistScope {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  kind      String
+  normTitle String
+  title     String
+  action    String
+  scope     String
+  ruleId    String?
+  rule      ChecklistScopeRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  reason    String?
+  source    String
+  status    String   @default("proposed")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, kind, normTitle])
+  @@index([userId])
 }

@@ -8,6 +8,7 @@ import {
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { ReopenableReview } from "@/app/components/message-review-reopen";
+import { ScopeChip, messageScopeToItemScope } from "@/app/components/scope-chip";
 
 /**
  * 予定に結びついた「未来の自分へ」1 件ぶん。予定詳細・学習内容（マニュアル）の両方で
@@ -30,12 +31,6 @@ export type EMRow = {
 };
 
 export type CategoryOption = { id: string; name: string };
-
-const SCOPE_LABEL: Record<string, string> = {
-  keyword: "キーワード一致のみ",
-  similar: "似た予定で提案",
-  once: "今回だけ",
-};
 
 /** 1 件ぶんの編集フォーム（本文・キーワード・ジャンル・カテゴリ・一致条件）＋この予定から外す。 */
 function RowEditForm({
@@ -198,7 +193,7 @@ export function FutureMessageRows({
                   </span>
                 )}
                 {r.matchReason && `${r.matchReason} ・ `}
-                {SCOPE_LABEL[r.scope] ?? r.scope}
+                <ScopeChip scope={messageScopeToItemScope(r.scope)} />
               </p>
             )}
             {r.eventEnded && (

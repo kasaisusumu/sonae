@@ -64,6 +64,10 @@ export async function GET(req: NextRequest) {
         tokenExpiry: expiryDate,
         // 書き込みスコープが許可されたら有効化（外れることはあっても勝手に無効化はしない）
         ...(canWriteEvents ? { writeDescriptionEnabled: true } : {}),
+        // 再接続で新しいトークンが来たので、取り込み失敗の表示は一旦消す
+        // （次の同期でまだ失敗するなら syncUserCalendar がまた立てる）。
+        syncError: null,
+        syncErrorAt: null,
       },
       create: {
         userId: user.id,

@@ -79,6 +79,10 @@ model UserGoogleAccount {
   // 予定の説明欄への準備リスト書き込み。既定 true（初回連携で calendar.events も要求）。
   // 設定でいつでもオフにできる。calendar.events 未許可なら書き込みは黙って失敗する。
   writeDescriptionEnabled Boolean @default(true)
+  // 直近の取り込みで失敗したか（例: "reauth_required" = Google 側でトークン失効・取り消し）。
+  // 成功した取り込みで null に戻す。設定画面で「再接続してください」の表示に使う。
+  syncError          String?
+  syncErrorAt        DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 }

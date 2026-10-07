@@ -9,6 +9,7 @@ import { classifyEventCategoriesBatch } from "@/lib/categorize-ai";
 import {
   fetchCalendarChanges,
   getCalendarClient,
+  isReauthRequiredError,
   type FetchedEvent,
 } from "@/lib/google";
 import { sendPushToUser } from "@/lib/push";
@@ -51,8 +52,23 @@ export async function syncUserCalendar(
   if (!account) throw new Error("Google アカウントが未接続です。");
 
   const isFirstSync = account.lastSyncedAt === null;
-  const { upserts, deletedIds, nextSyncToken } =
-    await fetchCalendarChanges(userId);
+  let fetched: Awaited<ReturnType<typeof fetchCalendarChanges>>;
+  try {
+    fetched = await fetchCalendarChanges(userId);
+  } catch (err) {
+    // 黙って毎回失敗し続けるのを防ぐ: Google 側のトークン失効は、設定画面に
+    // 「再接続してください」として出す（コード側では直せないため）。
+    if (isReauthRequiredError(err)) {
+      await prisma.userGoogleAccount
+        .update({
+          where: { userId },
+          data: { syncError: "reauth_required", syncErrorAt: new Date() },
+        })
+        .catch(() => {});
+    }
+    throw err;
+  }
+  const { upserts, deletedIds, nextSyncToken } = fetched;
 
   const now = Date.now();
   const inWindow = (ev: FetchedEvent) => {
@@ -245,6 +261,8 @@ export async function syncUserCalendar(
     where: { userId },
     data: {
       lastSyncedAt: new Date(),
+      syncError: null,
+      syncErrorAt: null,
       ...(nextSyncToken ? { syncToken: nextSyncToken } : {}),
     },
   });

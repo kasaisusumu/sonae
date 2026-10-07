@@ -165,8 +165,14 @@ export async function syncCalendar(): Promise<void> {
   if (!account) redirect("/settings");
 
   trackEvent(userId, "feature:calendar-manual-sync");
-  await syncAndNotify(userId);
-  await ensureWatch(userId).catch(() => {});
+  try {
+    await syncAndNotify(userId);
+    await ensureWatch(userId).catch(() => {});
+  } catch (e) {
+    // Google 側のトークン失効など、コード側では直せない失敗はここで止める。
+    // 設定画面に「再接続してください」を出す（syncUserCalendar が syncError を保存する）。
+    console.error("[syncCalendar] userId=%s", userId, e);
+  }
 
   revalidatePath("/events");
   revalidatePath("/");

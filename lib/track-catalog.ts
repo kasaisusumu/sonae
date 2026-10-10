@@ -50,6 +50,7 @@ export const INFOHINT_KEYS: TrackedKey[] = [
   { key: "infohint:savings-merge-group", label: "マニュアル: 同じ名前をまとめて編集" },
   { key: "infohint:savings-cleared", label: "マニュアル: 準備リストは空" },
   { key: "infohint:savings-intro", label: "マニュアル: ページの説明" },
+  { key: "infohint:savings-templates-intro", label: "マニュアル: 名前付きマニュアルの説明" },
   { key: "infohint:failures-intro", label: "未来の自分へ: ページの説明" },
   { key: "infohint:failures-quick-record", label: "未来の自分へ: メッセージを書く" },
   { key: "infohint:failures-review-queue", label: "未来の自分へ: 結果を記録しよう" },

@@ -7,6 +7,7 @@ import {
 import type { TemplateDetail } from "@/lib/templates";
 import { sectionLabel } from "@/lib/sections";
 import { ConfirmButton } from "@/app/components/confirm-button";
+import { InfoHint } from "@/app/components/info-hint";
 import { TemplateEditor } from "./template-editor";
 import { CopyTemplateButton } from "./copy-template-button";
 import { NewTemplateForm } from "./new-template-form";
@@ -106,12 +107,14 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
 export function TemplatesGroup({ templates }: { templates: TemplateDetail[] }) {
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted">
-        よく使う準備すること・持ち物に名前を付けて保存。予定ページの
-        「📋 マニュアル・他の予定から」でどの予定にも追加できます。追加すると、
-        その予定には<strong>この名前の新しい枠</strong>ができます（既存の準備すること・
-        持ち物には混ざりません）。名前の横の（　）は、予定ページのどの枠の
-        「マニュアルから追加」に出てくるかです。
+      <p className="flex items-center gap-1 text-xs text-muted">
+        よく使う準備すること・持ち物に名前を付けて保存できます。
+        <InfoHint id="savings-templates-intro">
+          予定ページの「📋 マニュアル・他の予定から」でどの予定にも追加できます。
+          追加すると、その予定には<strong>この名前の新しい枠</strong>ができます
+          （既存の準備すること・持ち物には混ざりません）。名前の横の（　）は、
+          予定ページのどの枠の「マニュアルから追加」に出てくるかです。
+        </InfoHint>
       </p>
 
       {templates.length === 0 && (

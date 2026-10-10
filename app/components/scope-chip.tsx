@@ -7,19 +7,21 @@ import type { ItemScope } from "@/lib/item-scope";
  * 白黒基調の例外として、この 3 色だけを使う（globals.css の --scope-*）。
  * 色だけで意味を伝えず、必ず文言と記号を併記する。
  *   1 = 今回だけ（青・「•」）
- *   2 = 似た予定のとき（緑・「••」）
- *   3 = この名前の予定だけ（紫・「🏷」、予定名から自動でキーワードを決める）
+ *   2 = 似た予定（緑・「••」、「似た予定のとき」の意味）
+ *   3 = この名前（紫・「🏷」、「この名前の予定だけ」の意味。予定名から自動でキーワードを決める）
  *   自動 = 範囲を指定していない従来の自動学習（無彩色）
+ * クイック選択3つを一列に収めるため、2026-10-10 にラベルを短縮した
+ * （意味は icon・色・詳細の説明文で補う。長い言い回しは詳細側の文章に残す）。
  */
 export const SCOPE_CHIP: Record<
   ItemScope,
   { label: string; icon: string; tone: "event" | "genre" | "keyword" | "auto" }
 > = {
   event_only: { label: "今回だけ", icon: "•", tone: "event" },
-  genre: { label: "この系の予定のとき", icon: "••", tone: "genre" },
-  similar: { label: "似た予定のとき", icon: "••", tone: "genre" },
-  keyword: { label: "この名前の予定だけ", icon: "🏷", tone: "keyword" },
-  auto: { label: "自動で覚える", icon: "", tone: "auto" },
+  genre: { label: "この系の予定", icon: "••", tone: "genre" },
+  similar: { label: "似た予定", icon: "••", tone: "genre" },
+  keyword: { label: "この名前", icon: "🏷", tone: "keyword" },
+  auto: { label: "自動", icon: "", tone: "auto" },
 };
 
 const TONE_CLASS: Record<

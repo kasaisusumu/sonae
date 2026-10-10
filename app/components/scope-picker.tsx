@@ -30,7 +30,7 @@ export function ScopeQuickToggle({
   className?: string;
 }) {
   return (
-    <div className={`flex flex-wrap gap-1 ${className}`}>
+    <div className={`flex flex-nowrap items-center gap-1 ${className}`}>
       {QUICK_SCOPES.map((sc) => {
         const selected = value === sc;
         return (
@@ -43,7 +43,7 @@ export function ScopeQuickToggle({
               e.stopPropagation();
               onChange(sc);
             }}
-            className={`rounded-full ${selected ? "" : "opacity-55 hover:opacity-100"} disabled:opacity-40`}
+            className={`shrink-0 rounded-full ${selected ? "" : "opacity-55 hover:opacity-100"} disabled:opacity-40`}
           >
             <ScopeChip scope={sc} status="chosen" className="pointer-events-none" />
           </button>

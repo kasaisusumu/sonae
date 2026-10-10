@@ -5,6 +5,7 @@ import {
   confirmMessageReviewAction,
   skipMessageReviewAction,
 } from "@/app/actions";
+import { ScopeQuickToggle, KeywordSentenceField } from "@/app/components/scope-picker";
 
 export interface ReviewProposal {
   body: string;
@@ -31,14 +32,12 @@ const splitCsv = (s: string): string[] =>
 export function MessageReviewCard({
   linkId,
   eventTitle,
-  categoryOptions,
   proposal,
   allowSkip = true,
   onClose,
 }: {
   linkId: string;
   eventTitle: string;
-  categoryOptions: { id: string; name: string }[];
   proposal: ReviewProposal;
   /** 予定後の確定待ち（一覧）では「今回は更新しない」を出す。済んだ予定からの振り返りでは出さない。 */
   allowSkip?: boolean;
@@ -47,10 +46,6 @@ export function MessageReviewCard({
 }) {
   const [body, setBody] = useState(proposal.body);
   const [keywords, setKeywords] = useState(proposal.keywords.join("、"));
-  const [genres, setGenres] = useState(proposal.genres.join("、"));
-  const [categoryIds, setCategoryIds] = useState<Set<string>>(
-    () => new Set(proposal.categoryIds),
-  );
   const [scope, setScope] = useState(proposal.scope);
   const [acceptedNew, setAcceptedNew] = useState<Set<number>>(() => new Set());
   const [pending, startTransition] = useTransition();
@@ -59,9 +54,9 @@ export function MessageReviewCard({
   function finalFields() {
     return {
       body: body.trim(),
-      keywords: splitCsv(keywords),
-      genres: splitCsv(genres),
-      categoryIds: [...categoryIds],
+      keywords: scope === "keyword" ? splitCsv(keywords) : [],
+      genres: [],
+      categoryIds: [],
       scope,
     };
   }
@@ -139,77 +134,23 @@ export function MessageReviewCard({
         )}
       </div>
 
-      <div className="space-y-1">
-        <label className="block text-xs text-muted">
-          キーワード（読点区切り）
-          <input
-            value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
-            className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
-          />
-        </label>
-        {proposal.reasons.keywords && (
-          <p className="text-[11px] text-teal-dark">根拠: {proposal.reasons.keywords}</p>
-        )}
-      </div>
-
-      <div className="space-y-1">
-        <label className="block text-xs text-muted">
-          ジャンル（〇〇系。読点区切り）
-          <input
-            value={genres}
-            onChange={(e) => setGenres(e.target.value)}
-            className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
-          />
-        </label>
-        {proposal.reasons.genres && (
-          <p className="text-[11px] text-teal-dark">根拠: {proposal.reasons.genres}</p>
-        )}
-      </div>
-
-      {categoryOptions.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-xs text-muted">カテゴリ指定</p>
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
-            {categoryOptions.map((c) => (
-              <label key={c.id} className="flex items-center gap-1 text-xs">
-                <input
-                  type="checkbox"
-                  checked={categoryIds.has(c.id)}
-                  onChange={(e) =>
-                    setCategoryIds((prev) => {
-                      const next = new Set(prev);
-                      if (e.target.checked) next.add(c.id);
-                      else next.delete(c.id);
-                      return next;
-                    })
-                  }
-                />
-                {c.name}
-              </label>
-            ))}
-          </div>
-          {proposal.reasons.categoryIds && (
-            <p className="text-[11px] text-teal-dark">
-              根拠: {proposal.reasons.categoryIds}
-            </p>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-1">
-        <label className="block text-xs text-muted">
-          一致条件
-          <select
-            value={scope}
-            onChange={(e) => setScope(e.target.value)}
-            className="mt-1 rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
-          >
-            <option value="keyword">キーワード一致のみ</option>
-            <option value="similar">似た予定で提案</option>
-            <option value="once">今回だけ（次回からは表示しない）</option>
-          </select>
-        </label>
+      <div className="space-y-1.5">
+        <p className="text-xs text-muted">次回の出し方</p>
+        <ScopeQuickToggle
+          value={scope === "once" ? "event_only" : scope === "similar" ? "similar" : "keyword"}
+          onChange={(sc) => setScope(sc === "event_only" ? "once" : "similar")}
+        />
+        <KeywordSentenceField
+          initialKeyword={scope === "keyword" ? keywords : ""}
+          onCommit={(kw) => {
+            setKeywords(kw);
+            setScope("keyword");
+          }}
+          onClear={() => {
+            setKeywords("");
+            setScope("once");
+          }}
+        />
         {proposal.reasons.scope && (
           <p className="text-[11px] text-teal-dark">根拠: {proposal.reasons.scope}</p>
         )}

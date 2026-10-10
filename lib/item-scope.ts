@@ -14,7 +14,6 @@ import type { EventFeatureData } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
 import {
   expandGenreKeywords,
-  includesNorm,
   stringifyGenreKeywords,
   stringifyStrArray,
 } from "@/lib/future-messages";
@@ -36,14 +35,14 @@ interface Recommendation {
 
 const DEFAULT_REASON = "自動で覚えます（従来どおり）";
 
+// AI の推奨は「今回のみ」「似たような予定で提案」の2択だけ（2026-10〜）。
+// キーワード指定は、詳細を開いたときの任意のオプション（手動のみ・AI は提案しない）。
 const SYSTEM = `あなたは準備リストの項目の「次回の出し方」を決めます。
-ユーザーが項目を追加または削除した理由を推測し、次のどれかを選びます。
-- event_only: 今回の予定だけの内容（次回以降は出さない・消さない）
-- keyword: 特定の場所・人・案件に依存する内容。予定名か説明に含まれる語を keyword に1つ入れる
-- genre: 同じ種類の予定全体に当てはまる内容。genre に「飲み会系」のような短い名前を入れる
-- similar: 似た日時・長さの予定で出す（特定のキーワードはない汎用的な内容）
+ユーザーが項目を追加または削除した理由を推測し、次のどちらかを選びます。
+- event_only: 今回の予定だけの内容（特定の場所・人・案件に依存する／一度きりの内容）
+- similar: 似た日時・長さの予定でも出したい、汎用的な内容
 出力は必ず次の JSON のみ:
-{"scope":"event_only|keyword|genre|similar","keyword":"...","genre":"...","reason":"1行の理由（ユーザーに見せる）"}`;
+{"scope":"event_only|similar","reason":"1行の理由（ユーザーに見せる）"}`;
 
 async function recommend(input: {
   action: "include" | "exclude";
@@ -87,27 +86,10 @@ async function recommend(input: {
     });
     const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
       scope?: unknown;
-      keyword?: unknown;
-      genre?: unknown;
       reason?: unknown;
     };
-    const scope = (ITEM_SCOPES as readonly string[]).includes(String(raw.scope))
-      ? (String(raw.scope) as ItemScope)
-      : "auto";
+    const scope = String(raw.scope) === "similar" ? "similar" : "event_only";
     const reason = String(raw.reason ?? "").trim().slice(0, 120) || DEFAULT_REASON;
-    const keyword = String(raw.keyword ?? "").trim();
-    const genre = String(raw.genre ?? "").trim();
-    // 根拠の無い指定は event_only に落とす（予定に無いキーワードで効かせない）
-    if (scope === "keyword") {
-      if (keyword && includesNorm(input.eventText, keyword)) {
-        return { scope, keyword, genre: null, reason, source: "ai" };
-      }
-      return { scope: "event_only", keyword: null, genre: null, reason, source: "ai" };
-    }
-    if (scope === "genre") {
-      if (genre) return { scope, keyword: null, genre, reason, source: "ai" };
-      return { scope: "event_only", keyword: null, genre: null, reason, source: "ai" };
-    }
     return { scope, keyword: null, genre: null, reason, source: "ai" };
   } catch (e) {
     console.error("[recommendItemScope] AI 失敗（自動に戻す）", e);
@@ -365,6 +347,30 @@ export async function setItemScope(input: {
   );
 }
 
+/**
+ * 項目の範囲を「キーワード」にする（詳細を開いたときの、文章形式の任意オプション）。
+ * 2択（event_only/similar）とは別の、手動だけの設定（AI は提案しない）。
+ */
+export async function setItemKeywordScope(input: {
+  scope: EventScopeInput;
+  kind: string;
+  title: string;
+  keyword: string;
+}): Promise<void> {
+  const keyword = input.keyword.trim().slice(0, 60);
+  if (!keyword) return;
+  await saveScopeForItem(
+    input.scope,
+    "include",
+    input.kind,
+    input.title,
+    "keyword",
+    "user",
+    { keyword, genre: null, reason: `「${keyword}」を含む予定のときに出すよう設定しました` },
+    "chosen",
+  );
+}
+
 /** 範囲ルールを外す（ルールは残すが適用しない）。自分のルールだけ扱う。 */
 export async function archiveScopeRule(userId: string, ruleId: string): Promise<boolean> {
   const rule = await prisma.checklistScopeRule.findFirst({
@@ -391,18 +397,32 @@ export async function loadActiveScopeRules(userId: string) {
   });
 }
 
+export interface EventScopeEntry {
+  scope: ItemScope;
+  status: string;
+  reason: string | null;
+  /** scope が "keyword" のときの、現在のキーワード（文章欄の初期値用）。 */
+  keyword: string | null;
+}
+
 /** 予定ごとの範囲（画面のチップ用）。キーは `kind:normTitle`。dropped と削除の印（exclude）は含めない。 */
 export async function loadEventScopeMap(
   userId: string,
   eventId: string,
-): Promise<Map<string, { scope: ItemScope; status: string; reason: string | null }>> {
+): Promise<Map<string, EventScopeEntry>> {
   const rows = await prisma.eventChecklistScope.findMany({
     where: { userId, eventId, status: { not: "dropped" }, action: "include" },
+    include: { rule: { select: { keywords: true } } },
   });
   return new Map(
     rows.map((r) => [
       `${r.kind}:${r.normTitle}`,
-      { scope: r.scope as ItemScope, status: r.status, reason: r.reason },
+      {
+        scope: r.scope as ItemScope,
+        status: r.status,
+        reason: r.reason,
+        keyword: r.rule ? firstRuleKeyword(r.rule.keywords) : null,
+      },
     ]),
   );
 }
@@ -437,6 +457,11 @@ export function describeScopeRule(rule: {
     when = "似た予定のとき";
   }
   return `${when}：${rule.title}を${verb}`;
+}
+
+/** ルールの keywords（JSON文字列）の先頭1件。文章欄の初期値に使う。 */
+export function firstRuleKeyword(raw: string): string | null {
+  return parseJsonArray(raw)[0] ?? null;
 }
 
 function parseJsonArray(raw: string): string[] {

@@ -11,11 +11,9 @@ import { MessageReviewCard, type ReviewProposal } from "@/app/components/message
 export function ReopenableReview({
   linkId,
   eventTitle,
-  categoryOptions,
 }: {
   linkId: string;
   eventTitle: string;
-  categoryOptions: { id: string; name: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [proposal, setProposal] = useState<ReviewProposal | null>(null);
@@ -72,7 +70,6 @@ export function ReopenableReview({
     <MessageReviewCard
       linkId={linkId}
       eventTitle={eventTitle}
-      categoryOptions={categoryOptions}
       proposal={proposal}
       allowSkip={false}
       onClose={close}

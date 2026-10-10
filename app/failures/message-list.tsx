@@ -9,7 +9,7 @@ import {
 import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
-import { ScopeChip, messageScopeToItemScope } from "@/app/components/scope-chip";
+import { ScopeQuickToggle, KeywordSentenceField } from "@/app/components/scope-picker";
 
 export type MLMessage = {
   id: string;
@@ -23,48 +23,61 @@ export type MLMessage = {
   upcomingEvents: { eventId: string; title: string; eventDatetime: Date }[];
 };
 
-
-function EditableRow({
-  m,
-  categoryOptions,
-}: {
-  m: MLMessage;
-  categoryOptions: { id: string; name: string }[];
-}) {
+/** 次回の出し方の2択＋任意のキーワード（文章形式）。本文の開閉とは別に、常時すぐ切り替えられる。 */
+function EditableRow({ m }: { m: MLMessage }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState(m.body);
   const [keywords, setKeywords] = useState(m.keywords.join("、"));
-  const [genres, setGenres] = useState(m.genres.join("、"));
-  const [categoryIds, setCategoryIds] = useState<Set<string>>(
-    () => new Set(m.categoryIds),
-  );
   const [scope, setScope] = useState(m.scope);
   const [pending, start] = useTransition();
 
-  function buildFd(): FormData {
+  function buildFd(next?: { scope?: string; keywords?: string }): FormData {
     const fd = new FormData();
     fd.set("id", m.id);
     fd.set("body", body);
-    fd.set("keywords", keywords);
-    fd.set("genres", genres);
-    fd.set("scope", scope);
-    for (const c of categoryIds) fd.append("categoryIds", c);
+    fd.set("keywords", next?.keywords ?? keywords);
+    fd.set("genres", "");
+    fd.set("scope", next?.scope ?? scope);
     return fd;
   }
   function flush() {
     if (pending) return;
     start(() => updateFutureMessageAction(buildFd()));
   }
+  function chooseQuick(sc: "event_only" | "similar") {
+    const next = sc === "event_only" ? "once" : "similar";
+    setScope(next);
+    start(() => updateFutureMessageAction(buildFd({ scope: next })));
+  }
+  function commitKeyword(kw: string) {
+    setKeywords(kw);
+    setScope("keyword");
+    start(() => updateFutureMessageAction(buildFd({ scope: "keyword", keywords: kw })));
+  }
+  function clearKeyword() {
+    setKeywords("");
+    setScope("once");
+    start(() => updateFutureMessageAction(buildFd({ scope: "once", keywords: "" })));
+  }
 
   return (
     <li className="rounded-xl bg-surface p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 space-y-1.5">
           <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
-          <p className="mt-1 text-xs text-muted">
-            <ScopeChip scope={messageScopeToItemScope(m.scope)} className="mr-1" />
-            {m.confirmedCount > 0 ? ` ・ ${m.confirmedCount}回更新` : ""}
-          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <ScopeQuickToggle
+              value={scope === "once" ? "event_only" : scope === "similar" ? "similar" : "keyword"}
+              onChange={chooseQuick}
+              disabled={pending}
+            />
+            {scope === "keyword" && keywords && (
+              <span className="text-[11px] text-muted">🏷「{keywords}」のとき</span>
+            )}
+            {m.confirmedCount > 0 && (
+              <span className="text-[11px] text-muted">{m.confirmedCount}回更新</span>
+            )}
+          </div>
         </div>
         <button
           type="button"
@@ -85,54 +98,12 @@ function EditableRow({
             onBlur={flush}
             className="w-full rounded-md border bg-background px-2 py-1 text-sm"
           />
-          <input
-            value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
-            onBlur={flush}
-            placeholder="キーワード（読点区切り）"
-            className="w-full rounded-md border bg-background px-2 py-1 text-xs"
+          <KeywordSentenceField
+            initialKeyword={scope === "keyword" ? keywords : ""}
+            onCommit={commitKeyword}
+            onClear={clearKeyword}
+            pending={pending}
           />
-          <input
-            value={genres}
-            onChange={(e) => setGenres(e.target.value)}
-            onBlur={flush}
-            placeholder="ジャンル（〇〇系。読点区切り）"
-            className="w-full rounded-md border bg-background px-2 py-1 text-xs"
-          />
-          {categoryOptions.length > 0 && (
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
-              {categoryOptions.map((c) => (
-                <label key={c.id} className="flex items-center gap-1 text-xs">
-                  <input
-                    type="checkbox"
-                    checked={categoryIds.has(c.id)}
-                    onChange={(e) => {
-                      setCategoryIds((prev) => {
-                        const next = new Set(prev);
-                        if (e.target.checked) next.add(c.id);
-                        else next.delete(c.id);
-                        return next;
-                      });
-                      queueMicrotask(flush);
-                    }}
-                  />
-                  {c.name}
-                </label>
-              ))}
-            </div>
-          )}
-          <select
-            value={scope}
-            onChange={(e) => {
-              setScope(e.target.value);
-              start(() => updateFutureMessageAction(buildFd()));
-            }}
-            className="rounded-md border bg-background px-1.5 py-1 text-xs"
-          >
-            <option value="keyword">キーワード一致のみ</option>
-            <option value="similar">似た予定で提案</option>
-            <option value="once">今回だけ</option>
-          </select>
           <div className="flex flex-wrap items-center gap-3 pt-1">
             <form action={archiveFutureMessageAction}>
               <input type="hidden" name="id" value={m.id} />
@@ -160,13 +131,7 @@ function EditableRow({
   );
 }
 
-export function MessageList({
-  messages,
-  categoryOptions,
-}: {
-  messages: MLMessage[];
-  categoryOptions: { id: string; name: string }[];
-}) {
+export function MessageList({ messages }: { messages: MLMessage[] }) {
   const active = messages.filter((m) => !m.archivedAt);
   const archived = messages.filter((m) => m.archivedAt);
   const upcoming = active.filter((m) => m.upcomingEvents.length > 0);
@@ -187,7 +152,7 @@ export function MessageList({
         </summary>
         <ul className="mt-2 space-y-2">
           {active.map((m) => (
-            <EditableRow key={m.id} m={m} categoryOptions={categoryOptions} />
+            <EditableRow key={m.id} m={m} />
           ))}
         </ul>
       </details>

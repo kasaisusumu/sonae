@@ -19,14 +19,9 @@ export default async function FuturesMessagesPage() {
   if (!user) redirect("/");
   trackEvent(user.id, "page:/failures");
 
-  const [pendingReviews, messages, categories, events] = await Promise.all([
+  const [pendingReviews, messages, events] = await Promise.all([
     getPendingMessageReviews(user.id),
     listFutureMessages(user.id),
-    prisma.category.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, name: true },
-    }),
     prisma.event.findMany({
       where: { userId: user.id },
       orderBy: { eventDatetime: "desc" },
@@ -90,7 +85,6 @@ export default async function FuturesMessagesPage() {
                 key={review.linkId}
                 linkId={review.linkId}
                 eventTitle={review.eventTitle}
-                categoryOptions={categories}
                 proposal={proposal}
               />
             ))}
@@ -105,8 +99,8 @@ export default async function FuturesMessagesPage() {
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
           ✍️ メッセージを書く
           <InfoHint id="failures-quick-record">
-            予定が未定でも作れます。キーワード・ジャンル・カテゴリのどれかに一致する
-            予定が入ったとき、自動で知らせます。
+            予定が未定でも作れます。キーワードを書けば、それに一致する予定が入ったとき
+            自動で知らせます。キーワードを書かなければ、似た予定のときに提案します。
           </InfoHint>
         </h2>
         <form action={createFutureMessageAction} className="mt-3 space-y-3">
@@ -119,36 +113,9 @@ export default async function FuturesMessagesPage() {
           />
           <input
             name="keywords"
-            placeholder="キーワード（読点区切り・任意。例: 田中、A社）"
+            placeholder="キーワード（任意・読点区切り。例: 田中、A社）"
             className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
           />
-          <input
-            name="genres"
-            placeholder="ジャンル（〇〇系。読点区切り・任意。例: 飲み会系）"
-            className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
-          />
-          {categories.length > 0 && (
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-              {categories.map((c) => (
-                <label key={c.id} className="flex items-center gap-1">
-                  <input type="checkbox" name="categoryIds" value={c.id} />
-                  {c.name}
-                </label>
-              ))}
-            </div>
-          )}
-          <label className="block text-xs text-muted">
-            一致条件
-            <select
-              name="scope"
-              defaultValue="keyword"
-              className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
-            >
-              <option value="keyword">キーワード一致のみ</option>
-              <option value="similar">似た予定で提案</option>
-              <option value="once">今回だけ</option>
-            </select>
-          </label>
 
           <div className="flex flex-wrap items-center gap-2">
             <SubmitButton>作成する</SubmitButton>
@@ -177,7 +144,6 @@ export default async function FuturesMessagesPage() {
             confirmedCount: m.confirmedCount,
             upcomingEvents: m.upcomingEvents,
           }))}
-          categoryOptions={categories}
         />
       </section>
     </div>

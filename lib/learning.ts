@@ -9,6 +9,7 @@ import {
 } from "@/lib/signature";
 import { resolveSections, sectionLabel } from "@/lib/sections";
 import { normTitle } from "@/lib/text-norm";
+import { firstRuleKeyword } from "@/lib/item-scope";
 import { classifyItemPattern } from "@/lib/pattern-classify";
 import {
   LINKED_MESSAGE_STATUSES,
@@ -501,7 +502,7 @@ export interface LeafListItem {
   isUserAdded: boolean;
   notifyLeadMinutes: number | null;
   /** 次回の出し方（範囲）。予定詳細と同じ表示・選び直しに使う。指定が無ければ null（自動）。 */
-  scope: { scope: string; status: string; reason: string | null } | null;
+  scope: { scope: string; status: string; reason: string | null; keyword: string | null } | null;
 }
 
 export interface LeafSection {
@@ -753,7 +754,14 @@ export async function getLearningNameTree(userId: string): Promise<{
           // 項目ごとの次回の出し方（予定詳細と同じ行を、学習内容の画面でも直せるように）
           eventChecklistScopes: {
             where: { action: "include", status: { not: "dropped" } },
-            select: { kind: true, normTitle: true, scope: true, status: true, reason: true },
+            select: {
+              kind: true,
+              normTitle: true,
+              scope: true,
+              status: true,
+              reason: true,
+              rule: { select: { keywords: true } },
+            },
           },
         },
       },
@@ -794,7 +802,13 @@ export async function getLearningNameTree(userId: string): Promise<{
           isUserAdded: i.isUserAdded,
           scope: (() => {
             const r = scopeByKey.get(`${kind}:${normTitle(i.title)}`);
-            return r ? { scope: r.scope, status: r.status, reason: r.reason } : null;
+            if (!r) return null;
+            return {
+              scope: r.scope,
+              status: r.status,
+              reason: r.reason,
+              keyword: r.rule ? firstRuleKeyword(r.rule.keywords) : null,
+            };
           })(),
           notifyLeadMinutes: i.notifyLeadMinutes,
         });

@@ -8,7 +8,7 @@ import {
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { ReopenableReview } from "@/app/components/message-review-reopen";
-import { ScopeChip, messageScopeToItemScope } from "@/app/components/scope-chip";
+import { ScopeQuickToggle, KeywordSentenceField } from "@/app/components/scope-picker";
 
 /**
  * 予定に結びついた「未来の自分へ」1 件ぶん。予定詳細・学習内容（マニュアル）の両方で
@@ -30,40 +30,59 @@ export type EMRow = {
   eventEnded: boolean;
 };
 
-export type CategoryOption = { id: string; name: string };
+/** 行に常時表示する、次回の出し方の2択（詳細を開かなくてもすぐ切り替えられる）。 */
+function MessageQuickToggle({ r }: { r: EMRow }) {
+  const [pending, start] = useTransition();
+  function choose(sc: "event_only" | "similar") {
+    const next = sc === "event_only" ? "once" : "similar";
+    const fd = new FormData();
+    fd.set("id", r.messageId);
+    fd.set("eventId", r.eventId);
+    fd.set("body", r.body);
+    fd.set("keywords", r.keywords.join("、"));
+    fd.set("genres", "");
+    fd.set("scope", next);
+    start(() => updateFutureMessageAction(fd));
+  }
+  return (
+    <ScopeQuickToggle
+      value={r.scope === "once" ? "event_only" : r.scope === "similar" ? "similar" : "keyword"}
+      onChange={choose}
+      disabled={pending}
+    />
+  );
+}
 
-/** 1 件ぶんの編集フォーム（本文・キーワード・ジャンル・カテゴリ・一致条件）＋この予定から外す。 */
-function RowEditForm({
-  r,
-  categoryOptions,
-}: {
-  r: EMRow;
-  categoryOptions: CategoryOption[];
-}) {
+/** 開いたときの編集フォーム（本文・任意でキーワードを文章形式で）＋この予定から外す。 */
+function RowEditForm({ r }: { r: EMRow }) {
   const [body, setBody] = useState(r.body);
   const [keywords, setKeywords] = useState(r.keywords.join("、"));
-  const [genres, setGenres] = useState(r.genres.join("、"));
   const [scope, setScope] = useState(r.scope);
-  const [categoryIds, setCategoryIds] = useState<Set<string>>(
-    () => new Set(r.categoryIds),
-  );
   const [pending, start] = useTransition();
 
-  // 押した時点の値をそのまま送る（チェックボックスは次の state を渡して即保存する）
-  function buildFd(next?: { scope?: string; categoryIds?: Set<string> }): FormData {
+  function buildFd(next?: { scope?: string; keywords?: string }): FormData {
     const fd = new FormData();
     fd.set("id", r.messageId);
     fd.set("eventId", r.eventId);
     fd.set("body", body);
-    fd.set("keywords", keywords);
-    fd.set("genres", genres);
+    fd.set("keywords", next?.keywords ?? keywords);
+    fd.set("genres", "");
     fd.set("scope", next?.scope ?? scope);
-    for (const c of next?.categoryIds ?? categoryIds) fd.append("categoryIds", c);
     return fd;
   }
   function flush() {
     if (pending) return;
     start(() => updateFutureMessageAction(buildFd()));
+  }
+  function commitKeyword(kw: string) {
+    setKeywords(kw);
+    setScope("keyword");
+    start(() => updateFutureMessageAction(buildFd({ scope: "keyword", keywords: kw })));
+  }
+  function clearKeyword() {
+    setKeywords("");
+    setScope("once");
+    start(() => updateFutureMessageAction(buildFd({ scope: "once", keywords: "" })));
   }
 
   return (
@@ -77,59 +96,15 @@ function RowEditForm({
         className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
         aria-label="メッセージ本文"
       />
-      <input
-        value={keywords}
-        onChange={(e) => setKeywords(e.target.value)}
-        onBlur={flush}
-        placeholder="キーワード（読点区切り。例: 田中、A社）"
-        className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
+      <KeywordSentenceField
+        initialKeyword={scope === "keyword" ? keywords : ""}
+        onCommit={commitKeyword}
+        onClear={clearKeyword}
+        pending={pending}
       />
-      <input
-        value={genres}
-        onChange={(e) => setGenres(e.target.value)}
-        onBlur={flush}
-        placeholder="ジャンル（〇〇系。読点区切り）"
-        className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
-      />
-      {categoryOptions.length > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-          <span>カテゴリ指定</span>
-          {categoryOptions.map((c) => (
-            <label key={c.id} className="flex items-center gap-1">
-              <input
-                type="checkbox"
-                checked={categoryIds.has(c.id)}
-                onChange={(e) => {
-                  const next = new Set(categoryIds);
-                  if (e.target.checked) next.add(c.id);
-                  else next.delete(c.id);
-                  setCategoryIds(next);
-                  start(() => updateFutureMessageAction(buildFd({ categoryIds: next })));
-                }}
-              />
-              {c.name}
-            </label>
-          ))}
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-        <select
-          value={scope}
-          onChange={(e) => {
-            setScope(e.target.value);
-            start(() => updateFutureMessageAction(buildFd({ scope: e.target.value })));
-          }}
-          className="rounded-md border bg-background px-1.5 py-1 text-xs text-foreground"
-          aria-label="一致条件"
-        >
-          <option value="keyword">キーワード一致のみ</option>
-          <option value="similar">似た予定で提案</option>
-          <option value="once">今回だけ</option>
-        </select>
-        <span className="text-[11px] text-muted">
-          {pending ? "保存中…" : "変更は自動保存"}
-        </span>
-      </div>
+      <p className="text-[11px] text-muted">
+        {pending ? "保存中…" : "変更は自動保存"}
+      </p>
       <form action={removeMessageFromEventAction}>
         <input type="hidden" name="eventId" value={r.eventId} />
         <input type="hidden" name="messageId" value={r.messageId} />
@@ -145,13 +120,7 @@ function RowEditForm({
 }
 
 /** 予定に結びついたメッセージの一覧。1 件ずつ開いて、いつでも編集できる。 */
-export function FutureMessageRows({
-  rows,
-  categoryOptions,
-}: {
-  rows: EMRow[];
-  categoryOptions: CategoryOption[];
-}) {
+export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) =>
     setOpenIds((s) => {
@@ -185,24 +154,25 @@ export function FutureMessageRows({
                 {open ? "∧" : "∨"}
               </button>
             </div>
-            {!open && (r.matchReason || r.status === "confirmed") && (
-              <p className="ml-0.5 mt-0.5 text-[11px] text-muted">
-                {r.status === "confirmed" && (
-                  <span className="mr-1 rounded bg-surface-muted px-1 text-teal-dark">
-                    確定済み
-                  </span>
-                )}
-                {r.matchReason && `${r.matchReason} ・ `}
-                <ScopeChip scope={messageScopeToItemScope(r.scope)} />
-              </p>
+            <div className="ml-0.5 mt-1 flex flex-wrap items-center gap-1.5">
+              <MessageQuickToggle r={r} />
+              {r.scope === "keyword" && r.keywords.length > 0 && (
+                <span className="text-[11px] text-muted">
+                  🏷「{r.keywords.join("、")}」のとき
+                </span>
+              )}
+              {r.status === "confirmed" && (
+                <span className="rounded bg-surface-muted px-1 text-[11px] text-teal-dark">
+                  確定済み
+                </span>
+              )}
+            </div>
+            {!open && r.matchReason && (
+              <p className="ml-0.5 mt-0.5 text-[11px] text-muted">{r.matchReason}</p>
             )}
             {r.eventEnded && (
               <div className="mt-1">
-                <ReopenableReview
-                  linkId={r.id}
-                  eventTitle={r.eventTitle}
-                  categoryOptions={categoryOptions}
-                />
+                <ReopenableReview linkId={r.id} eventTitle={r.eventTitle} />
               </div>
             )}
             {open && (
@@ -210,7 +180,7 @@ export function FutureMessageRows({
                 {r.matchReason && (
                   <p className="text-[11px] text-muted">なぜ出ているか: {r.matchReason}</p>
                 )}
-                <RowEditForm key={r.id} r={r} categoryOptions={categoryOptions} />
+                <RowEditForm key={r.id} r={r} />
               </div>
             )}
           </li>

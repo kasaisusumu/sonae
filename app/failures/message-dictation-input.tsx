@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { previewDictatedMessages, saveDictatedMessages } from "@/app/actions";
 import { formatDateOnly } from "@/lib/format";
 
-type Draft = { body: string; keywords: string; genres: string };
+type Draft = { body: string; keywords: string };
 
 /**
  * スマホのキーボードのマイクキーで「いつか思い出したいこと」を話し、AI で
@@ -26,7 +26,7 @@ export function MessageDictationInput({
   const [phase, setPhase] = useState<"input" | "review">("input");
   const [text, setText] = useState("");
   const [selectedEventId, setSelectedEventId] = useState("");
-  const [draft, setDraft] = useState<Draft>({ body: "", keywords: "", genres: "" });
+  const [draft, setDraft] = useState<Draft>({ body: "", keywords: "" });
   const [moreCount, setMoreCount] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export function MessageDictationInput({
     setPhase("input");
     setText("");
     setSelectedEventId("");
-    setDraft({ body: "", keywords: "", genres: "" });
+    setDraft({ body: "", keywords: "" });
     setMoreCount(0);
     setErr(null);
   }
@@ -60,7 +60,6 @@ export function MessageDictationInput({
         setDraft({
           body: first.body,
           keywords: first.keywords.join("、"),
-          genres: first.genres.join("、"),
         });
         setMoreCount(rest.length);
         setPhase("review");
@@ -89,7 +88,6 @@ export function MessageDictationInput({
           {
             body,
             keywords: draft.keywords.split(/[、,，]/).map((s) => s.trim()).filter(Boolean),
-            genres: draft.genres.split(/[、,，]/).map((s) => s.trim()).filter(Boolean),
           },
         ],
       });
@@ -209,13 +207,7 @@ export function MessageDictationInput({
                 <input
                   value={draft.keywords}
                   onChange={(e) => setDraft((d) => ({ ...d, keywords: e.target.value }))}
-                  placeholder="キーワード（読点区切り・任意）"
-                  className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
-                />
-                <input
-                  value={draft.genres}
-                  onChange={(e) => setDraft((d) => ({ ...d, genres: e.target.value }))}
-                  placeholder="ジャンル（〇〇系。読点区切り・任意）"
+                  placeholder="キーワード（任意・読点区切り）"
                   className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
                 />
 

@@ -3,11 +3,7 @@
 import { useState } from "react";
 import { createMessageForEventAction } from "@/app/actions";
 import { SubmitButton } from "@/app/components/submit-button";
-import {
-  FutureMessageRows,
-  type CategoryOption,
-  type EMRow,
-} from "@/app/components/future-message-rows";
+import { FutureMessageRows, type EMRow } from "@/app/components/future-message-rows";
 
 export type { EMRow };
 
@@ -15,11 +11,9 @@ export type { EMRow };
 export function FutureMessageEditor({
   eventId,
   initial,
-  categoryOptions,
 }: {
   eventId: string;
   initial: EMRow[];
-  categoryOptions: CategoryOption[];
 }) {
   const [adding, setAdding] = useState(false);
 
@@ -35,7 +29,7 @@ export function FutureMessageEditor({
         </span>
       </div>
 
-      <FutureMessageRows rows={initial} categoryOptions={categoryOptions} />
+      <FutureMessageRows rows={initial} />
 
       {adding && (
         <form
@@ -52,12 +46,7 @@ export function FutureMessageEditor({
           />
           <input
             name="keywords"
-            placeholder="キーワード（読点区切り・任意）"
-            className="w-full rounded-md border bg-background px-2 py-1 text-xs"
-          />
-          <input
-            name="genres"
-            placeholder="ジャンル（〇〇系。読点区切り・任意）"
+            placeholder="キーワード（任意・読点区切り。例: 田中、A社）"
             className="w-full rounded-md border bg-background px-2 py-1 text-xs"
           />
           <div className="flex flex-wrap items-center gap-2">

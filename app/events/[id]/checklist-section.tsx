@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ensureChecklistForEvent, normTitle } from "@/lib/checklist";
-import { loadEventScopeMap, type ItemScope } from "@/lib/item-scope";
+import { loadEventScopeMap, type EventScopeEntry } from "@/lib/item-scope";
 import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
@@ -51,7 +51,7 @@ type Row = {
   suggestionValue: string | null;
 };
 
-type ScopeEntry = { scope: ItemScope; status: string; reason: string | null };
+type ScopeEntry = EventScopeEntry;
 
 function KindBlock({
   eventId,
@@ -168,7 +168,6 @@ export async function ChecklistSection({
   });
   const [
     pendingReviews,
-    categories,
     taskRules,
     belongingRules,
     reviewState,
@@ -177,11 +176,6 @@ export async function ChecklistSection({
     itemImages,
   ] = await Promise.all([
     getPendingMessageReviewsForEvent(event.id, event.userId),
-    prisma.category.findMany({
-      where: { userId: event.userId },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, name: true },
-    }),
     getApplicableRules(event.categoryId, feature, "task"),
     getApplicableRules(event.categoryId, feature, "belonging"),
     prisma.event.findUnique({
@@ -206,7 +200,6 @@ export async function ChecklistSection({
   const futureMessageNode = (
     <FutureMessageEditor
       eventId={event.id}
-      categoryOptions={categories}
       initial={linkedMessages.map(
         (m): EMRow => ({
           id: m.id,
@@ -306,7 +299,6 @@ export async function ChecklistSection({
               key={review.linkId}
               linkId={review.linkId}
               eventTitle={review.eventTitle}
-              categoryOptions={categories}
               proposal={proposal}
             />
           ))}

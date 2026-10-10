@@ -10,6 +10,7 @@ import {
   saveListAsTemplate,
   setItemNotifyLead,
   setItemScopeAction,
+  setItemKeywordScopeAction,
   toggleChecklistItemDone,
   trackFeatureUse,
 } from "@/app/actions";
@@ -18,7 +19,8 @@ import { InfoHint } from "@/app/components/info-hint";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { useFlushOnHide } from "@/app/components/use-flush-on-hide";
 import { ItemImages, Linkify, type ItemImage } from "./item-media";
-import { ScopeChip, SCOPE_CHOICES } from "@/app/components/scope-chip";
+import { ScopeChip } from "@/app/components/scope-chip";
+import { ScopeQuickToggle, KeywordSentenceField, type QuickScope } from "@/app/components/scope-picker";
 import type { ItemScope } from "@/lib/item-scope";
 
 /** 項目の「次回の出し方」（範囲）。予定ごとの指定（EventChecklistScope）から来る。 */
@@ -26,6 +28,8 @@ interface ScopeInfo {
   scope: string;
   status: string; // proposed | chosen
   reason: string | null;
+  /** scope が "keyword" のときの、現在のキーワード。 */
+  keyword: string | null;
 }
 
 interface Item {
@@ -494,8 +498,8 @@ export function ChecklistEditor({
     return it.scope?.status === "chosen" ? "chosen" : "proposed";
   }
 
-  /** 項目の範囲を選び直す。未保存の編集を先に保存してから、この項目の範囲を保存する。 */
-  function chooseScope(it: Item, scope: ItemScope) {
+  /** 項目の範囲を選び直す（今回のみ／似たような予定で提案の2択）。未保存の編集を先に保存してから保存する。 */
+  function chooseScope(it: Item, scope: QuickScope) {
     setScopeOverride((prev) => ({ ...prev, [it.key]: scope }));
     startTransition(async () => {
       await flushPending();
@@ -504,6 +508,21 @@ export function ChecklistEditor({
         kind,
         title: it.title.trim(),
         scope,
+      });
+      router.refresh();
+    });
+  }
+
+  /** 項目の範囲を「キーワード」にする（詳細の文章欄）。空文字なら「今回のみ」に戻す。 */
+  function chooseKeyword(it: Item, keyword: string) {
+    setScopeOverride((prev) => ({ ...prev, [it.key]: keyword ? "keyword" : "event_only" }));
+    startTransition(async () => {
+      await flushPending();
+      await setItemKeywordScopeAction({
+        eventId,
+        kind,
+        title: it.title.trim(),
+        keyword,
       });
       router.refresh();
     });
@@ -691,12 +710,25 @@ export function ChecklistEditor({
                     }`}
                   />
                   {it.title.trim() && (
-                    <ScopeChip
-                      scope={shownScope(it)}
-                      status={shownStatus(it)}
-                      onClick={() => toggleOpen(it.key)}
-                      className="ml-1 max-w-full"
-                    />
+                    <div className="ml-1 flex flex-wrap items-center gap-1">
+                      <ScopeQuickToggle
+                        value={shownScope(it)}
+                        onChange={(sc) => chooseScope(it, sc)}
+                      />
+                      {shownScope(it) === "keyword" && (
+                        <button
+                          type="button"
+                          onClick={() => toggleOpen(it.key)}
+                          className="rounded-full"
+                        >
+                          <ScopeChip
+                            scope="keyword"
+                            status={shownStatus(it)}
+                            className="pointer-events-none"
+                          />
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
                 {it.isUserAdded && (
@@ -741,37 +773,19 @@ export function ChecklistEditor({
               {/* 詳細（チップを押したときだけ）：通知タイミング・メモ・削除 */}
               {open && (
                 <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
-                  {/* 次回の出し方（範囲）。選ぶと、次に同じ条件の予定を作ったときの扱いが変わる */}
-                  <div className="space-y-1.5">
-                    <p className="text-xs text-muted">次回の出し方</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {SCOPE_CHOICES.map((sc) => {
-                        const selected = shownScope(it) === sc;
-                        return (
-                          <button
-                            key={sc}
-                            type="button"
-                            aria-pressed={selected}
-                            onClick={() => chooseScope(it, sc)}
-                            className={`rounded-full ${
-                              selected ? "ring-2 ring-foreground/30" : "opacity-70 hover:opacity-100"
-                            }`}
-                          >
-                            <ScopeChip
-                              scope={sc}
-                              status="chosen"
-                              className="pointer-events-none"
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
+                  {/* 次回の出し方（範囲）。2択は行に常時表示済み。ここではキーワードの任意設定だけ。 */}
+                  <div className="space-y-1">
                     <p className="text-[11px] text-muted">
                       {shownStatus(it) === "proposed"
                         ? "AI の提案のまま適用中です。選び直すと、その内容になります。"
                         : "選んだ内容で、次に同じ条件の予定を作ったときに扱います。"}
                       {it.scope?.reason && `（${it.scope.reason}）`}
                     </p>
+                    <KeywordSentenceField
+                      initialKeyword={shownScope(it) === "keyword" ? (it.scope?.keyword ?? "") : ""}
+                      onCommit={(kw) => chooseKeyword(it, kw)}
+                      onClear={() => chooseKeyword(it, "")}
+                    />
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
                     <span className="shrink-0">通知</span>

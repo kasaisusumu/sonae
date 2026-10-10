@@ -9,7 +9,7 @@ import { formatLead } from "@/lib/lead-time";
 import { getUserTemplates } from "@/lib/templates";
 import { sectionLabel } from "@/lib/sections";
 import { InfoHint } from "@/app/components/info-hint";
-import { FutureMessageRows, type CategoryOption } from "@/app/components/future-message-rows";
+import { FutureMessageRows } from "@/app/components/future-message-rows";
 import { ScopeRuleList } from "./scope-rule-list";
 import { prisma } from "@/lib/prisma";
 import { type SearchEntry } from "./learning-search";
@@ -77,11 +77,9 @@ function CompactList({ sections }: { sections: LeafSectionData[] }) {
 function EventLeaf({
   leaf,
   depth = 1,
-  categoryOptions,
 }: {
   leaf: NameTreeLeaf;
   depth?: number;
-  categoryOptions: CategoryOption[];
 }) {
   const sections: LeafSectionData[] = leaf.sections.map((s) => ({
     key: s.key,
@@ -143,7 +141,7 @@ function EventLeaf({
       {leaf.messages.length > 0 && (
         <div className="mt-3 space-y-1.5 rounded-xl bg-teal-soft p-3">
           <p className="text-xs font-semibold text-teal-dark">💌 未来の自分へ</p>
-          <FutureMessageRows rows={leaf.messages} categoryOptions={categoryOptions} />
+          <FutureMessageRows rows={leaf.messages} />
         </div>
       )}
     </LazyLeaf>
@@ -153,16 +151,12 @@ function EventLeaf({
 function NameBranch({
   node,
   depth = 1,
-  categoryOptions,
 }: {
   node: NameTreeNode;
   depth?: number;
-  categoryOptions: CategoryOption[];
 }) {
   if (node.children.length === 0 && node.leaves.length === 1) {
-    return (
-      <EventLeaf leaf={node.leaves[0]} depth={depth} categoryOptions={categoryOptions} />
-    );
+    return <EventLeaf leaf={node.leaves[0]} depth={depth} />;
   }
   // 階層ごとに白／グレーを交互に。
   const muted = depth % 2 === 1;
@@ -180,20 +174,10 @@ function NameBranch({
       </summary>
       <div className="mt-1.5 space-y-1.5 border-l border-border pl-3">
         {node.children.map((c) => (
-          <NameBranch
-            key={c.path}
-            node={c}
-            depth={depth + 1}
-            categoryOptions={categoryOptions}
-          />
+          <NameBranch key={c.path} node={c} depth={depth + 1} />
         ))}
         {node.leaves.map((l) => (
-          <EventLeaf
-            key={l.eventId}
-            leaf={l}
-            depth={depth + 1}
-            categoryOptions={categoryOptions}
-          />
+          <EventLeaf key={l.eventId} leaf={l} depth={depth + 1} />
         ))}
       </div>
     </details>
@@ -205,16 +189,10 @@ export default async function LearningTreePage() {
   if (!user) redirect("/");
   trackEvent(user.id, "page:/savings");
 
-  const [{ categories, searchIndex }, templates, categoryRows] = await Promise.all([
+  const [{ categories, searchIndex }, templates] = await Promise.all([
     getLearningNameTree(user.id),
     getUserTemplates(user.id),
-    prisma.category.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, name: true },
-    }),
   ]);
-  const categoryOptions: CategoryOption[] = categoryRows;
   // 次回の出し方（範囲つきルール）。文章で一覧し、削除（確認つき）できる。
   const scopeRules = await prisma.checklistScopeRule.findMany({
     where: { userId: user.id, archivedAt: null },
@@ -263,10 +241,10 @@ export default async function LearningTreePage() {
           </summary>
           <div className="mt-3 space-y-1.5 border-l border-border pl-3">
             {cat.node.children.map((c) => (
-              <NameBranch key={c.path} node={c} categoryOptions={categoryOptions} />
+              <NameBranch key={c.path} node={c} />
             ))}
             {cat.node.leaves.map((l) => (
-              <EventLeaf key={l.eventId} leaf={l} categoryOptions={categoryOptions} />
+              <EventLeaf key={l.eventId} leaf={l} />
             ))}
           </div>
         </details>

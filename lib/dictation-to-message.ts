@@ -5,7 +5,6 @@ const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 export interface MessageDictationItem {
   body: string;
   keywords: string[];
-  genres: string[];
 }
 
 const norm = (s: string) => s.trim().replace(/\s+/g, " ");
@@ -17,14 +16,13 @@ const SYSTEM = `あなたは「未来の自分へのメッセージ」アプリ�
 各要素:
 - body: メッセージの本文（次に読む自分への短い一文。例「前回のギブアンドテイクを忘れない」）
 - keywords: 本文から、次に同じ種類の予定を見分けるのに使えそうな固有名詞（人名・会社名など）
-- genres: 本文から、当てはまりそうな予定の種類（「〇〇系」の形。無理に作らなくてよい）
 
 ルール:
 - ユーザーが言っていないことは足さない・推測で水増ししない。
-- keywords・genres は該当が無ければ空配列でよい。
+- keywords は該当が無ければ空配列でよい。
 - 最大 10 件。
 - 出力は必ず次の JSON のみ:
-{"items":[{"body":"...","keywords":["..."],"genres":["..."]}, ...]}`;
+{"items":[{"body":"...","keywords":["..."]}, ...]}`;
 
 function parseItems(raw: unknown, cap = 10): MessageDictationItem[] {
   if (!Array.isArray(raw)) return [];
@@ -33,7 +31,6 @@ function parseItems(raw: unknown, cap = 10): MessageDictationItem[] {
     const o = (x ?? {}) as {
       body?: unknown;
       keywords?: unknown;
-      genres?: unknown;
     };
     const body = typeof o.body === "string" ? norm(o.body).slice(0, 500) : "";
     if (!body) continue;
@@ -41,25 +38,25 @@ function parseItems(raw: unknown, cap = 10): MessageDictationItem[] {
       Array.isArray(v)
         ? [...new Set(v.map((s) => String(s).trim()).filter(Boolean))].slice(0, 8)
         : [];
-    out.push({ body, keywords: strList(o.keywords), genres: strList(o.genres) });
+    out.push({ body, keywords: strList(o.keywords) });
     if (out.length >= cap) break;
   }
   return out;
 }
 
-/** OpenAI 不使用時の素朴な分割（句読点・接続語で区切るだけ。keywords/genres は空）。 */
+/** OpenAI 不使用時の素朴な分割（句読点・接続語で区切るだけ。keywords は空）。 */
 function fallback(text: string): MessageDictationItem[] {
   const parts = norm(text)
     .split(/[\n、,，。・]|(?:\s+と\s+)|(?:\s*あと\s*)|(?:\s*それと\s*)|(?:\s*それから\s*)/g)
     .map((s) => norm(s))
     .filter((s) => s.length > 0 && s.length < 500)
     .slice(0, 10);
-  return parts.map((body) => ({ body, keywords: [], genres: [] }));
+  return parts.map((body) => ({ body, keywords: [] }));
 }
 
 /**
  * 音声入力（キーボードのマイク）で話した自由文を、「未来の自分へのメッセージ」の
- * 本文・キーワード・ジャンル候補に AI で整える。複数話しても要素ごとに分ける。
+ * 本文・キーワード候補に AI で整える。複数話しても要素ごとに分ける。
  * OpenAI キーが無い・失敗時は素朴な分割にフォールバックする。
  */
 export async function splitDictationIntoMessages(

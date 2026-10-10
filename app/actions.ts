@@ -57,6 +57,7 @@ import {
   isAutoScopeDecision,
   proposeScopesForSave,
   setItemScope,
+  setItemKeywordScope,
   type ItemScope,
   ITEM_SCOPES,
 } from "@/lib/item-scope";
@@ -1207,14 +1208,16 @@ export async function createFutureMessageAction(formData: FormData): Promise<voi
   const userId = await requireUserId();
   const body = String(formData.get("body") ?? "").trim();
   if (!body) return;
-  const rawScope = String(formData.get("scope") ?? "keyword");
+  const keywords = parseCsv(formData.get("keywords"));
+  // 検知項目はキーワードだけ。キーワードを書けばそれで一致、書かなければ似た予定で提案する。
+  const rawScope = keywords.length > 0 ? "keyword" : "similar";
   trackEvent(userId, "feature:message-quick-record");
 
   await createFutureMessage(userId, {
     body,
-    keywords: parseCsv(formData.get("keywords")),
-    genres: parseCsv(formData.get("genres")),
-    categoryIds: formData.getAll("categoryIds").map(String),
+    keywords,
+    genres: [],
+    categoryIds: [],
     scope: rawScope,
   });
   revalidateAppViews();
@@ -1283,12 +1286,12 @@ export async function removeMessageFromEventAction(formData: FormData): Promise<
 }
 
 /**
- * 音声入力（スマホのマイクキーで話した自由文）を、AI で「本文・キーワード・ジャンル」
+ * 音声入力（スマホのマイクキーで話した自由文）を、AI で「本文・キーワード」
  * の配列に整える（まだ保存しない）。previewDictatedFailures と同じ2段階の作法。
  */
 export async function previewDictatedMessages(text: string): Promise<{
   ok: boolean;
-  items: { body: string; keywords: string[]; genres: string[] }[];
+  items: { body: string; keywords: string[] }[];
   error?: string;
 }> {
   await requireUserId();
@@ -1316,14 +1319,13 @@ export async function previewDictatedMessages(text: string): Promise<{
 /** previewDictatedMessages で確認済みの内容をまとめて保存する。 */
 export async function saveDictatedMessages(input: {
   eventId: string | null;
-  items: { body: string; keywords: string[]; genres: string[] }[];
+  items: { body: string; keywords: string[] }[];
 }): Promise<{ ok: boolean; added: number; error?: string }> {
   const userId = await requireUserId();
   const cleanItems = (input.items ?? [])
     .map((it) => ({
       body: String(it.body ?? "").trim(),
       keywords: (it.keywords ?? []).map(String),
-      genres: (it.genres ?? []).map(String),
     }))
     .filter((it) => it.body.length > 0);
   if (cleanItems.length === 0) {
@@ -1419,6 +1421,52 @@ export async function setItemScopeAction(input: {
     title,
     chosen: scope,
   });
+  revalidateAppViews(event.id);
+  return { ok: true };
+}
+
+/**
+ * 準備リストの項目の範囲を「キーワード」にする（詳細を開いたときの、文章形式の任意オプション）。
+ * 空文字で呼ぶと「今回のみ」に戻す（KeywordSentenceField の onClear）。
+ */
+export async function setItemKeywordScopeAction(input: {
+  eventId: string;
+  kind: string;
+  title: string;
+  keyword: string;
+}): Promise<{ ok: boolean }> {
+  const userId = await requireUserId();
+  const title = String(input.title ?? "").trim();
+  const keyword = String(input.keyword ?? "").trim();
+  if (!title) return { ok: false };
+
+  const event = await prisma.event.findFirst({
+    where: { id: input.eventId, userId },
+    include: { category: { select: { name: true } } },
+  });
+  if (!event) return { ok: false };
+
+  const scopeInput = {
+    userId,
+    eventId: event.id,
+    eventTitle: event.title,
+    eventMemo: event.memo,
+    categoryId: event.categoryId,
+    categoryName: event.category?.name ?? "その他",
+    feature: extractEventFeature({
+      title: event.title,
+      memo: event.memo,
+      eventDatetime: event.eventDatetime,
+      endDatetime: event.endDatetime,
+    }),
+  };
+  const kind = String(input.kind || "task");
+  trackEvent(userId, "feature:item-scope-keyword");
+  if (keyword) {
+    await setItemKeywordScope({ scope: scopeInput, kind, title, keyword });
+  } else {
+    await setItemScope({ scope: scopeInput, kind, title, chosen: "event_only" });
+  }
   revalidateAppViews(event.id);
   return { ok: true };
 }

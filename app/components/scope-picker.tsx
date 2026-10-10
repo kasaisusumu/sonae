@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ScopeChip } from "@/app/components/scope-chip";
+import { ScopeChip, SCOPE_CHIP } from "@/app/components/scope-chip";
 import type { ItemScope } from "@/lib/item-scope";
 
 /** トグルが表示・選択できる3値だけの型（item-scope の ItemScope のうち、この3つだけ使う）。 */
@@ -33,6 +33,7 @@ export function ScopeQuickToggle({
     <div className={`flex flex-nowrap items-center gap-1 ${className}`}>
       {QUICK_SCOPES.map((sc) => {
         const selected = value === sc;
+        const meta = SCOPE_CHIP[sc];
         return (
           <button
             key={sc}
@@ -43,9 +44,22 @@ export function ScopeQuickToggle({
               e.stopPropagation();
               onChange(sc);
             }}
-            className={`shrink-0 rounded-full ${selected ? "" : "opacity-55 hover:opacity-100"} disabled:opacity-40`}
+            className="shrink-0 rounded-full disabled:opacity-40"
           >
-            <ScopeChip scope={sc} status="chosen" className="pointer-events-none" />
+            {selected ? (
+              // 選んだものだけ色付き（塗りつぶし＋太字）。これ以外は無彩色にして、
+              // 「同じ色の濃淡」ではなく「色が付いているかどうか」で選択状態を見分けられるようにする。
+              <ScopeChip
+                scope={sc}
+                status="chosen"
+                className="pointer-events-none font-semibold ring-2 ring-offset-1 ring-[var(--foreground)]/15"
+              />
+            ) : (
+              <span className="pointer-events-none inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] leading-tight text-muted">
+                {meta.icon && <span aria-hidden>{meta.icon}</span>}
+                <span className="truncate">{meta.label}</span>
+              </span>
+            )}
           </button>
         );
       })}

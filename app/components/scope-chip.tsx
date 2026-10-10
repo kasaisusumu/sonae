@@ -6,19 +6,19 @@ import type { ItemScope } from "@/lib/item-scope";
  * 「次回いつ出すか」の範囲チップ（項目・未来の自分へ・確定カード・学習内容で共通）。
  * 白黒基調の例外として、この 3 色だけを使う（globals.css の --scope-*）。
  * 色だけで意味を伝えず、必ず文言と記号を併記する。
- *   1 = この予定だけ（青・「•」）
- *   2 = この系の予定のとき／似た予定のとき（緑・「••」）
- *   3 = このキーワードの予定のとき（紫・「🏷」）
+ *   1 = 今回だけ（青・「•」）
+ *   2 = 似た予定のとき（緑・「••」）
+ *   3 = この名前の予定だけ（紫・「🏷」、予定名から自動でキーワードを決める）
  *   自動 = 範囲を指定していない従来の自動学習（無彩色）
  */
 export const SCOPE_CHIP: Record<
   ItemScope,
   { label: string; icon: string; tone: "event" | "genre" | "keyword" | "auto" }
 > = {
-  event_only: { label: "この予定だけ", icon: "•", tone: "event" },
+  event_only: { label: "今回だけ", icon: "•", tone: "event" },
   genre: { label: "この系の予定のとき", icon: "••", tone: "genre" },
   similar: { label: "似た予定のとき", icon: "••", tone: "genre" },
-  keyword: { label: "このキーワードの予定のとき", icon: "🏷", tone: "keyword" },
+  keyword: { label: "この名前の予定だけ", icon: "🏷", tone: "keyword" },
   auto: { label: "自動で覚える", icon: "", tone: "auto" },
 };
 

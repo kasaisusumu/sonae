@@ -143,6 +143,7 @@ export default async function FuturesMessagesPage() {
             archivedAt: m.archivedAt,
             confirmedCount: m.confirmedCount,
             upcomingEvents: m.upcomingEvents,
+            sourceEventTitle: m.sourceEventTitle,
           }))}
         />
       </section>

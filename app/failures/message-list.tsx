@@ -9,7 +9,8 @@ import {
 import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
-import { ScopeQuickToggle, KeywordSentenceField } from "@/app/components/scope-picker";
+import { ScopeQuickToggle, KeywordSentenceField, type QuickScope } from "@/app/components/scope-picker";
+import { pickKeyword } from "@/lib/text-norm";
 
 export type MLMessage = {
   id: string;
@@ -21,9 +22,11 @@ export type MLMessage = {
   archivedAt: Date | null;
   confirmedCount: number;
   upcomingEvents: { eventId: string; title: string; eventDatetime: Date }[];
+  /** 作られたきっかけの予定名（あれば）。「この名前の予定だけ」クイック選択の自動キーワードに使う。 */
+  sourceEventTitle: string | null;
 };
 
-/** 次回の出し方の2択＋任意のキーワード（文章形式）。本文の開閉とは別に、常時すぐ切り替えられる。 */
+/** 次回の出し方の3択（うち1つはキーワード・予定名から自動）。本文の開閉とは別に、常時すぐ切り替えられる。 */
 function EditableRow({ m }: { m: MLMessage }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState(m.body);
@@ -44,7 +47,15 @@ function EditableRow({ m }: { m: MLMessage }) {
     if (pending) return;
     start(() => updateFutureMessageAction(buildFd()));
   }
-  function chooseQuick(sc: "event_only" | "similar") {
+  function chooseQuick(sc: QuickScope) {
+    if (sc === "keyword") {
+      const nameSource = m.sourceEventTitle ?? m.upcomingEvents[0]?.title ?? m.body;
+      const kw = pickKeyword(nameSource);
+      setKeywords(kw);
+      setScope("keyword");
+      start(() => updateFutureMessageAction(buildFd({ scope: "keyword", keywords: kw })));
+      return;
+    }
     const next = sc === "event_only" ? "once" : "similar";
     setScope(next);
     start(() => updateFutureMessageAction(buildFd({ scope: next })));

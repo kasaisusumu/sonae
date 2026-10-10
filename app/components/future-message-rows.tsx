@@ -8,7 +8,8 @@ import {
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { ReopenableReview } from "@/app/components/message-review-reopen";
-import { ScopeQuickToggle, KeywordSentenceField } from "@/app/components/scope-picker";
+import { ScopeQuickToggle, KeywordSentenceField, type QuickScope } from "@/app/components/scope-picker";
+import { pickKeyword } from "@/lib/text-norm";
 
 /**
  * 予定に結びついた「未来の自分へ」1 件ぶん。予定詳細・学習内容（マニュアル）の両方で
@@ -30,18 +31,22 @@ export type EMRow = {
   eventEnded: boolean;
 };
 
-/** 行に常時表示する、次回の出し方の2択（詳細を開かなくてもすぐ切り替えられる）。 */
+/** 行に常時表示する、次回の出し方の3択（詳細を開かなくてもすぐ切り替えられる）。 */
 function MessageQuickToggle({ r }: { r: EMRow }) {
   const [pending, start] = useTransition();
-  function choose(sc: "event_only" | "similar") {
-    const next = sc === "event_only" ? "once" : "similar";
+  function choose(sc: QuickScope) {
     const fd = new FormData();
     fd.set("id", r.messageId);
     fd.set("eventId", r.eventId);
     fd.set("body", r.body);
-    fd.set("keywords", r.keywords.join("、"));
     fd.set("genres", "");
-    fd.set("scope", next);
+    if (sc === "keyword") {
+      fd.set("scope", "keyword");
+      fd.set("keywords", pickKeyword(r.eventTitle));
+    } else {
+      fd.set("scope", sc === "event_only" ? "once" : "similar");
+      fd.set("keywords", r.keywords.join("、"));
+    }
     start(() => updateFutureMessageAction(fd));
   }
   return (

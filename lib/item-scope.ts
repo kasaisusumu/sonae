@@ -9,7 +9,7 @@
  */
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
-import { normTitle } from "@/lib/text-norm";
+import { normTitle, pickKeyword } from "@/lib/text-norm";
 import type { EventFeatureData } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
 import {
@@ -35,8 +35,9 @@ interface Recommendation {
 
 const DEFAULT_REASON = "自動で覚えます（従来どおり）";
 
-// AI の推奨は「今回のみ」「似たような予定で提案」の2択だけ（2026-10〜）。
-// キーワード指定は、詳細を開いたときの任意のオプション（手動のみ・AI は提案しない）。
+// AI の推奨は「今回だけ」「似た予定のとき」の2択だけ（2026-10〜）。
+// 「この名前の予定だけ」（キーワード・予定名から自動）は3つ目のクイック選択として画面には出すが、
+// AI は提案しない（手動で選んだときだけ）。
 const SYSTEM = `あなたは準備リストの項目の「次回の出し方」を決めます。
 ユーザーが項目を追加または削除した理由を推測し、次のどちらかを選びます。
 - event_only: 今回の予定だけの内容（特定の場所・人・案件に依存する／一度きりの内容）
@@ -97,14 +98,7 @@ async function recommend(input: {
   }
 }
 
-/** 予定名から、キーワード候補を 1 つ選ぶ（区切りで分けた最初の 2 文字以上）。 */
-export function pickKeyword(eventTitle: string): string {
-  const parts = eventTitle
-    .split(/[\s　・／/（）()「」【】『』,、]+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length >= 2);
-  return (parts[0] ?? eventTitle.trim()).slice(0, 30);
-}
+export { pickKeyword };
 
 export interface EventScopeInput {
   userId: string;
@@ -348,8 +342,9 @@ export async function setItemScope(input: {
 }
 
 /**
- * 項目の範囲を「キーワード」にする（詳細を開いたときの、文章形式の任意オプション）。
- * 2択（event_only/similar）とは別の、手動だけの設定（AI は提案しない）。
+ * 項目の範囲をキーワード（カスタム）にする。詳細を開いたときの、文章形式の任意オプション。
+ * クイック選択の3番目（「この名前の予定だけ」＝予定名から自動）とは別に、
+ * 任意の語に差し替えたいときに使う。手動だけの設定（AI は提案しない）。
  */
 export async function setItemKeywordScope(input: {
   scope: EventScopeInput;

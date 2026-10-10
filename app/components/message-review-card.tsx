@@ -6,6 +6,7 @@ import {
   skipMessageReviewAction,
 } from "@/app/actions";
 import { ScopeQuickToggle, KeywordSentenceField } from "@/app/components/scope-picker";
+import { pickKeyword } from "@/lib/text-norm";
 
 export interface ReviewProposal {
   body: string;
@@ -138,7 +139,14 @@ export function MessageReviewCard({
         <p className="text-xs text-muted">次回の出し方</p>
         <ScopeQuickToggle
           value={scope === "once" ? "event_only" : scope === "similar" ? "similar" : "keyword"}
-          onChange={(sc) => setScope(sc === "event_only" ? "once" : "similar")}
+          onChange={(sc) => {
+            if (sc === "keyword") {
+              setKeywords(pickKeyword(eventTitle));
+              setScope("keyword");
+            } else {
+              setScope(sc === "event_only" ? "once" : "similar");
+            }
+          }}
         />
         <KeywordSentenceField
           initialKeyword={scope === "keyword" ? keywords : ""}

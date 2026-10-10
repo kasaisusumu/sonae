@@ -4,16 +4,17 @@ import { useState } from "react";
 import { ScopeChip } from "@/app/components/scope-chip";
 import type { ItemScope } from "@/lib/item-scope";
 
-/** トグルが表示・選択できる2値だけの型（item-scope の ItemScope のうち、この2つだけ使う）。 */
-export type QuickScope = Extract<ItemScope, "event_only" | "similar">;
+/** トグルが表示・選択できる3値だけの型（item-scope の ItemScope のうち、この3つだけ使う）。 */
+export type QuickScope = Extract<ItemScope, "event_only" | "similar" | "keyword">;
 
 /**
- * 「次回の出し方」のクイック選択（2択だけ）。項目（準備リスト）・未来の自分へ、共通で使う。
+ * 「次回の出し方」のクイック選択（3択）。項目（準備リスト）・未来の自分へ、共通で使う。
  * 詳細を開かなくても、ここをタップするだけで即切り替わる。
- * 現在値がこの2つ以外（キーワード指定など）のときは、どちらも選択状態にしない
- * （キーワード側の表示は呼び出し元が別に出す）。
+ * 「この名前の予定だけ」（keyword）をタップしたときの実際のキーワードは、呼び出し元が
+ * 予定名から自動で決める（`pickKeyword`、`lib/text-norm.ts`）。呼び出し元の `onChange` が
+ * それぞれの保存処理（キーワードの算出を含む）を行う。
  */
-export const QUICK_SCOPES: QuickScope[] = ["event_only", "similar"];
+export const QUICK_SCOPES: QuickScope[] = ["event_only", "similar", "keyword"];
 
 export function ScopeQuickToggle({
   value,
@@ -21,7 +22,8 @@ export function ScopeQuickToggle({
   disabled,
   className = "",
 }: {
-  /** 2択のどちらかと一致すればハイライトする。それ以外の値（キーワード等）ならどちらも非選択。 */
+  /** 3択のどれかと一致すればハイライトする（keyword はカスタムの値でも3番目がハイライトする）。
+   * それ以外の値（旧ジャンル・自動など）ならどれも非選択。 */
   value: string;
   onChange: (next: QuickScope) => void;
   disabled?: boolean;
@@ -82,7 +84,7 @@ export function KeywordSentenceField({
 
   return (
     <div className="flex flex-wrap items-center gap-1 text-sm text-foreground">
-      <span className="text-muted">または、キーワードで「</span>
+      <span className="text-muted">キーワードを直すなら「</span>
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}

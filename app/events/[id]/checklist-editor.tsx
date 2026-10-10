@@ -19,7 +19,6 @@ import { InfoHint } from "@/app/components/info-hint";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { useFlushOnHide } from "@/app/components/use-flush-on-hide";
 import { ItemImages, Linkify, type ItemImage } from "./item-media";
-import { ScopeChip } from "@/app/components/scope-chip";
 import { ScopeQuickToggle, KeywordSentenceField, type QuickScope } from "@/app/components/scope-picker";
 import type { ItemScope } from "@/lib/item-scope";
 
@@ -498,7 +497,7 @@ export function ChecklistEditor({
     return it.scope?.status === "chosen" ? "chosen" : "proposed";
   }
 
-  /** 項目の範囲を選び直す（今回のみ／似たような予定で提案の2択）。未保存の編集を先に保存してから保存する。 */
+  /** 項目の範囲を選び直す（今回だけ／似た予定のとき／この名前の予定だけ、の3択）。未保存の編集を先に保存してから保存する。 */
   function chooseScope(it: Item, scope: QuickScope) {
     setScopeOverride((prev) => ({ ...prev, [it.key]: scope }));
     startTransition(async () => {
@@ -513,7 +512,7 @@ export function ChecklistEditor({
     });
   }
 
-  /** 項目の範囲を「キーワード」にする（詳細の文章欄）。空文字なら「今回のみ」に戻す。 */
+  /** 項目の範囲を、詳細の文章欄で指定したキーワードに差し替える。空文字なら「今回だけ」に戻す。 */
   function chooseKeyword(it: Item, keyword: string) {
     setScopeOverride((prev) => ({ ...prev, [it.key]: keyword ? "keyword" : "event_only" }));
     startTransition(async () => {
@@ -715,17 +714,13 @@ export function ChecklistEditor({
                         value={shownScope(it)}
                         onChange={(sc) => chooseScope(it, sc)}
                       />
-                      {shownScope(it) === "keyword" && (
+                      {shownScope(it) === "keyword" && it.scope?.keyword && (
                         <button
                           type="button"
                           onClick={() => toggleOpen(it.key)}
-                          className="rounded-full"
+                          className="text-[11px] text-muted hover:text-foreground"
                         >
-                          <ScopeChip
-                            scope="keyword"
-                            status={shownStatus(it)}
-                            className="pointer-events-none"
-                          />
+                          「{it.scope.keyword}」
                         </button>
                       )}
                     </div>
@@ -773,7 +768,7 @@ export function ChecklistEditor({
               {/* 詳細（チップを押したときだけ）：通知タイミング・メモ・削除 */}
               {open && (
                 <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
-                  {/* 次回の出し方（範囲）。2択は行に常時表示済み。ここではキーワードの任意設定だけ。 */}
+                  {/* 次回の出し方（範囲）。3択は行に常時表示済み。ここではキーワードを直す（任意）だけ。 */}
                   <div className="space-y-1">
                     <p className="text-[11px] text-muted">
                       {shownStatus(it) === "proposed"

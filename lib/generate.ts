@@ -13,7 +13,7 @@ export interface GenerateInput {
 export interface GeneratedBase {
   tasks: GeneratedItem[];
   belongings: GeneratedItem[];
-  source: "openai" | "template" | "recall";
+  source: "openai" | "template" | "recall" | "none";
 }
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";

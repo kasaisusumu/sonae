@@ -67,10 +67,13 @@ function persistData(
  * ベース生成＋学習ルール適用で準備リストを（再）生成し、丸ごと保存する。既存コメントは引き継ぐ。
  * force=false（既定）: 同名・未編集の予定が既にリストを持っていれば、生成せずコピーする
  *   （AI 節約＋同名グループの内容を揃える）。force=true: 必ず生成する（作り直す用）。
+ * allowAiGeneration=true（既定）: 学習元（再利用・確定ルール・範囲ルール・パターン）が無ければ
+ *   AI でたたき台を新規生成する。false にすると、学習元が無ければ何も生成しない
+ *   （`buildChecklistForEvent` 参照。カレンダー連携による自動生成だけ false を渡す）。
  */
 export async function generateAndSaveChecklist(
   eventId: string,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; allowAiGeneration?: boolean } = {},
 ): Promise<void> {
   await applyLearnedListReminder(eventId);
 
@@ -104,7 +107,9 @@ export async function generateAndSaveChecklist(
     }
   }
 
-  const { items, customSectionSeeds } = await buildChecklistForEvent(eventId);
+  const { items, customSectionSeeds } = await buildChecklistForEvent(eventId, {
+    allowAiGeneration: opts.allowAiGeneration,
+  });
   const rows = persistData(eventId, items, comments);
   await prisma.$transaction([
     // 作り直すのは組み込みの2枠（準備すること・持ち物）だけ。
@@ -150,8 +155,14 @@ export async function generateAndSaveChecklist(
   }
 }
 
-/** チェックリストが未生成なら生成する（予定詳細を開いたときの遅延生成）。 */
-export async function ensureChecklistForEvent(eventId: string): Promise<void> {
+/**
+ * チェックリストが未生成なら生成する（予定詳細を開いたときの遅延生成・「🪄 準備リストを作る」）。
+ * allowAiGeneration は generateAndSaveChecklist に渡すだけ（既定 true）。
+ */
+export async function ensureChecklistForEvent(
+  eventId: string,
+  opts: { allowAiGeneration?: boolean } = {},
+): Promise<void> {
   const ev = await prisma.event.findUnique({
     where: { id: eventId },
     select: { listCleared: true },
@@ -162,8 +173,11 @@ export async function ensureChecklistForEvent(eventId: string): Promise<void> {
     return;
   }
   const count = await prisma.checklistItem.count({ where: { eventId } });
-  if (count === 0) await generateAndSaveChecklist(eventId);
-  else await applyLearnedListReminder(eventId);
+  if (count === 0) {
+    await generateAndSaveChecklist(eventId, { allowAiGeneration: opts.allowAiGeneration });
+  } else {
+    await applyLearnedListReminder(eventId);
+  }
 }
 
 /**
@@ -541,7 +555,9 @@ export async function primeNotifiedChecklists(
       const [first, ...rest] = g;
       let n = 0;
       try {
-        await generateAndSaveChecklist(first.id); // まとまりにつき最大 1 回の生成
+        // 学習元（再利用・確定ルール・範囲ルール・パターン）が無ければ何も生成しない
+        // （カレンダー連携による自動生成はAIでのたたき台生成をしない・ユーザー指定）。
+        await generateAndSaveChecklist(first.id, { allowAiGeneration: false }); // まとまりにつき最大 1 回の生成
         await syncEventDescription(first.id);
         n++;
         for (const r of rest) {

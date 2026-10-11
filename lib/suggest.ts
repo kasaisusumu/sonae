@@ -247,10 +247,19 @@ export interface BuildChecklistResult {
  * 予定の準備リスト（準備すること＋持ち物）を組み立てる。
  * 一般ベース → 確定ルール強制適用 → 仮ルールは提案 → 上限で間引き。
  * 学習が薄いカテゴリ・パターンではベースがほぼそのまま出る。
+ *
+ * `allowAiGeneration` (既定 true): 再利用できる過去予定が無いとき、AI（`generateBaseChecklist`）
+ * でベースを新規生成するかどうか。false にすると、学習元（再利用・確定ルール・範囲ルール・
+ * カテゴリ横断パターン）が無ければ何も生成しない（空のまま）。カレンダー連携による自動生成
+ * （`primeNotifiedChecklists`／予定詳細の遅延生成）だけ false を渡す（ユーザー指定）。
+ * 「🪄 準備リストを作る」「作り直す」のような手動操作では、学習元が無くても従来どおり
+ * AI でたたき台を作る（既定の true のまま）。
  */
 export async function buildChecklistForEvent(
   eventId: string,
+  opts: { allowAiGeneration?: boolean } = {},
 ): Promise<BuildChecklistResult> {
+  const allowAiGeneration = opts.allowAiGeneration ?? true;
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: { category: true },
@@ -307,14 +316,16 @@ export async function buildChecklistForEvent(
           belongings: recalled.belongings,
           source: "recall",
         })
-      : generateBaseChecklist({
-          title: event.title,
-          categoryName: event.category?.name ?? "その他",
-          eventDatetime: event.eventDatetime,
-          memo: event.memo,
-          isOverseas: feature.isOverseas,
-          durationNights: feature.durationNights,
-        }),
+      : allowAiGeneration
+        ? generateBaseChecklist({
+            title: event.title,
+            categoryName: event.category?.name ?? "その他",
+            eventDatetime: event.eventDatetime,
+            memo: event.memo,
+            isOverseas: feature.isOverseas,
+            durationNights: feature.durationNights,
+          })
+        : Promise.resolve<GeneratedBase>({ tasks: [], belongings: [], source: "none" }),
     // 似た予定を思い出したときは、シグネチャ違いも含めて前回の学習を全部当てる。
     // そこで今回の予定が違う形に編集されたら、初めてシグネチャごとに枝分かれする。
     getApplicableRules(event.categoryId, feature, "task", { broad: !!recalled }),

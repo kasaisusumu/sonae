@@ -23,6 +23,8 @@ export function ScopeQuickToggle({
   disabled,
   className = "",
   showHint = true,
+  hintOpen,
+  onHintOpenChange,
 }: {
   /** 3択のどれかと一致すればハイライトする（keyword はカスタムの値でも3番目がハイライトする）。
    * それ以外の値（旧ジャンル・自動など）ならどれも非選択。 */
@@ -32,6 +34,13 @@ export function ScopeQuickToggle({
   className?: string;
   /** 3つのボタンの横に ⓘ（説明）を出すか。既定は出す。同じ行に複数並ぶ画面だけ false にする。 */
   showHint?: boolean;
+  /**
+   * ⓘ の開閉状態を呼び出し元に持たせたいとき用（`InfoHint` の `open`/`onOpenChange` にそのまま渡す）。
+   * 自動保存のたびに行が再マウントされる画面（準備リストの項目行など）では必須:
+   * 内部 state のままだと、保存完了の瞬間に再マウントされて開いたポップアップが即閉じてしまう。
+   */
+  hintOpen?: boolean;
+  onHintOpenChange?: (open: boolean) => void;
 }) {
   return (
     <div className={`flex flex-nowrap items-center gap-1 ${className}`}>
@@ -68,7 +77,7 @@ export function ScopeQuickToggle({
         );
       })}
       {showHint && (
-        <InfoHint id="scope-quick-toggle">
+        <InfoHint id="scope-quick-toggle" open={hintOpen} onOpenChange={onHintOpenChange}>
           <p className="mb-2 text-sm font-semibold text-foreground">
             「次回の出し方」の3つのボタン
           </p>

@@ -183,6 +183,11 @@ export function ChecklistEditor({
 
   // 行ごとの詳細（通知タイミング・メモ・削除）を開いているか
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
+  // 「次回の出し方」ⓘ の開閉。行（<li key={it.key}>）の中では持たせない: it.key は
+  // 自動保存が完了するたびに振り直され、行ごと再マウントされる（下の useEffect のコメント参照）。
+  // 行の中の useState だとその瞬間に開いたポップアップが即閉じてしまうため、再マウントされない
+  // この階層で共有して持つ（内容は全項目共通なので、1つの boolean で足りる）。
+  const [scopeHintOpen, setScopeHintOpen] = useState(false);
   const toggleOpen = (key: string) =>
     setOpenKeys((prev) => {
       const next = new Set(prev);
@@ -713,6 +718,8 @@ export function ChecklistEditor({
                       <ScopeQuickToggle
                         value={shownScope(it)}
                         onChange={(sc) => chooseScope(it, sc)}
+                        hintOpen={scopeHintOpen}
+                        onHintOpenChange={setScopeHintOpen}
                       />
                       {shownScope(it) === "keyword" && it.scope?.keyword && (
                         <button

@@ -9,17 +9,29 @@ import { trackFeatureUse } from "@/app/actions";
  * 見出しや <p> の中に置けるよう、要素は span / button のみで組む。
  * `id` は管理画面の利用状況分析用の識別子（`lib/track-catalog.ts` の
  * `INFOHINT_KEYS` と対応させる。新しく置いたら両方に追記すること）。
+ *
+ * `open`/`onOpenChange` を渡すと開閉状態を呼び出し元が持つ「制御あり」モードになる
+ * （省略時は内部の useState で自分で持つ）。頻繁に key が振り直されて丸ごと再マウントされる
+ * 行（例: 準備リストの項目行。自動保存のたびに key が変わる）の中に置く場合、内部 state だと
+ * 保存が完了した瞬間に再マウントされて開いたポップアップが即閉じてしまう。呼び出し元の、
+ * 再マウントされない場所に state を持たせて渡すことでそれを避けられる。
  */
 export function InfoHint({
   id,
   children,
   label = "説明を見る",
+  open: controlledOpen,
+  onOpenChange,
 }: {
   id: string;
   children: ReactNode;
   label?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = onOpenChange ?? setLocalOpen;
   return (
     <>
       <button

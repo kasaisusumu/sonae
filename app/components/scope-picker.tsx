@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ScopeChip, SCOPE_CHIP } from "@/app/components/scope-chip";
+import { InfoHint } from "@/app/components/info-hint";
 import type { ItemScope } from "@/lib/item-scope";
 
 /** トグルが表示・選択できる3値だけの型（item-scope の ItemScope のうち、この3つだけ使う）。 */
@@ -21,6 +22,7 @@ export function ScopeQuickToggle({
   onChange,
   disabled,
   className = "",
+  showHint = true,
 }: {
   /** 3択のどれかと一致すればハイライトする（keyword はカスタムの値でも3番目がハイライトする）。
    * それ以外の値（旧ジャンル・自動など）ならどれも非選択。 */
@@ -28,6 +30,8 @@ export function ScopeQuickToggle({
   onChange: (next: QuickScope) => void;
   disabled?: boolean;
   className?: string;
+  /** 3つのボタンの横に ⓘ（説明）を出すか。既定は出す。同じ行に複数並ぶ画面だけ false にする。 */
+  showHint?: boolean;
 }) {
   return (
     <div className={`flex flex-nowrap items-center gap-1 ${className}`}>
@@ -63,6 +67,26 @@ export function ScopeQuickToggle({
           </button>
         );
       })}
+      {showHint && (
+        <InfoHint id="scope-quick-toggle">
+          <p className="mb-2 text-sm font-semibold text-foreground">
+            「次回の出し方」の3つのボタン
+          </p>
+          <p className="mb-1.5">
+            <span className="font-medium text-foreground">今回だけ</span>：
+            この予定の中だけ。次回以降の予定には影響しません。
+          </p>
+          <p className="mb-1.5">
+            <span className="font-medium text-foreground">似た予定</span>（似た予定のとき）：
+            日時や長さが似た予定でも、同じように出す／出さないようにします。
+          </p>
+          <p>
+            <span className="font-medium text-foreground">この名前</span>（この名前の予定だけ）：
+            この予定の名前から自動でキーワードを決めて、次にそのキーワードを含む予定が
+            来たときだけ出す／出さないようにします。∨ を開くとキーワードを直せます。
+          </p>
+        </InfoHint>
+      )}
     </div>
   );
 }

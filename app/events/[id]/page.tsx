@@ -12,6 +12,7 @@ import {
 } from "./checklist-section";
 import { ScrollToHash } from "./scroll-to-hash";
 import { DescLinkHint } from "./desc-link-hint";
+import { ScopeHint } from "./scope-hint";
 import { InfoHint } from "@/app/components/info-hint";
 import { trackEvent } from "@/lib/track";
 
@@ -46,6 +47,9 @@ export default async function EventDetailPage({
   // 説明欄のリンク（?src=cal）から来たときだけ、直接編集の案内を出す。
   // 「今後表示しない」が押されるまでは、毎回このリンクで来るたびに表示する。
   const showDescLinkHint = src === "cal" && !user.descLinkHintDismissedAt;
+  // 「次回の出し方」の説明。全画面ポップアップが重ならないよう、DescLinkHint を
+  // 出さない回だけ出す（「今後表示しない」が押されるまで、毎回開くたびに表示する）。
+  const showScopeHint = !showDescLinkHint && !user.scopeHintDismissedAt;
 
   const categoryNames = Array.from(
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),
@@ -55,6 +59,7 @@ export default async function EventDetailPage({
     <div className="space-y-6">
       <ScrollToHash />
       <DescLinkHint show={showDescLinkHint} />
+      <ScopeHint show={showScopeHint} />
       <Link
         href="/events"
         className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-2 text-sm font-medium text-foreground no-underline shadow-sm transition-colors hover:bg-surface-muted active:bg-surface-muted"

@@ -93,4 +93,7 @@ export const POPUP_KEYS: TrackedKey[] = [
   { key: "popup:coach:settings_v5:complete", label: "コーチマーク: 設定（最後まで）" },
   { key: "popup:desc-link-hint:shown", label: "説明欄リンクの案内: 表示" },
   { key: "popup:desc-link-hint:dismiss", label: "説明欄リンクの案内: 今後表示しない" },
+  { key: "popup:scope-hint:shown", label: "次回の出し方の案内: 表示" },
+  { key: "popup:scope-hint:dismiss", label: "次回の出し方の案内: 今後表示しない" },
+  { key: "infohint:scope-quick-toggle", label: "次回の出し方: 説明（ⓘ）" },
 ];

@@ -26,6 +26,9 @@ model User {
   // 説明欄のリンクから開いたときに出す「直接編集できます」案内を、
   // 「今後表示しない」で消したかどうか。null の間は毎回表示する。
   descLinkHintDismissedAt DateTime?
+  // 「次回の出し方」（3択）の説明ポップアップを、「今後表示しない」で消したかどうか。
+  // null の間は予定詳細を開くたびに毎回表示する（desc-link-hint と同じ方式）。
+  scopeHintDismissedAt DateTime?
 
   googleAccount  UserGoogleAccount?
   categories     Category[]

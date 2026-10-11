@@ -1545,6 +1545,19 @@ export async function dismissDescLinkHint(): Promise<void> {
   void trackFeatureUse("popup:desc-link-hint:dismiss");
 }
 
+/**
+ * 「次回の出し方」（3択）の説明ポップアップを、「今後表示しない」で消したことを記録する
+ * （呼ばなければ、予定詳細を開くたびに毎回表示され続ける）。
+ */
+export async function dismissScopeHint(): Promise<void> {
+  const userId = await requireUserId();
+  await prisma.user.updateMany({
+    where: { id: userId, scopeHintDismissedAt: null },
+    data: { scopeHintDismissedAt: new Date() },
+  });
+  void trackFeatureUse("popup:scope-hint:dismiss");
+}
+
 // ─────────────────────────────────────────────
 // 通知（Web Push）購読の登録・解除
 // ─────────────────────────────────────────────

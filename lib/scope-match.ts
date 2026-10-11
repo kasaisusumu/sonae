@@ -60,6 +60,17 @@ export function matchScopeRule(rule: ScopeRuleRow, ctx: ScopeContext): string | 
     return null;
   }
   if (rule.scope === "similar") {
+    // 2026-10〜: 日時・長さ（featureSignature）ではなく、AI が判断した「同じ種類」
+    // （例: バスと新幹線はどちらも「移動」）で当てる。genre と同じ、言い換え語の一致判定。
+    for (const g of parseGenreKeywords(rule.genreKeywords)) {
+      for (const term of g.terms) {
+        if (includesNorm(ctx.text, term)) {
+          return `似た予定（同じ種類「${g.genre}」の「${term}」に一致）`;
+        }
+      }
+    }
+    // 言い換え語が無い旧データ（AI 未設定時に作られたルールなど）は、
+    // 従来の日時・長さの一致にフォールバックする。
     if (rule.signature && signatureMatches(rule.signature, ctx.feature)) {
       return "似た予定（日時・長さなどの特徴が一致）";
     }

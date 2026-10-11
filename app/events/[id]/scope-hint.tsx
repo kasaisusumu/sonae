@@ -46,7 +46,8 @@ export function ScopeHint({ show }: { show: boolean }) {
           </p>
           <p>
             <span className="font-medium text-foreground">似た予定</span>（似た予定のとき）：
-            日時や長さが似た予定でも、同じように出す／出さないようにします。
+            日時や長さではなく、用途が同じ種類の予定（例: バスも新幹線も「移動」）でも
+            同じように出す／出さないようにします。種類はAIが自動で判断します。
           </p>
           <p>
             <span className="font-medium text-foreground">この名前</span>（この名前の予定だけ）：

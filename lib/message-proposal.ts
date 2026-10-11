@@ -76,6 +76,8 @@ function acceptanceRateByField(
   return out;
 }
 
+// メッセージは「キーワードが決まっていればそれで一致」という条件そのものなので、
+// ジャンル・カテゴリ・一致条件（scope）は提案しない（2026-10〜。画面にも出していない）。
 const SYSTEM = `あなたは「未来の自分へのメッセージ」アプリのアシスタントです。
 終わった予定を振り返り、次回への引き継ぎとして残すメッセージの内容を提案します。
 
@@ -83,12 +85,11 @@ const SYSTEM = `あなたは「未来の自分へのメッセージ」アプリ�
 - 事実を捏造しない。予定のタイトル・メモ・既存のメッセージ本文だけから考える。
 - 本文への追記は「〜を確認する」「〜の結果を聞く」のような、次回に向けた短い一文。
   追記する必要が無いと判断したら、既存の本文をそのまま返す（無理に足さない）。
-- キーワード・ジャンルは、次回も同じ種類の予定に一致させるために有効そうなものだけ提案する。
+- キーワードは、次回も同じ種類の予定に一致させるために有効そうなものだけ提案する。
 - 迷ったら変更しない（既存の値をそのまま返す）。
 - 出力は必ず次の JSON のみ:
-{"body":"...","keywords":["..."],"genres":["..."],"categoryIds":["..."],
- "scope":"keyword|similar|once","reasons":{"body":"...","keywords":"...","genres":"...",
- "categoryIds":"...","scope":"..."},"newMessageSuggestions":[{"body":"...","keywords":["..."]}]}`;
+{"body":"...","keywords":["..."],"reasons":{"body":"...","keywords":"..."},
+ "newMessageSuggestions":[{"body":"...","keywords":["..."]}]}`;
 
 /** 予定後の確定カード用の提案一式を作る（AI 未設定時は「変更なし」を返す）。 */
 export async function buildMessageProposal(input: {
@@ -153,9 +154,6 @@ export async function buildMessageProposal(input: {
     const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
       body?: unknown;
       keywords?: unknown;
-      genres?: unknown;
-      categoryIds?: unknown;
-      scope?: unknown;
       reasons?: unknown;
       newMessageSuggestions?: unknown;
     };
@@ -163,11 +161,9 @@ export async function buildMessageProposal(input: {
       Array.isArray(v)
         ? [...new Set(v.map((x) => String(x).trim()).filter(Boolean))].slice(0, cap)
         : [];
-    const scope =
-      raw.scope === "similar" || raw.scope === "once" ? raw.scope : "keyword";
     const reasonsObj = (raw.reasons ?? {}) as Record<string, unknown>;
     const reasons: ProposalFields["reasons"] = {};
-    for (const k of ["body", "keywords", "genres", "categoryIds", "scope"] as const) {
+    for (const k of ["body", "keywords"] as const) {
       const v = reasonsObj[k];
       if (typeof v === "string" && v.trim()) reasons[k] = v.trim().slice(0, 80);
     }
@@ -188,9 +184,9 @@ export async function buildMessageProposal(input: {
           ? raw.body.trim().slice(0, 2000)
           : input.current.body,
       keywords: strList(raw.keywords),
-      genres: strList(raw.genres, 5),
-      categoryIds: strList(raw.categoryIds),
-      scope,
+      genres: [],
+      categoryIds: [],
+      scope: "keyword",
       reasons,
       newMessageSuggestions,
     };

@@ -5,8 +5,7 @@ import {
   confirmMessageReviewAction,
   skipMessageReviewAction,
 } from "@/app/actions";
-import { ScopeQuickToggle, KeywordSentenceField } from "@/app/components/scope-picker";
-import { pickKeyword } from "@/lib/text-norm";
+import { KeywordSentenceField } from "@/app/components/scope-picker";
 
 export interface ReviewProposal {
   body: string;
@@ -47,7 +46,6 @@ export function MessageReviewCard({
 }) {
   const [body, setBody] = useState(proposal.body);
   const [keywords, setKeywords] = useState(proposal.keywords.join("、"));
-  const [scope, setScope] = useState(proposal.scope);
   const [acceptedNew, setAcceptedNew] = useState<Set<number>>(() => new Set());
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState<"confirmed" | "skipped" | null>(null);
@@ -55,10 +53,10 @@ export function MessageReviewCard({
   function finalFields() {
     return {
       body: body.trim(),
-      keywords: scope === "keyword" ? splitCsv(keywords) : [],
+      keywords: splitCsv(keywords),
       genres: [],
       categoryIds: [],
-      scope,
+      scope: "keyword",
     };
   }
 
@@ -136,31 +134,14 @@ export function MessageReviewCard({
       </div>
 
       <div className="space-y-1.5">
-        <p className="text-xs text-muted">次回の出し方</p>
-        <ScopeQuickToggle
-          value={scope === "once" ? "event_only" : scope === "similar" ? "similar" : "keyword"}
-          onChange={(sc) => {
-            if (sc === "keyword") {
-              setKeywords(pickKeyword(eventTitle));
-              setScope("keyword");
-            } else {
-              setScope(sc === "event_only" ? "once" : "similar");
-            }
-          }}
-        />
+        <p className="text-xs text-muted">キーワード</p>
         <KeywordSentenceField
-          initialKeyword={scope === "keyword" ? keywords : ""}
-          onCommit={(kw) => {
-            setKeywords(kw);
-            setScope("keyword");
-          }}
-          onClear={() => {
-            setKeywords("");
-            setScope("once");
-          }}
+          initialKeyword={keywords}
+          onCommit={(kw) => setKeywords(kw)}
+          onClear={() => setKeywords("")}
         />
-        {proposal.reasons.scope && (
-          <p className="text-[11px] text-teal-dark">根拠: {proposal.reasons.scope}</p>
+        {proposal.reasons.keywords && (
+          <p className="text-[11px] text-teal-dark">根拠: {proposal.reasons.keywords}</p>
         )}
       </div>
 

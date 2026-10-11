@@ -100,7 +100,8 @@ export default async function FuturesMessagesPage() {
           ✍️ メッセージを書く
           <InfoHint id="failures-quick-record">
             予定が未定でも作れます。キーワードを書けば、それに一致する予定が入ったとき
-            自動で知らせます。キーワードを書かなければ、似た予定のときに提案します。
+            自動で知らせます。キーワードを書かなければ、自動では一致しません
+            （あとでキーワードを足せば効くようになります）。
           </InfoHint>
         </h2>
         <form action={createFutureMessageAction} className="mt-3 space-y-3">

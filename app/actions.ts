@@ -1209,8 +1209,8 @@ export async function createFutureMessageAction(formData: FormData): Promise<voi
   const body = String(formData.get("body") ?? "").trim();
   if (!body) return;
   const keywords = parseCsv(formData.get("keywords"));
-  // 検知項目はキーワードだけ。キーワードを書けばそれで一致、書かなければ似た予定で提案する。
-  const rawScope = keywords.length > 0 ? "keyword" : "similar";
+  // キーワードが条件そのもの（2026-10〜）。決まっていればそれで一致、決まっていなければ
+  // 自動では一致しない（あとでキーワードを足せば効くようになる）。
   trackEvent(userId, "feature:message-quick-record");
 
   await createFutureMessage(userId, {
@@ -1218,7 +1218,7 @@ export async function createFutureMessageAction(formData: FormData): Promise<voi
     keywords,
     genres: [],
     categoryIds: [],
-    scope: rawScope,
+    scope: "keyword",
   });
   revalidateAppViews();
 }

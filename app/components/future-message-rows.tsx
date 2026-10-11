@@ -8,8 +8,7 @@ import {
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { ReopenableReview } from "@/app/components/message-review-reopen";
-import { ScopeQuickToggle, KeywordSentenceField, type QuickScope } from "@/app/components/scope-picker";
-import { pickKeyword } from "@/lib/text-norm";
+import { KeywordSentenceField } from "@/app/components/scope-picker";
 
 /**
  * 予定に結びついた「未来の自分へ」1 件ぶん。予定詳細・学習内容（マニュアル）の両方で
@@ -31,48 +30,25 @@ export type EMRow = {
   eventEnded: boolean;
 };
 
-/** 行に常時表示する、次回の出し方の3択（詳細を開かなくてもすぐ切り替えられる）。 */
-function MessageQuickToggle({ r }: { r: EMRow }) {
-  const [pending, start] = useTransition();
-  function choose(sc: QuickScope) {
-    const fd = new FormData();
-    fd.set("id", r.messageId);
-    fd.set("eventId", r.eventId);
-    fd.set("body", r.body);
-    fd.set("genres", "");
-    if (sc === "keyword") {
-      fd.set("scope", "keyword");
-      fd.set("keywords", pickKeyword(r.eventTitle));
-    } else {
-      fd.set("scope", sc === "event_only" ? "once" : "similar");
-      fd.set("keywords", r.keywords.join("、"));
-    }
-    start(() => updateFutureMessageAction(fd));
-  }
-  return (
-    <ScopeQuickToggle
-      value={r.scope === "once" ? "event_only" : r.scope === "similar" ? "similar" : "keyword"}
-      onChange={choose}
-      disabled={pending}
-    />
-  );
-}
-
-/** 開いたときの編集フォーム（本文・任意でキーワードを文章形式で）＋この予定から外す。 */
+/**
+ * 開いたときの編集フォーム（本文・キーワード）＋この予定から外す。
+ * メッセージはキーワードを決めること自体が条件なので、項目のような「今回だけ／似た予定／
+ * この名前」の3択は持たない（2026-10 にやめた）。キーワードが決まっていればそれで一致、
+ * 決まっていなければ自動では一致しない（この予定への手動の「＋追加」はキーワードと無関係）。
+ */
 function RowEditForm({ r }: { r: EMRow }) {
   const [body, setBody] = useState(r.body);
   const [keywords, setKeywords] = useState(r.keywords.join("、"));
-  const [scope, setScope] = useState(r.scope);
   const [pending, start] = useTransition();
 
-  function buildFd(next?: { scope?: string; keywords?: string }): FormData {
+  function buildFd(next?: { keywords?: string }): FormData {
     const fd = new FormData();
     fd.set("id", r.messageId);
     fd.set("eventId", r.eventId);
     fd.set("body", body);
     fd.set("keywords", next?.keywords ?? keywords);
     fd.set("genres", "");
-    fd.set("scope", next?.scope ?? scope);
+    fd.set("scope", "keyword");
     return fd;
   }
   function flush() {
@@ -81,13 +57,11 @@ function RowEditForm({ r }: { r: EMRow }) {
   }
   function commitKeyword(kw: string) {
     setKeywords(kw);
-    setScope("keyword");
-    start(() => updateFutureMessageAction(buildFd({ scope: "keyword", keywords: kw })));
+    start(() => updateFutureMessageAction(buildFd({ keywords: kw })));
   }
   function clearKeyword() {
     setKeywords("");
-    setScope("once");
-    start(() => updateFutureMessageAction(buildFd({ scope: "once", keywords: "" })));
+    start(() => updateFutureMessageAction(buildFd({ keywords: "" })));
   }
 
   return (
@@ -102,7 +76,7 @@ function RowEditForm({ r }: { r: EMRow }) {
         aria-label="メッセージ本文"
       />
       <KeywordSentenceField
-        initialKeyword={scope === "keyword" ? keywords : ""}
+        initialKeyword={keywords}
         onCommit={commitKeyword}
         onClear={clearKeyword}
         pending={pending}
@@ -114,7 +88,7 @@ function RowEditForm({ r }: { r: EMRow }) {
         <input type="hidden" name="eventId" value={r.eventId} />
         <input type="hidden" name="messageId" value={r.messageId} />
         <ConfirmButton
-          message="この予定からだけ外します。次回以降は、設定（キーワード等）に一致すればまた表示されます。よろしいですか？"
+          message="この予定からだけ外します。次回以降は、キーワードが一致すればまた表示されます。よろしいですか？"
           className="text-[11px] text-muted underline hover:text-warn"
         >
           この予定から外す
@@ -160,11 +134,12 @@ export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
               </button>
             </div>
             <div className="ml-0.5 mt-1 flex flex-wrap items-center gap-1.5">
-              <MessageQuickToggle r={r} />
-              {r.scope === "keyword" && r.keywords.length > 0 && (
+              {r.keywords.length > 0 ? (
                 <span className="text-[11px] text-muted">
                   🏷「{r.keywords.join("、")}」のとき
                 </span>
+              ) : (
+                <span className="text-[11px] text-muted">キーワード未設定</span>
               )}
               {r.status === "confirmed" && (
                 <span className="rounded bg-surface-muted px-1 text-[11px] text-teal-dark">

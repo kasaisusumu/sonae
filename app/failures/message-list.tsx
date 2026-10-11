@@ -9,8 +9,7 @@ import {
 import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
-import { ScopeQuickToggle, KeywordSentenceField, type QuickScope } from "@/app/components/scope-picker";
-import { pickKeyword } from "@/lib/text-norm";
+import { KeywordSentenceField } from "@/app/components/scope-picker";
 
 export type MLMessage = {
   id: string;
@@ -26,49 +25,37 @@ export type MLMessage = {
   sourceEventTitle: string | null;
 };
 
-/** 次回の出し方の3択（うち1つはキーワード・予定名から自動）。本文の開閉とは別に、常時すぐ切り替えられる。 */
+/**
+ * メッセージはキーワードを決めること自体が条件なので、項目のような3択は持たない
+ * （2026-10 にやめた）。キーワードが決まっていればそれで一致、決まっていなければ
+ * 自動では一致しない。
+ */
 function EditableRow({ m }: { m: MLMessage }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState(m.body);
   const [keywords, setKeywords] = useState(m.keywords.join("、"));
-  const [scope, setScope] = useState(m.scope);
   const [pending, start] = useTransition();
 
-  function buildFd(next?: { scope?: string; keywords?: string }): FormData {
+  function buildFd(next?: { keywords?: string }): FormData {
     const fd = new FormData();
     fd.set("id", m.id);
     fd.set("body", body);
     fd.set("keywords", next?.keywords ?? keywords);
     fd.set("genres", "");
-    fd.set("scope", next?.scope ?? scope);
+    fd.set("scope", "keyword");
     return fd;
   }
   function flush() {
     if (pending) return;
     start(() => updateFutureMessageAction(buildFd()));
   }
-  function chooseQuick(sc: QuickScope) {
-    if (sc === "keyword") {
-      const nameSource = m.sourceEventTitle ?? m.upcomingEvents[0]?.title ?? m.body;
-      const kw = pickKeyword(nameSource);
-      setKeywords(kw);
-      setScope("keyword");
-      start(() => updateFutureMessageAction(buildFd({ scope: "keyword", keywords: kw })));
-      return;
-    }
-    const next = sc === "event_only" ? "once" : "similar";
-    setScope(next);
-    start(() => updateFutureMessageAction(buildFd({ scope: next })));
-  }
   function commitKeyword(kw: string) {
     setKeywords(kw);
-    setScope("keyword");
-    start(() => updateFutureMessageAction(buildFd({ scope: "keyword", keywords: kw })));
+    start(() => updateFutureMessageAction(buildFd({ keywords: kw })));
   }
   function clearKeyword() {
     setKeywords("");
-    setScope("once");
-    start(() => updateFutureMessageAction(buildFd({ scope: "once", keywords: "" })));
+    start(() => updateFutureMessageAction(buildFd({ keywords: "" })));
   }
 
   return (
@@ -77,13 +64,10 @@ function EditableRow({ m }: { m: MLMessage }) {
         <div className="min-w-0 flex-1 space-y-1.5">
           <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
           <div className="flex flex-wrap items-center gap-1.5">
-            <ScopeQuickToggle
-              value={scope === "once" ? "event_only" : scope === "similar" ? "similar" : "keyword"}
-              onChange={chooseQuick}
-              disabled={pending}
-            />
-            {scope === "keyword" && keywords && (
+            {keywords ? (
               <span className="text-[11px] text-muted">🏷「{keywords}」のとき</span>
+            ) : (
+              <span className="text-[11px] text-muted">キーワード未設定</span>
             )}
             {m.confirmedCount > 0 && (
               <span className="text-[11px] text-muted">{m.confirmedCount}回更新</span>
@@ -110,7 +94,7 @@ function EditableRow({ m }: { m: MLMessage }) {
             className="w-full rounded-md border bg-background px-2 py-1 text-sm"
           />
           <KeywordSentenceField
-            initialKeyword={scope === "keyword" ? keywords : ""}
+            initialKeyword={keywords}
             onCommit={commitKeyword}
             onClear={clearKeyword}
             pending={pending}

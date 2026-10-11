@@ -35,18 +35,15 @@ const TOURS: Tour[] = [
     ],
   },
   {
-    key: "events_v3",
+    // 手動「↻ 取り込む」ボタンを廃止（自動取り込みのみになった）ため、そのステップを削除
+    // （2026-10〜）。key を上げて、既に events_v3 を見た人にも更新後のツアーを出す。
+    key: "events_v4",
     match: (p) => p === "/events",
     steps: [
       {
         sel: '[data-coach="event-card"]',
         title: "予定のカード",
         body: "どこをタップしても準備リストへ。細いバーは準備の進み具合です。",
-      },
-      {
-        sel: '[data-coach="sync"]',
-        title: "取り込み",
-        body: "普段は自動。すぐ反映したいときだけ「↻ 取り込む」を押してください。",
       },
     ],
   },

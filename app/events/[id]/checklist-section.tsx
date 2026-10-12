@@ -218,6 +218,7 @@ export async function ChecklistSection({
           matchReason: m.matchReason,
           eventTitle: m.eventTitle,
           eventEnded: m.eventEnded,
+          isDone: m.isDone,
         }),
       )}
     />
@@ -267,9 +268,14 @@ export async function ChecklistSection({
   );
   // 「未来の自分へ」もリスト枠として並べ替え対象にする。
   // まだ並べ替えたことがなければ、話して作るのすぐ下（先頭）に置く。
-  const orderedKeys = sections.includes(FUTURE_MESSAGE_KEY)
-    ? sections
-    : [FUTURE_MESSAGE_KEY, ...sections];
+  // ただし、この予定に結びついたメッセージが1件も無ければ枠自体を出さない
+  // （空の「＋追加」だけの枠が毎回出るのを避ける。追加は /failures からできる）。
+  const hasFutureMessages = linkedMessages.length > 0;
+  const orderedKeys = hasFutureMessages
+    ? sections.includes(FUTURE_MESSAGE_KEY)
+      ? sections
+      : [FUTURE_MESSAGE_KEY, ...sections]
+    : sections.filter((k) => k !== FUTURE_MESSAGE_KEY);
 
   // ユーザーが足した枠（買うもの等）の名前付きリストも、その枠名が一致すれば拾う
   // （組み込みの2枠に限らない。「引き出す」も別枠として独立させるため）。

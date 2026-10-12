@@ -134,8 +134,15 @@ export function MessageDictationInput({
               <>
                 <p className="text-[11px] text-muted">
                   スマホのキーボードの<strong>マイクキー</strong>で、次に思い出したい
-                  ことを話してください。1回につき1件、確認してから記録します。
-                  複数あれば、記録したあとにもう一度話してください。
+                  ことを話してください。人名・会社名など、次回その予定を見分けるのに
+                  使えそうな語があれば<strong>キーワード</strong>として自動で拾います。
+                  1回につき1件、確認してから記録します。複数あれば、記録したあとに
+                  もう一度話してください。
+                </p>
+                <p className="rounded-lg bg-surface-muted px-3 py-2 text-[11px] text-muted">
+                  例: 「<strong className="text-foreground">田中さん</strong>とは前回の
+                  ギブアンドテイクがあるから、次に会うときは忘れない」→
+                  キーワード「<strong className="text-foreground">田中さん</strong>」
                 </p>
                 <textarea
                   value={text}
@@ -197,19 +204,23 @@ export function MessageDictationInput({
                   </p>
                 )}
 
-                <textarea
-                  value={draft.body}
-                  onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
-                  rows={2}
-                  placeholder="次に思い出したいこと"
-                  className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
-                />
-                <input
-                  value={draft.keywords}
-                  onChange={(e) => setDraft((d) => ({ ...d, keywords: e.target.value }))}
-                  placeholder="キーワード（任意・読点区切り）"
-                  className="w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm"
-                />
+                <label className="block text-xs text-muted">
+                  次に思い出したいこと
+                  <textarea
+                    value={draft.body}
+                    onChange={(e) => setDraft((d) => ({ ...d, body: e.target.value }))}
+                    rows={2}
+                    className="mt-1 w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm text-foreground"
+                  />
+                </label>
+                <label className="block text-xs text-muted">
+                  キーワード（あれば複数・読点区切り・無くてもよい）
+                  <input
+                    value={draft.keywords}
+                    onChange={(e) => setDraft((d) => ({ ...d, keywords: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border bg-background px-2.5 py-1.5 text-sm text-foreground"
+                  />
+                </label>
 
                 <div className="flex flex-wrap items-center gap-3">
                   <button

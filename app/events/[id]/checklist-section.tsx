@@ -32,6 +32,7 @@ import { ListReminderControl } from "./list-reminder-control";
 import { AddSectionButton } from "./section-manager";
 import { SectionList, type SectionEntry } from "./section-list";
 import { DictationInput } from "./dictation-input";
+import { AiSortButton } from "./ai-sort-button";
 import { SubmitButton } from "@/app/components/submit-button";
 
 type TplOpt = { id: string; name: string };
@@ -321,6 +322,7 @@ export async function ChecklistSection({
             )}
           />
           <DictationInput eventId={event.id} />
+          <AiSortButton eventId={event.id} />
         </div>
 
         {needsManualGenerate && (

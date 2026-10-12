@@ -57,7 +57,7 @@ import {
   proposeScopesForSave,
   setItemScope,
   setItemKeywordScope,
-  recommendItemScopeNow,
+  recommendScopesForAllItems,
   type ItemScope,
   ITEM_SCOPES,
 } from "@/lib/item-scope";
@@ -1426,27 +1426,28 @@ export async function setItemScopeAction(input: {
 }
 
 /**
- * 準備リストの項目の「次回いつ出すか」を、ユーザーの代わりに AI に今すぐ決めてもらう
- * （「🤖AIで分別」ボタン）。event_only か similar かを判定して「選んだ」として保存する。
+ * 予定詳細の「🤖AIで分別」ボタン。その予定の準備リストの中身**全部**を一括で AI に
+ * 分別してもらう（項目ひとつずつのボタンではない。押した予定単位で全項目を処理する）。
  */
-export async function recommendItemScopeAction(input: {
+export async function recommendAllItemScopesAction(input: {
   eventId: string;
-  kind: string;
-  title: string;
-  action: "include" | "exclude";
-}): Promise<{ ok: boolean; scope?: ItemScope }> {
+}): Promise<{ ok: boolean; count: number }> {
   const userId = await requireUserId();
-  const title = String(input.title ?? "").trim();
-  if (!title) return { ok: false };
 
   const event = await prisma.event.findFirst({
     where: { id: input.eventId, userId },
     include: { category: { select: { name: true } } },
   });
-  if (!event) return { ok: false };
+  if (!event) return { ok: false, count: 0 };
 
-  trackEvent(userId, "feature:item-scope-ai-sort");
-  const scope = await recommendItemScopeNow({
+  const items = await prisma.checklistItem.findMany({
+    where: { eventId: event.id, isSuggested: false },
+    select: { kind: true, title: true },
+  });
+  if (items.length === 0) return { ok: true, count: 0 };
+
+  trackEvent(userId, "feature:item-scope-ai-sort-all");
+  const count = await recommendScopesForAllItems({
     scope: {
       userId,
       eventId: event.id,
@@ -1461,12 +1462,10 @@ export async function recommendItemScopeAction(input: {
         endDatetime: event.endDatetime,
       }),
     },
-    kind: String(input.kind || "task"),
-    title,
-    action: input.action,
+    items: items.map((i) => ({ kind: i.kind, title: i.title })),
   });
   revalidateAppViews(event.id);
-  return { ok: true, scope };
+  return { ok: true, count };
 }
 
 /**

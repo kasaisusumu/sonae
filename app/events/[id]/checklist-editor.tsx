@@ -11,7 +11,6 @@ import {
   setItemNotifyLead,
   setItemScopeAction,
   setItemKeywordScopeAction,
-  recommendItemScopeAction,
   toggleChecklistItemDone,
   trackFeatureUse,
 } from "@/app/actions";
@@ -533,27 +532,6 @@ export function ChecklistEditor({
     });
   }
 
-  const [aiSorting, setAiSorting] = useState<Record<string, boolean>>({});
-
-  /** 項目の範囲を、ユーザーの代わりに AI に今すぐ決めてもらう（🤖AIで分別）。 */
-  function chooseAiScope(it: Item) {
-    setAiSorting((prev) => ({ ...prev, [it.key]: true }));
-    startTransition(async () => {
-      await flushPending();
-      const res = await recommendItemScopeAction({
-        eventId,
-        kind,
-        title: it.title.trim(),
-        action: "include",
-      });
-      if (res.ok && res.scope) {
-        setScopeOverride((prev) => ({ ...prev, [it.key]: res.scope! }));
-      }
-      setAiSorting((prev) => ({ ...prev, [it.key]: false }));
-      router.refresh();
-    });
-  }
-
   async function flushPending() {
     if (dirty) {
       await saveChecklist({
@@ -743,15 +721,6 @@ export function ChecklistEditor({
                         hintOpen={scopeHintOpen}
                         onHintOpenChange={setScopeHintOpen}
                       />
-                      <button
-                        type="button"
-                        onClick={() => chooseAiScope(it)}
-                        disabled={pending || !!aiSorting[it.key]}
-                        title="AIに「今回だけ」か「似た予定」かを決めてもらう"
-                        className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[11px] leading-tight text-muted disabled:opacity-50 hover:border-teal hover:text-teal-dark"
-                      >
-                        {aiSorting[it.key] ? "分別中…" : "🤖AIで分別"}
-                      </button>
                       {shownScope(it) === "keyword" && it.scope?.keyword && (
                         <button
                           type="button"

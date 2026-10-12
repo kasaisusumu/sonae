@@ -67,6 +67,14 @@ export default async function SettingsPage() {
                 ? `最終取り込み ${formatDateTime(account.lastSyncedAt)}`
                 : "未取り込み"}
             </p>
+            {account.syncError && (
+              <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
+                ⚠ Google との連携が切れていて、新しい予定を取り込めていません。
+                下の「再接続」を押してください。
+                {account.syncErrorAt &&
+                  `（${formatDateTime(account.syncErrorAt)}ごろから）`}
+              </p>
+            )}
             {calendars.length > 0 && (
               <form action={setCalendarId} className="pt-1">
                 <label className="block text-xs text-muted">

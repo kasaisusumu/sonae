@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { formatYen, formatDateOnly } from "@/lib/format";
+import { formatYen, formatDateOnly, formatDateTime } from "@/lib/format";
 import { jstDayKey } from "@/lib/activity";
 import {
   isAdminEmail,
@@ -251,7 +251,12 @@ export default async function AdminPage({
       orderBy: { createdAt: "asc" },
       include: {
         googleAccount: {
-          select: { googleAccountEmail: true, writeDescriptionEnabled: true },
+          select: {
+            googleAccountEmail: true,
+            writeDescriptionEnabled: true,
+            syncError: true,
+            syncErrorAt: true,
+          },
         },
         _count: {
           select: {
@@ -372,6 +377,8 @@ export default async function AdminPage({
       wtpYen:
         feedbackByUser.get(u.id)?.find((f) => f.wtpYen !== null)?.wtpYen ?? null,
       byDay: days.map((d) => byDay?.get(d.key) ?? 0),
+      syncBroken: !!u.googleAccount?.syncError,
+      syncErrorAt: u.googleAccount?.syncErrorAt ?? null,
     };
   });
 
@@ -404,6 +411,7 @@ export default async function AdminPage({
   ).length;
   const onboardingDoneCount = rows.filter((r) => r.onboardingDone).length;
   const googleConnectedCount = rows.filter((r) => r.steps.step1Google).length;
+  const syncBrokenCount = rows.filter((r) => r.syncBroken).length;
   const notifyOnCount = rows.filter((r) => r.steps.step5Notify).length;
   const avgTotalMinutes =
     users.length > 0
@@ -439,6 +447,7 @@ export default async function AdminPage({
               `${onboardingDoneCount} / ${users.length}`,
             ],
             ["Google連携率", `${googleConnectedCount} / ${users.length}`],
+            ["うち連携切れ（再接続要）", `${syncBrokenCount} / ${googleConnectedCount}`],
             ["通知オン率", `${notifyOnCount} / ${users.length}`],
             ["平均累計利用時間", formatMinutes(avgTotalMinutes)],
             [
@@ -530,6 +539,12 @@ export default async function AdminPage({
                       <StepBadge ok={r.steps.step5Notify} label="通知" />
                       <StepBadge ok={r.steps.tutorial} label="導入" />
                     </div>
+                    {r.syncBroken && (
+                      <p className="mt-0.5 rounded bg-warn-soft px-1 py-0.5 text-[10px] text-warn">
+                        ⚠ 連携切れ
+                        {r.syncErrorAt && `（${formatDateTime(r.syncErrorAt)}ごろから）`}
+                      </p>
+                    )}
                     <p className="mt-0.5 text-[10px] text-muted">
                       ホーム画面追加は端末側の自己申告のみで管理画面では不明
                     </p>

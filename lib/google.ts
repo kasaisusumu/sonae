@@ -226,6 +226,21 @@ export async function fetchCalendarChanges(userId: string): Promise<CalendarChan
   }
 }
 
+/**
+ * Google の invalid_grant（リフレッシュトークンの失効・取り消し）かどうか。
+ * コード側では直せない＝本人の再接続が必要、のサイン。
+ */
+export function isReauthRequiredError(err: unknown): boolean {
+  const e = err as {
+    message?: string;
+    response?: { data?: { error?: string } };
+  };
+  return (
+    e?.response?.data?.error === "invalid_grant" ||
+    /invalid_grant/i.test(String(e?.message ?? ""))
+  );
+}
+
 export interface CalendarChoice {
   id: string;
   summary: string;

@@ -628,6 +628,12 @@ export interface EventMessageRow {
   eventTitle: string;
   /** 予定が済んでいるか（振り返りを開けるかの判定。pendingMessageReviewWhere と同じ意味）。 */
   eventEnded: boolean;
+  /**
+   * 準備リストの項目と同じ「チェックで完了」。この予定での見た目だけの軽い状態で、
+   * 次回以降の一致判定（matchedBy/status）には一切影響しない（チェックしても
+   * 二度と提案されなくなる、という意味ではない）。
+   */
+  isDone: boolean;
 }
 
 export interface EventInfoForMessage {
@@ -651,6 +657,7 @@ export function toEventMessageRow(
     status: string;
     matchedBy: string;
     matchReason: string | null;
+    isDone: boolean;
     message: Parameters<typeof toRow>[0];
   },
   ev: EventInfoForMessage,
@@ -672,7 +679,23 @@ export function toEventMessageRow(
     matchedBy: l.matchedBy as MatchedBy,
     matchReason: l.matchReason,
     confirmedCount: m.confirmedCount,
+    isDone: l.isDone,
   };
+}
+
+/**
+ * ✓ チェック（準備リストの項目と同じ「完了」印）。この予定での見た目だけの状態で、
+ * 一致判定・提案には関わらない（チェックしても次回また一致すれば変わらず提案される）。
+ */
+export async function toggleEventFutureMessageDone(
+  userId: string,
+  linkId: string,
+  isDone: boolean,
+): Promise<void> {
+  await prisma.eventFutureMessage.updateMany({
+    where: { id: linkId, userId },
+    data: { isDone: Boolean(isDone) },
+  });
 }
 
 export async function getMessagesForEvent(

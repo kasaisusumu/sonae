@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import {
   removeMessageFromEventAction,
   updateFutureMessageAction,
+  toggleFutureMessageDoneAction,
 } from "@/app/actions";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
@@ -28,6 +29,8 @@ export type EMRow = {
   eventTitle: string;
   /** 予定が済んでいるか。済んでいれば振り返り（AI 提案つき）をいつでも開ける。 */
   eventEnded: boolean;
+  /** 準備リストの項目と同じ「チェックで完了」。次回の提案・一致判定には影響しない。 */
+  isDone: boolean;
 };
 
 /**
@@ -98,9 +101,17 @@ function RowEditForm({ r }: { r: EMRow }) {
   );
 }
 
+/**
+ * 準備リストの項目と同じ並び順にする: 未完了が上、完了が下（元の順序はそれぞれ維持）。
+ */
+function sortByDone(rows: EMRow[]): EMRow[] {
+  return [...rows].sort((a, b) => Number(a.isDone) - Number(b.isDone));
+}
+
 /** 予定に結びついたメッセージの一覧。1 件ずつ開いて、いつでも編集できる。 */
 export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
+  const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
   const toggle = (id: string) =>
     setOpenIds((s) => {
       const next = new Set(s);
@@ -109,15 +120,34 @@ export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
       return next;
     });
 
+  function toggleDone(r: EMRow, next: boolean) {
+    setDoneOverride((prev) => ({ ...prev, [r.id]: next }));
+    void toggleFutureMessageDoneAction(r.id, next);
+  }
+
   if (rows.length === 0) return null;
+  const sorted = sortByDone(
+    rows.map((r) => ({ ...r, isDone: doneOverride[r.id] ?? r.isDone })),
+  );
   return (
     <ul className="space-y-1">
-      {rows.map((r) => {
+      {sorted.map((r) => {
         const open = openIds.has(r.id);
         return (
           <li key={r.id} className="rounded-lg bg-surface px-2 py-1.5">
             <div className="flex items-start gap-2">
-              <span className="min-w-0 flex-1 whitespace-pre-wrap break-words py-0.5 text-sm">
+              <input
+                type="checkbox"
+                checked={r.isDone}
+                onChange={(e) => toggleDone(r, e.target.checked)}
+                className="mt-1 h-5 w-5 shrink-0 accent-[var(--teal)]"
+                aria-label="完了"
+              />
+              <span
+                className={`min-w-0 flex-1 whitespace-pre-wrap break-words py-0.5 text-sm ${
+                  r.isDone ? "text-muted line-through" : ""
+                }`}
+              >
                 {r.body}
               </span>
               <button

@@ -42,6 +42,7 @@ import {
   deleteFutureMessage,
   createMessageForEvent,
   removeMessageFromEvent,
+  toggleEventFutureMessageDone,
   confirmMessageReview,
   skipMessageReview,
   getLinkForReview,
@@ -1283,6 +1284,19 @@ export async function removeMessageFromEventAction(formData: FormData): Promise<
   if (!eventId || !messageId) return;
   await removeMessageFromEvent(eventId, userId, messageId);
   revalidateAppViews(eventId);
+}
+
+/**
+ * ✓ チェック（準備リストの項目と同じ「完了」印）。この予定での見た目だけの状態で、
+ * 次回以降の一致判定・提案には一切影響しない（チェック＝もう提案しない、ではない）。
+ */
+export async function toggleFutureMessageDoneAction(
+  linkId: string,
+  isDone: boolean,
+): Promise<void> {
+  const userId = await requireUserId();
+  await toggleEventFutureMessageDone(userId, linkId, isDone);
+  revalidateAppViews();
 }
 
 /**

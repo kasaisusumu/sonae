@@ -501,6 +501,9 @@ model EventFutureMessage {
   // "keyword" | "genre_keyword" | "genre_ai" | "category" | "similar_ai" | "manual"
   matchedBy   String
   matchReason String?
+  // 準備リストの項目と同じ「チェックで完了」。予定後の確定（status）とは別物
+  // （振り返りの確定フローに割り込まない、ユーザー自身のチェックオフだけの軽い状態）。
+  isDone      Boolean   @default(false)
   notifiedAt       DateTime? // 一致時のプッシュ（1予定1回）
   reviewNotifiedAt DateTime? // 予定後の確定うながしプッシュ（1予定1回）
   createdAt DateTime @default(now())

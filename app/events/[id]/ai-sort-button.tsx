@@ -68,7 +68,7 @@ export function AiSortButton({ eventId }: { eventId: string }) {
         <p className="mb-2 text-[13px]">
           例: 「新幹線のチケットを確認」という項目なら、AI は「バスや飛行機の移動でも
           出したい内容」と判断して <ScopeChip scope="similar" className="mx-1 align-middle" /> に、
-          「玉姫殿に電話する」のような項目なら「この予定限定の内容」と判断して
+          「ホテルに電話する」のような項目なら「この予定限定の内容」と判断して
           <ScopeChip scope="event_only" className="mx-1 align-middle" /> にします。
         </p>
         <p className="text-[13px] text-muted">

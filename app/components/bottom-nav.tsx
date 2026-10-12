@@ -12,21 +12,40 @@ const TABS = [
   { href: "/settings", label: "設定" },
 ];
 
+function isEditableElement(el: Element | null): boolean {
+  if (!el) return false;
+  const tag = el.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    (el as HTMLElement).isContentEditable
+  );
+}
+
 /**
  * スマホのキーボードが出ている間だけ true。
  * キーボードで visualViewport が縮むと、`position:fixed; bottom:0` のバーが
  * キーボードの上まで“せり上がって”画面中央に浮いてしまうため、その間は隠す。
  * URL バーの伸縮（〜100px）で誤検知しないよう、しきい値は大きめ（150px）。
+ *
+ * 2026-10〜: 入力欄にフォーカスが無いときはビューポートが縮んでいても隠さない
+ * （`focusedEditable` を同時に見る）。ブラウザのアドレスバー／ツールバーの
+ * 伸縮だけでも 150px を超えることがあり、それだけでバーが消えたまま戻らない
+ * 不具合があった。フォーカスの有無も条件に加えることで、キーボード以外が
+ * 原因の縮みでは隠さないようにし、かつ `focusout` の瞬間に即座に復帰できる
+ * （ビューポートのリサイズイベントが遅れる端末があるため、フォーカス解除を
+ * 復帰のトリガーとしても使う）。
  */
 function useKeyboardOpen(): boolean {
-  const [open, setOpen] = useState(false);
+  const [shrunk, setShrunk] = useState(false);
+  const [focusedEditable, setFocusedEditable] = useState(false);
 
   useEffect(() => {
     const vv = typeof window !== "undefined" ? window.visualViewport : null;
     if (!vv) return;
     const update = () => {
       const hidden = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setOpen(hidden > 150);
+      setShrunk(hidden > 150);
     };
     update();
     vv.addEventListener("resize", update);
@@ -37,7 +56,19 @@ function useKeyboardOpen(): boolean {
     };
   }, []);
 
-  return open;
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) =>
+      setFocusedEditable(isEditableElement(e.target as Element | null));
+    const onFocusOut = () => setFocusedEditable(false);
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("focusout", onFocusOut);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("focusout", onFocusOut);
+    };
+  }, []);
+
+  return shrunk && focusedEditable;
 }
 
 export function BottomNav({ pendingReview = 0 }: { pendingReview?: number }) {

@@ -86,7 +86,7 @@ export function ScopeQuickToggle({
             <ScopeChip scope="event_only" status="chosen" />
           </p>
           <p className="mb-3 text-[13px]">
-            この予定の中だけ。次回以降の予定には影響しません。例えば「玉姫殿に電話する」
+            この予定の中だけ。次回以降の予定には影響しません。例えば「ホテルに電話する」
             のような、この予定限定の内容に向いています。
           </p>
 
@@ -125,7 +125,7 @@ export function KeywordSentenceField({
   onCommit,
   onClear,
   pending,
-  placeholder = "玉姫殿",
+  placeholder = "ホテル",
 }: {
   initialKeyword: string;
   onCommit: (keyword: string) => void;

@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { toHiragana } from "wanakana";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { stripSonaeBlock } from "@/lib/description";
@@ -57,15 +58,21 @@ export function stringifyGenreKeywords(entries: GenreKeywordEntry[]): string {
   );
 }
 
-// ── テキスト正規化（NFKC・大文字小文字・ひらがな/カタカナ同一視）──
+// ── テキスト正規化（NFKC・大文字小文字・ひらがな/カタカナ/ローマ字同一視）──
+// AI（OpenAI）は使わず、決まった規則だけで正規化する。
 
-function toHiragana(s: string): string {
+function katakanaToHiragana(s: string): string {
   return s.replace(/[ァ-ヶ]/g, (c) =>
     String.fromCharCode(c.charCodeAt(0) - 0x60),
   );
 }
 export function normalizeMatchText(s: string): string {
-  return toHiragana(s.normalize("NFKC").toLowerCase());
+  const base = s.normalize("NFKC").toLowerCase();
+  // ローマ字部分だけをひらがなに変換（既存のかな・漢字はそのまま）。
+  // 例: "shinkansen" → "しんかんせん"（ひらがな表記のキーワード・本文と一致させる）。
+  // 漢字自体の読みの変換（例: 「病院」→「びょういん」）は辞書が必要なため対象外。
+  const romajiConverted = toHiragana(base, { passRomaji: false });
+  return katakanaToHiragana(romajiConverted);
 }
 export function includesNorm(haystack: string, needle: string): boolean {
   const n = needle.trim();

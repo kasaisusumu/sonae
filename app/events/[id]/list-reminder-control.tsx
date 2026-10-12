@@ -15,7 +15,8 @@ const TIME_PRESETS = LEAD_PRESETS.filter(
 
 /**
  * 予定単位の「準備リストのリマインド」。最大5回まで。小さなボタン → ポップアップで編集。
- * ボタン表記: 1回=「🔔 リマインド：1日前」、2回以上=「🔔 リマインド（2）：1日前+」。
+ * ボタン表記: 1回=「🔔 リマインド：1日前」、2回以上=「🔔 リマインド(2)：1日前+」
+ * （件数の丸括弧は半角。数字だけを囲む丸括弧は全角ではなく半角で統一する、ユーザー指定の表記ルール）。
  */
 export function ListReminderControl({
   eventId,
@@ -40,7 +41,7 @@ export function ListReminderControl({
       : leads.length === 1
         ? formatLead(leads[0])
         : `${formatLead(leads[0])}+`;
-  const countBadge = leads.length >= 2 ? `（${leads.length}）` : "";
+  const countBadge = leads.length >= 2 ? `(${leads.length})` : "";
 
   return (
     <>

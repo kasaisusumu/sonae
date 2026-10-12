@@ -153,7 +153,7 @@ export default async function EventsPage({
       {past.length > 0 && (
         <details className="rounded-2xl bg-surface p-4 [&_summary::-webkit-details-marker]:hidden">
           <summary className="cursor-pointer list-none text-sm font-semibold text-muted">
-            済んだ予定（{past.length}）
+            済んだ予定({past.length})
           </summary>
           <ul className="mt-3 space-y-2.5">
             {past.map((ev) => (

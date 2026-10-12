@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { recommendAllItemScopesAction } from "@/app/actions";
 import { InfoHint } from "@/app/components/info-hint";
+import { ScopeChip } from "@/app/components/scope-chip";
 
 /**
  * 予定詳細の「🤖AIで分別」ボタン。押すと、この予定の準備リストの中身**全部**
@@ -39,7 +40,11 @@ export function AiSortButton({ eventId }: { eventId: string }) {
   }
 
   return (
-    <span className="inline-flex items-center gap-1.5">
+    // relative + 固定サイズの中身（ボタン＋ⓘ）だけで幅・高さを決め、結果メッセージは
+    // absolute で下に重ねて表示する（通常のフローに含めない）。結果メッセージの文字数が
+    // 変わっても、同じ行に並ぶ他のボタン（🔔リマインド・🎤話して作る）の折り返し位置や
+    // 高さが変わらないようにするため。
+    <span className="relative inline-flex shrink-0 items-center gap-1">
       <button
         type="button"
         onClick={run}
@@ -49,11 +54,33 @@ export function AiSortButton({ eventId }: { eventId: string }) {
         {pending ? "分別中…" : "🤖AIで分別"}
       </button>
       <InfoHint id="ai-sort-all">
-        準備リストの項目（準備すること・持ち物・足した枠）全部について、「今回だけ」か
-        「似た予定のとき」かを AI にまとめて決めてもらいます。項目ごとに3択ボタンを
-        押す代わりに、ここを1回押すだけで済みます。すでに選んだ項目は変更しません。
+        <p className="mb-2 text-sm font-semibold text-foreground">🤖AIで分別とは</p>
+        <p className="mb-2 text-[13px]">
+          準備リストの項目（準備すること・持ち物・足した枠）全部について、まだ決まって
+          いないものだけ、AI が次のどちらかにまとめて決めます。項目ごとに下のボタンを
+          1つずつ押す代わりに、ここを1回押すだけで済みます。
+        </p>
+        <p className="mb-3 flex flex-wrap items-center gap-1.5">
+          <ScopeChip scope="event_only" />
+          <span className="text-[11px] text-muted">または</span>
+          <ScopeChip scope="similar" />
+        </p>
+        <p className="mb-2 text-[13px]">
+          例: 「新幹線のチケットを確認」という項目なら、AI は「バスや飛行機の移動でも
+          出したい内容」と判断して <ScopeChip scope="similar" className="mx-1 align-middle" /> に、
+          「玉姫殿に電話する」のような項目なら「この予定限定の内容」と判断して
+          <ScopeChip scope="event_only" className="mx-1 align-middle" /> にします。
+        </p>
+        <p className="text-[13px] text-muted">
+          すでに <ScopeChip scope="event_only" className="mx-0.5 align-middle" />
+          のように選んだ・決まっている項目は変更しません。
+        </p>
       </InfoHint>
-      {note && <span className="text-[11px] text-muted">{note}</span>}
+      {note && (
+        <span className="absolute left-0 top-full z-10 mt-1 whitespace-nowrap rounded-md bg-surface px-1.5 py-0.5 text-[11px] text-muted shadow-sm">
+          {note}
+        </span>
+      )}
     </span>
   );
 }

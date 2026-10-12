@@ -632,7 +632,7 @@ function mergeLeaves(raw: RawLeaf[]): NameTreeLeaf[] {
         title: rep.title,
         situationLabel: rep.cleared
           ? g.length > 1
-            ? `内容なし（${g.length}件）`
+            ? `内容なし(${g.length}件)`
             : "内容なし"
           : g.length > 1
             ? `同じ名前の未編集 ${g.length}件`

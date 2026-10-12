@@ -19,15 +19,9 @@ export default async function FuturesMessagesPage() {
   if (!user) redirect("/");
   trackEvent(user.id, "page:/failures");
 
-  const [pendingReviews, messages, events] = await Promise.all([
+  const [pendingReviews, messages] = await Promise.all([
     getPendingMessageReviews(user.id),
     listFutureMessages(user.id),
-    prisma.event.findMany({
-      where: { userId: user.id },
-      orderBy: { eventDatetime: "desc" },
-      take: 80,
-      select: { id: true, title: true, eventDatetime: true },
-    }),
   ]);
 
   const reviewsToShow = pendingReviews.slice(0, MAX_REVIEW_PROPOSALS);
@@ -73,7 +67,7 @@ export default async function FuturesMessagesPage() {
       {reviewCards.length > 0 && (
         <section id="review" className="scroll-mt-4 space-y-3">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            🤔 結果を記録しよう（{pendingReviews.length}件）
+            🤔 結果を記録しよう({pendingReviews.length}件)
             <InfoHint id="failures-review-queue">
               終わった予定のメッセージを見直しましょう。全項目に提案が入っているので、
               直すところだけ直して確定するだけでOKです。
@@ -120,19 +114,55 @@ export default async function FuturesMessagesPage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <MessageCreateSubmit>作成する</MessageCreateSubmit>
-            <MessageDictationInput
-              events={events.map((e) => ({
-                id: e.id,
-                title: e.title,
-                eventDatetime: e.eventDatetime,
-              }))}
-            />
+            <MessageDictationInput />
           </div>
         </form>
       </section>
 
       <section data-coach="message-list" className="space-y-3">
-        <h2 className="text-lg font-semibold">これまでの記録</h2>
+        <h2 className="flex items-center gap-1.5 text-lg font-semibold">
+          これまでの記録
+          <InfoHint id="future-message-delete-vs-remove">
+            <p className="mb-3 text-sm font-semibold text-foreground">
+              削除・この予定から外す・✓ の違い
+            </p>
+
+            <div className="mb-1">
+              <span className="text-[11px] text-warn underline">削除</span>
+              <span className="ml-1 text-[11px] text-muted">（このページのボタン）</span>
+            </div>
+            <p className="mb-3 text-[13px]">
+              メッセージ自体を完全に削除します。
+              <strong className="text-foreground">以後どの予定にも二度と提案されません</strong>。
+              例えば「田中さんとの前回の件を忘れない」を削除すると、次に田中さんが
+              関わる予定が来ても、もう出てきません。
+            </p>
+
+            <div className="mb-1">
+              <span className="text-[11px] text-muted underline">この予定から外す</span>
+              <span className="ml-1 text-[11px] text-muted">（予定詳細のボタン）</span>
+            </div>
+            <p className="mb-3 text-[13px]">
+              <strong className="text-foreground">その予定からだけ</strong>外れます。
+              メッセージ自体は残るので、例えば「来月の田中さんとの打ち合わせ」には
+              引き続き提案されます。
+            </p>
+
+            <div className="mb-1 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked
+                readOnly
+                className="h-5 w-5 shrink-0 accent-[var(--teal)]"
+              />
+              <span className="text-sm text-muted">（予定詳細のチェック）</span>
+            </div>
+            <p className="text-[13px]">
+              その予定での完了の印だけ。
+              <strong className="text-foreground">チェックしても次回の提案は変わりません</strong>。
+            </p>
+          </InfoHint>
+        </h2>
         <MessageList
           messages={messages.map((m) => ({
             id: m.id,

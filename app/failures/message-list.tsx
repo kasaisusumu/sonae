@@ -143,7 +143,7 @@ export function MessageList({ messages }: { messages: MLMessage[] }) {
     <>
       <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
         <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
-          ▸ 登録したメッセージを見る（{active.length}件）
+          ▸ 登録したメッセージを見る({active.length}件)
         </summary>
         <ul className="mt-2 space-y-2">
           {active.map((m) => (
@@ -155,7 +155,7 @@ export function MessageList({ messages }: { messages: MLMessage[] }) {
       {upcoming.length > 0 && (
         <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
           <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
-            ▸ これからの予定に出るメッセージを見る（{upcoming.length}件）
+            ▸ これからの予定に出るメッセージを見る({upcoming.length}件)
           </summary>
           <ul className="mt-2 space-y-2">
             {upcoming.map((m) => (
@@ -177,7 +177,7 @@ export function MessageList({ messages }: { messages: MLMessage[] }) {
       {archived.length > 0 && (
         <details className="rounded-xl border border-border bg-surface p-3 [&_summary::-webkit-details-marker]:hidden">
           <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
-            ▸ 過去のメッセージを見る（{archived.length}件）
+            ▸ 過去のメッセージを見る({archived.length}件)
           </summary>
           <ul className="mt-2 space-y-2">
             {archived.map((m) => (

@@ -3,7 +3,6 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { previewDictatedMessages, saveDictatedMessages } from "@/app/actions";
-import { formatDateOnly } from "@/lib/format";
 
 type Draft = { body: string; keywords: string };
 
@@ -11,33 +10,29 @@ type Draft = { body: string; keywords: string };
  * スマホのキーボードのマイクキーで「いつか思い出したいこと」を話し、AI で
  * 本文・キーワード・ジャンルに分ける。その場で確認・修正してから保存する
  * （いきなり保存しない）。複数話しても、確認するのは常に1件ずつ。
+ * 予定への紐づけは、キーワード一致による自動結びつけに任せる（手動で予定を
+ * 選ぶ UI は持たない。2026-10 に撤去。クイック記録の最中に予定を選ばせるのは
+ * 手間になるだけという判断。eventId を渡したときだけ、その予定に固定で紐づける）。
  */
 export function MessageDictationInput({
   eventId = null,
-  events,
 }: {
-  /** 予定に紐づけて記録したいとき（固定。選択 UI は出さない）。 */
+  /** 予定に紐づけて記録したいとき（固定。予定詳細から呼ぶときに渡す）。 */
   eventId?: string | null;
-  /** 紐づける予定を選べるようにしたいとき（例: /failures ページ）に渡す。eventId 指定時は無視。 */
-  events?: { id: string; title: string; eventDatetime: Date }[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<"input" | "review">("input");
   const [text, setText] = useState("");
-  const [selectedEventId, setSelectedEventId] = useState("");
   const [draft, setDraft] = useState<Draft>({ body: "", keywords: "" });
   const [moreCount, setMoreCount] = useState(0);
   const [note, setNote] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const showEventPicker = !eventId && !!events && events.length > 0;
-
   function reset() {
     setPhase("input");
     setText("");
-    setSelectedEventId("");
     setDraft({ body: "", keywords: "" });
     setMoreCount(0);
     setErr(null);
@@ -82,14 +77,10 @@ export function MessageDictationInput({
       );
       if (!ok) return;
     }
-    const targetEventId = eventId ?? (selectedEventId || null);
-    const linkedEvent = !eventId
-      ? events?.find((e) => e.id === selectedEventId)
-      : null;
     setErr(null);
     startTransition(async () => {
       const res = await saveDictatedMessages({
-        eventId: targetEventId,
+        eventId,
         items: [
           {
             body,
@@ -100,9 +91,7 @@ export function MessageDictationInput({
       if (res.ok) {
         const where = eventId
           ? "この予定の「未来の自分へ」に追加しました。"
-          : linkedEvent
-            ? `「${linkedEvent.title}」の予定ページに追加しました。`
-            : "下の「▸ 登録したメッセージを見る」に追加しました。";
+          : "下の「▸ 登録したメッセージを見る」に追加しました。";
         setNote(`記録しました。${where}`);
         reset();
         router.refresh();
@@ -187,28 +176,11 @@ export function MessageDictationInput({
                   </p>
                 )}
 
-                {showEventPicker && (
-                  <label className="block text-xs text-muted">
-                    どの予定？
-                    <select
-                      value={selectedEventId}
-                      onChange={(e) => setSelectedEventId(e.target.value)}
-                      className="mt-1 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground"
-                    >
-                      <option value="">— 紐づけない（あとで一致すれば自動で結びつきます）—</option>
-                      {events!.map((e) => (
-                        <option key={e.id} value={e.id}>
-                          {formatDateOnly(e.eventDatetime)} {e.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                {!!eventId && (
-                  <p className="rounded-lg bg-surface-muted px-3 py-2 text-[11px] text-muted">
-                    この予定に紐づけて記録します。
-                  </p>
-                )}
+                <p className="rounded-lg bg-surface-muted px-3 py-2 text-[11px] text-muted">
+                  {eventId
+                    ? "この予定に紐づけて記録します。"
+                    : "キーワードが一致する予定があれば、あとで自動で結びつきます。"}
+                </p>
 
                 <label className="block text-xs text-muted">
                   次に思い出したいこと

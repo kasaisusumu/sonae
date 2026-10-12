@@ -86,7 +86,7 @@ export function LearningExplorer({
           学習内容
         </Seg>
         <Seg active={view === "templates"} onClick={() => setView("templates")}>
-          名前付きマニュアル（{templateCount}）
+          名前付きマニュアル({templateCount})
         </Seg>
       </div>
 

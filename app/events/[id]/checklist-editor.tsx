@@ -1129,7 +1129,7 @@ export function ChecklistEditor({
                       <option value="">予定を選ぶ</option>
                       {pastEvents.map((e) => (
                         <option key={e.id} value={e.id}>
-                          {e.label}（{e.count}）
+                          {e.label}({e.count})
                         </option>
                       ))}
                     </select>

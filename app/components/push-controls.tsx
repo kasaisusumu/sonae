@@ -256,7 +256,7 @@ export function PushControls({ publicKey }: { publicKey: string | null }) {
         );
       } else {
         setNote(
-          `テスト通知を送りました（${r.sent} 件）。数秒待っても届かない場合は端末の通知設定を確認してください。`,
+          `テスト通知を送りました(${r.sent} 件)。数秒待っても届かない場合は端末の通知設定を確認してください。`,
         );
       }
     } catch {

@@ -10,8 +10,6 @@ import { getUserTemplates } from "@/lib/templates";
 import { sectionLabel } from "@/lib/sections";
 import { InfoHint } from "@/app/components/info-hint";
 import { FutureMessageRows } from "@/app/components/future-message-rows";
-import { ScopeRuleList } from "./scope-rule-list";
-import { prisma } from "@/lib/prisma";
 import { type SearchEntry } from "./learning-search";
 import { LearningExplorer } from "./learning-explorer";
 import { LazyLeaf } from "./lazy-leaf";
@@ -193,12 +191,6 @@ export default async function LearningTreePage() {
     getLearningNameTree(user.id),
     getUserTemplates(user.id),
   ]);
-  // 次回の出し方（範囲つきルール）。文章で一覧し、削除（確認つき）できる。
-  const scopeRules = await prisma.checklistScopeRule.findMany({
-    where: { userId: user.id, archivedAt: null },
-    orderBy: { updatedAt: "desc" },
-    take: 200,
-  });
 
   const searchEntries: SearchEntry[] = [
     ...searchIndex.map((e) => ({
@@ -264,8 +256,6 @@ export default async function LearningTreePage() {
           </InfoHint>
         </p>
       </div>
-
-      <ScopeRuleList rules={scopeRules} />
 
       <LearningExplorer
         entries={searchEntries}

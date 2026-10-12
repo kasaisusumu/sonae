@@ -53,7 +53,6 @@ import {
   type MessageFields,
 } from "@/lib/message-proposal";
 import {
-  archiveScopeRule,
   isAutoScopeDecision,
   proposeScopesForSave,
   setItemScope,
@@ -1469,15 +1468,6 @@ export async function setItemKeywordScopeAction(input: {
   }
   revalidateAppViews(event.id);
   return { ok: true };
-}
-
-/** 範囲ルールを外す（学習内容の一覧から。確認ポップアップは画面側で出す）。 */
-export async function archiveScopeRuleAction(formData: FormData): Promise<void> {
-  const userId = await requireUserId();
-  const ruleId = String(formData.get("ruleId") ?? "");
-  if (!ruleId) return;
-  await archiveScopeRule(userId, ruleId);
-  revalidateAppViews();
 }
 
 /** 予定後の確定カード：「この内容で確定」／項目ごとの修正後に確定する。 */

@@ -178,6 +178,12 @@ async function buildRuleData(
   title: string,
   scope: ItemScope,
   rec: { keyword: string | null; genre: string | null; reason: string },
+  /**
+   * 既に「似た予定」として同じ項目に当たっていたルール（選び直す前のもの）。
+   * 同じ項目を「似た予定」のまま選び直しただけ（ボタンの二度押し等）なら、
+   * 言い換え語を AI に聞き直さずそのまま使い回す（無駄な待ち時間・API 呼び出しを避ける）。
+   */
+  previousSimilarRule?: { genres: string; genreKeywords: string; signature: string | null } | null,
 ) {
   const base = {
     userId: input.userId,
@@ -215,6 +221,17 @@ async function buildRuleData(
     };
   }
   if (scope === "similar") {
+    if (previousSimilarRule && previousSimilarRule.genreKeywords !== "[]") {
+      return {
+        ...base,
+        scope,
+        keywords: "[]",
+        genres: previousSimilarRule.genres,
+        genreKeywords: previousSimilarRule.genreKeywords,
+        categoryIds: "[]",
+        signature: previousSimilarRule.signature,
+      };
+    }
     const { kind, terms } = await classifySimilarKind(
       input.eventTitle,
       eventTextOf(input),
@@ -260,11 +277,33 @@ async function saveScopeForItem(
   const where = {
     eventId_kind_normTitle: { eventId: input.eventId, kind, normTitle: nt },
   };
-  const existing = await prisma.eventChecklistScope.findUnique({ where });
+  const existing = await prisma.eventChecklistScope.findUnique({
+    where,
+    include: { rule: true },
+  });
   if (existing?.status === "chosen" && status === "proposed") return;
 
+  // 「似た予定」のまま選び直しただけなら、言い換え語を AI に聞き直さず前回の結果を使い回す
+  // （ボタンの二度押し等で毎回 AI を呼ぶ無駄・待ち時間を避ける）。
+  const previousSimilarRule =
+    scope === "similar" && existing?.scope === "similar" && existing.rule
+      ? {
+          genres: existing.rule.genres,
+          genreKeywords: existing.rule.genreKeywords,
+          signature: existing.rule.signature,
+        }
+      : null;
+
   await archiveRule(existing?.ruleId ?? null);
-  const ruleData = await buildRuleData(input, action, kind, title, scope, rec);
+  const ruleData = await buildRuleData(
+    input,
+    action,
+    kind,
+    title,
+    scope,
+    rec,
+    previousSimilarRule,
+  );
   const rule = ruleData
     ? await prisma.checklistScopeRule.create({ data: ruleData })
     : null;
@@ -426,25 +465,6 @@ export async function setItemKeywordScope(input: {
     { keyword, genre: null, reason: `「${keyword}」を含む予定のときに出すよう設定しました` },
     "chosen",
   );
-}
-
-/** 範囲ルールを外す（ルールは残すが適用しない）。自分のルールだけ扱う。 */
-export async function archiveScopeRule(userId: string, ruleId: string): Promise<boolean> {
-  const rule = await prisma.checklistScopeRule.findFirst({
-    where: { id: ruleId, userId, archivedAt: null },
-    select: { id: true },
-  });
-  if (!rule) return false;
-  await prisma.checklistScopeRule.update({
-    where: { id: ruleId },
-    data: { archivedAt: new Date() },
-  });
-  // 紐づく予定側の行は「自動」に戻す（チップの表示と、実際に効いている範囲を揃える）
-  await prisma.eventChecklistScope.updateMany({
-    where: { userId, ruleId },
-    data: { ruleId: null, scope: "auto", status: "chosen" },
-  });
-  return true;
 }
 
 /** 適用中の範囲ルール（ユーザー単位・未アーカイブのみ）。 */

@@ -54,7 +54,7 @@ function monthKeysDesc(startMonthKey: string, endMonthKey: string): string[] {
 
 /** 活動量 → 色の濃さ（白黒基調の例外として、この画面だけ teal の濃淡で見やすくする）。 */
 function intensityClass(minutes: number): string {
-  if (minutes <= 0) return "bg-surface-muted text-muted";
+  if (minutes <= 0) return "bg-surface text-muted";
   if (minutes < 15) return "bg-teal-soft text-teal-dark";
   if (minutes < 60) return "bg-[var(--teal)]/40 text-teal-dark font-medium";
   return "bg-[var(--teal)] text-white font-semibold";

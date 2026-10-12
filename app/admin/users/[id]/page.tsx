@@ -79,7 +79,9 @@ function MonthCalendar({
 
   let monthTotal = 0;
   let activeDays = 0;
-  for (const min of dayMinutes.values()) {
+  for (const day of cells) {
+    if (day === null) continue;
+    const min = dayMinutes.get(`${monthKey}-${String(day).padStart(2, "0")}`) ?? 0;
     monthTotal += min;
     if (min > 0) activeDays++;
   }
@@ -108,9 +110,14 @@ function MonthCalendar({
             <div
               key={i}
               title={`${key}: ${formatMinutes(min)}`}
-              className={`flex aspect-square items-center justify-center rounded ${intensityClass(min)}`}
+              className={`flex aspect-square flex-col items-center justify-center rounded leading-tight ${intensityClass(min)}`}
             >
-              {day}
+              <span>{day}</span>
+              {min > 0 && (
+                <span className="text-[8px] tabular-nums opacity-80">
+                  {min}分
+                </span>
+              )}
             </div>
           );
         })}

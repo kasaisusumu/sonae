@@ -18,6 +18,10 @@ export function AiSortButton({ eventId }: { eventId: string }) {
 
   function run() {
     if (pending) return;
+    const ok = window.confirm(
+      "まだ決まっていない項目を、AIが「今回だけ」か「似た予定」かに自動で振り分けます（次回以降の出し方が変わります）。すでに選んだ項目は変更しません。実行しますか？",
+    );
+    if (!ok) return;
     setNote(null);
     startTransition(async () => {
       const res = await recommendAllItemScopesAction({ eventId });

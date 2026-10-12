@@ -10,17 +10,20 @@ export function ConfirmButton({
   message,
   className,
   disabled,
+  "aria-label": ariaLabel,
 }: {
   children: React.ReactNode;
   message: string;
   className?: string;
   disabled?: boolean;
+  "aria-label"?: string;
 }) {
   return (
     <button
       type="submit"
       disabled={disabled}
       className={className}
+      aria-label={ariaLabel}
       onClick={(e) => {
         if (!window.confirm(message)) e.preventDefault();
       }}

@@ -87,19 +87,12 @@ function RowEditForm({ r }: { r: EMRow }) {
       <p className="text-[11px] text-muted">
         {pending ? "保存中…" : "変更は自動保存"}
       </p>
-      <form action={removeMessageFromEventAction}>
-        <input type="hidden" name="eventId" value={r.eventId} />
-        <input type="hidden" name="messageId" value={r.messageId} />
-        <ConfirmButton
-          message="この予定からだけ外します。次回以降は、キーワードが一致すればまた表示されます。よろしいですか？"
-          className="text-[11px] text-muted underline hover:text-warn"
-        >
-          この予定から外す
-        </ConfirmButton>
-      </form>
     </div>
   );
 }
+
+const REMOVE_CONFIRM_MESSAGE =
+  "この予定からだけ外します。次回以降は、キーワードが一致すればまた表示されます。よろしいですか？";
 
 /**
  * 準備リストの項目と同じ並び順にする: 未完了が上、完了が下（元の順序はそれぞれ維持）。
@@ -162,6 +155,17 @@ export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
               >
                 {open ? "∧" : "∨"}
               </button>
+              <form action={removeMessageFromEventAction} className="contents">
+                <input type="hidden" name="eventId" value={r.eventId} />
+                <input type="hidden" name="messageId" value={r.messageId} />
+                <ConfirmButton
+                  message={REMOVE_CONFIRM_MESSAGE}
+                  aria-label="この予定から外す"
+                  className="mt-0.5 shrink-0 rounded-full border border-border px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn"
+                >
+                  ✕
+                </ConfirmButton>
+              </form>
             </div>
             <div className="ml-0.5 mt-1 flex flex-wrap items-center gap-1.5">
               {r.keywords.length > 0 ? (

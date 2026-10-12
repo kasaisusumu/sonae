@@ -35,16 +35,19 @@ interface Recommendation {
 
 const DEFAULT_REASON = "自動で覚えます（従来どおり）";
 
-// AI の推奨は「今回だけ」「似た予定のとき」の2択だけ（2026-10〜）。
-// 「この名前の予定だけ」（キーワード・予定名から自動）は3つ目のクイック選択として画面には出すが、
-// AI は提案しない（手動で選んだときだけ）。
+// AI の推奨は3択すべて（event_only / similar / keyword、2026-10〜）。
+// keyword を選んだときのキーワード自体は AI には決めさせず、クイック選択の3番目と同じ
+// pickKeyword(予定名) で自動的に決める（buildRuleData の keyword 分岐が rec.keyword が
+// null のときのフォールバックとして既にこれをやっている）。
 const SYSTEM = `あなたは準備リストの項目の「次回の出し方」を決めます。
-ユーザーが項目を追加または削除した理由を推測し、次のどちらかを選びます。
+ユーザーが項目を追加または削除した理由を推測し、次の3つから1つを選びます。
 - event_only: 今回の予定だけの内容（特定の場所・人・案件に依存する／一度きりの内容）
 - similar: 日時や長さではなく、予定の「用途・性質」が同じ種類の予定でも出したい、汎用的な内容
   （例: 「新幹線のチケットを確認」はバス移動・飛行機移動など、同じ「移動」という種類の予定でも出したい）
+- keyword: 予定の名前（固有名）に強く結びつく内容で、同じ名前の予定が来たときだけ出したい
+  （例: 「玉姫殿」という名前の予定でだけ出したい内容）
 出力は必ず次の JSON のみ:
-{"scope":"event_only|similar","reason":"1行の理由（ユーザーに見せる）"}`;
+{"scope":"event_only|similar|keyword","reason":"1行の理由（ユーザーに見せる）"}`;
 
 // 「似た予定」の一致判定（2026-10〜）: 日時・長さ（featureSignature）ではなく、
 // AI が判断した「同じ種類」（例: バスと新幹線はどちらも「移動」）で当てる。ジャンルの
@@ -145,7 +148,13 @@ async function recommend(input: {
       scope?: unknown;
       reason?: unknown;
     };
-    const scope = String(raw.scope) === "similar" ? "similar" : "event_only";
+    const rawScope = String(raw.scope);
+    const scope: ItemScope =
+      rawScope === "similar"
+        ? "similar"
+        : rawScope === "keyword"
+          ? "keyword"
+          : "event_only";
     const reason = String(raw.reason ?? "").trim().slice(0, 120) || DEFAULT_REASON;
     return { scope, keyword: null, genre: null, reason, source: "ai" };
   } catch (e) {
@@ -444,7 +453,7 @@ export async function setItemScope(input: {
 
 /**
  * 項目の範囲を、ユーザーの代わりに AI に今すぐ決めてもらう（「🤖AIで分別」ボタン）。
- * event_only か similar かだけを判定する（recommend と同じ基準。keyword は対象外）。
+ * event_only / similar / keyword の3択すべてを判定する（recommend と同じ基準）。
  * 「選んだ」として保存するので、以後 proposeScopesForSave に上書きされない。
  */
 export async function recommendItemScopeNow(input: {
@@ -461,7 +470,9 @@ export async function recommendItemScopeNow(input: {
     eventText: eventTextOf(scope),
     categoryName: scope.categoryName,
   });
-  const finalScope = rec.scope === "similar" ? "similar" : "event_only";
+  // AI 未設定・失敗時の既定値（"auto"）だけ、安全側の event_only に落とす。
+  const finalScope: ItemScope =
+    rec.scope === "similar" || rec.scope === "keyword" ? rec.scope : "event_only";
   await saveScopeForItem(
     scope,
     action,
@@ -479,10 +490,9 @@ export async function recommendItemScopeNow(input: {
  * 予定の準備リスト全体（渡した項目すべて）を、一括で AI に分別してもらう
  * （予定詳細の「🤖AIで分別」ボタン。項目ひとつずつではなく、予定単位で押す）。
  * - すでに「選んだ」（status="chosen"）項目はそのまま残す（ユーザーの意図的な選択を上書きしない）。
- * - すでに AI の「提案」（status="proposed"、scope が event_only/similar）がある項目は、
+ * - すでに AI の「提案」（status="proposed"、scope が event_only/similar/keyword）がある項目は、
  *   AI を呼び直さずそのまま「選んだ」に昇格させるだけ（無駄な API 呼び出しを避ける）。
  * - 範囲行が無い・scope が "auto"（提案すら無い）項目だけ、新たに AI に判定してもらう。
- * keyword スコープは対象外（AI は提案しない。手動選択のみ、§12.1 参照）。
  */
 export async function recommendScopesForAllItems(input: {
   scope: EventScopeInput;
@@ -506,7 +516,9 @@ export async function recommendScopesForAllItems(input: {
 
     if (
       existing?.status === "proposed" &&
-      (existing.scope === "event_only" || existing.scope === "similar")
+      (existing.scope === "event_only" ||
+        existing.scope === "similar" ||
+        existing.scope === "keyword")
     ) {
       await saveScopeForItem(
         scope,

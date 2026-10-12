@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { dismissScopeHint, trackFeatureUse } from "@/app/actions";
+import { ScopeChip } from "@/app/components/scope-chip";
 
 /**
  * 「次回の出し方」（準備リストの項目・未来の自分へのメッセージ、共通の3択）の説明を、
@@ -33,28 +34,44 @@ export function ScopeHint({ show }: { show: boolean }) {
       onClick={close}
     >
       <div
-        className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-2xl"
+        className="max-h-[85vh] w-full max-w-sm overflow-y-auto rounded-2xl bg-surface p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base font-semibold text-foreground">
           「次回の出し方」の3つのボタン
         </h2>
-        <div className="mt-2 space-y-2 text-sm leading-relaxed text-muted">
+        <div className="mt-3 space-y-1 text-sm leading-relaxed text-muted">
           <p>
-            <span className="font-medium text-foreground">今回だけ</span>：
-            この予定の中だけ。次回以降の予定には影響しません。
+            <ScopeChip scope="event_only" status="chosen" />
           </p>
+          <p className="mb-2.5 text-[13px]">
+            この予定の中だけ。次回以降の予定には影響しません。例えば「玉姫殿に電話する」
+            のような、この予定限定の内容に向いています。
+          </p>
+
           <p>
-            <span className="font-medium text-foreground">似た予定</span>（似た予定のとき）：
+            <ScopeChip scope="similar" status="chosen" />
+          </p>
+          <p className="mb-2.5 text-[13px]">
             日時や長さではなく、用途が同じ種類の予定（例: バスも新幹線も「移動」）でも
-            同じように出す／出さないようにします。種類はAIが自動で判断します。
+            同じように出す／出さないようにします。種類はAIが自動で判断します。例えば
+            「新幹線のチケットを確認」なら、バス移動・飛行機移動の予定にも同じように
+            出るようにできます。
           </p>
+
           <p>
-            <span className="font-medium text-foreground">この名前</span>（この名前の予定だけ）：
-            この予定の名前から自動でキーワードを決めて、次にそのキーワードを含む予定が
-            来たときだけ出す／出さないようにします。
+            <ScopeChip scope="keyword" status="chosen" />
           </p>
-          <p>タップするだけですぐ切り替わります。∨ を開くとキーワードを直せます。</p>
+          <p className="mb-2.5 text-[13px]">
+            この予定の名前から自動でキーワードを決めて、次にそのキーワードを含む予定が
+            来たときだけ出す／出さないようにします。例えば「田中さんと商談」なら
+            キーワード「田中さん」が決まり、次に「田中さん」を含む予定が来たときだけ
+            出ます。
+          </p>
+
+          <p className="text-[13px]">
+            タップするだけですぐ切り替わります。∨ を開くとキーワードを直せます。
+          </p>
         </div>
         <label className="mt-4 flex items-center gap-2 text-xs text-muted">
           <input

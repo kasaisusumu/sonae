@@ -78,22 +78,36 @@ export function ScopeQuickToggle({
       })}
       {showHint && (
         <InfoHint id="scope-quick-toggle" open={hintOpen} onOpenChange={onHintOpenChange}>
-          <p className="mb-2 text-sm font-semibold text-foreground">
+          <p className="mb-3 text-sm font-semibold text-foreground">
             「次回の出し方」の3つのボタン
           </p>
-          <p className="mb-1.5">
-            <span className="font-medium text-foreground">今回だけ</span>：
-            この予定の中だけ。次回以降の予定には影響しません。
+
+          <p className="mb-1">
+            <ScopeChip scope="event_only" status="chosen" />
           </p>
-          <p className="mb-1.5">
-            <span className="font-medium text-foreground">似た予定</span>（似た予定のとき）：
+          <p className="mb-3 text-[13px]">
+            この予定の中だけ。次回以降の予定には影響しません。例えば「玉姫殿に電話する」
+            のような、この予定限定の内容に向いています。
+          </p>
+
+          <p className="mb-1">
+            <ScopeChip scope="similar" status="chosen" />
+          </p>
+          <p className="mb-3 text-[13px]">
             日時や長さではなく、用途が同じ種類の予定（例: バスも新幹線も「移動」）でも
             同じように出す／出さないようにします。種類はAIが自動で判断します。
+            例えば「新幹線のチケットを確認」なら、バス移動・飛行機移動の予定にも
+            同じように出るようにできます。
           </p>
-          <p>
-            <span className="font-medium text-foreground">この名前</span>（この名前の予定だけ）：
+
+          <p className="mb-1">
+            <ScopeChip scope="keyword" status="chosen" />
+          </p>
+          <p className="text-[13px]">
             この予定の名前から自動でキーワードを決めて、次にそのキーワードを含む予定が
-            来たときだけ出す／出さないようにします。∨ を開くとキーワードを直せます。
+            来たときだけ出す／出さないようにします。例えば「田中さんと商談」なら
+            キーワード「田中さん」が決まり、次に「田中さん」を含む予定が来たときだけ
+            出ます。∨ を開くとキーワードを直せます。
           </p>
         </InfoHint>
       )}

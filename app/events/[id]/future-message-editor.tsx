@@ -50,7 +50,16 @@ export function FutureMessageEditor({
             className="w-full rounded-md border bg-background px-2 py-1 text-xs"
           />
           <div className="flex flex-wrap items-center gap-2">
-            <SubmitButton>追加する</SubmitButton>
+            <SubmitButton
+              confirmIf={(form) => {
+                const kw = (form.elements.namedItem("keywords") as HTMLInputElement | null)?.value ?? "";
+                return kw.trim()
+                  ? null
+                  : "キーワードが未設定です。このままだと、似た予定が来ても自動では思い出せません。このまま保存しますか？";
+              }}
+            >
+              追加する
+            </SubmitButton>
             <button
               type="button"
               onClick={() => setAdding(false)}

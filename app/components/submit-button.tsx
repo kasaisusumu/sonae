@@ -6,9 +6,16 @@ export function SubmitButton({
   children,
   variant = "primary",
   confirm,
+  confirmIf,
 }: {
   children: React.ReactNode;
   variant?: "primary" | "ghost";
+  /**
+   * 送信前に、そのフォームの状態を見て条件つきで確認ダイアログを出したいとき用。
+   * 文字列を返せばその内容で確認し、null/undefined ならそのまま送信する。
+   * confirm と両方指定した場合はこちらを優先する。
+   */
+  confirmIf?: (form: HTMLFormElement) => string | null | undefined;
   /** 指定すると、送信前に確認ダイアログを出す（キャンセルで送信中止）。 */
   confirm?: string;
 }) {
@@ -25,11 +32,17 @@ export function SubmitButton({
       type="submit"
       disabled={pending}
       onClick={
-        confirm
+        confirmIf
           ? (e) => {
-              if (!window.confirm(confirm)) e.preventDefault();
+              const form = e.currentTarget.form;
+              const msg = form ? confirmIf(form) : null;
+              if (msg && !window.confirm(msg)) e.preventDefault();
             }
-          : undefined
+          : confirm
+            ? (e) => {
+                if (!window.confirm(confirm)) e.preventDefault();
+              }
+            : undefined
       }
       className={`${base} ${styles}`}
     >

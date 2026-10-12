@@ -443,6 +443,39 @@ export async function setItemScope(input: {
 }
 
 /**
+ * 項目の範囲を、ユーザーの代わりに AI に今すぐ決めてもらう（「🤖AIで分別」ボタン）。
+ * event_only か similar かだけを判定する（recommend と同じ基準。keyword は対象外）。
+ * 「選んだ」として保存するので、以後 proposeScopesForSave に上書きされない。
+ */
+export async function recommendItemScopeNow(input: {
+  scope: EventScopeInput;
+  kind: string;
+  title: string;
+  action: "include" | "exclude";
+}): Promise<ItemScope> {
+  const { scope, action, title } = input;
+  const rec = await recommend({
+    action,
+    title,
+    eventTitle: scope.eventTitle,
+    eventText: eventTextOf(scope),
+    categoryName: scope.categoryName,
+  });
+  const finalScope = rec.scope === "similar" ? "similar" : "event_only";
+  await saveScopeForItem(
+    scope,
+    action,
+    input.kind,
+    title,
+    finalScope,
+    "ai",
+    { keyword: null, genre: null, reason: rec.reason },
+    "chosen",
+  );
+  return finalScope;
+}
+
+/**
  * 項目の範囲をキーワード（カスタム）にする。詳細を開いたときの、文章形式の任意オプション。
  * クイック選択の3番目（「この名前の予定だけ」＝予定名から自動）とは別に、
  * 任意の語に差し替えたいときに使う。手動だけの設定（AI は提案しない）。

@@ -57,6 +57,7 @@ import {
   proposeScopesForSave,
   setItemScope,
   setItemKeywordScope,
+  recommendItemScopeNow,
   type ItemScope,
   ITEM_SCOPES,
 } from "@/lib/item-scope";
@@ -1422,6 +1423,50 @@ export async function setItemScopeAction(input: {
   });
   revalidateAppViews(event.id);
   return { ok: true };
+}
+
+/**
+ * 準備リストの項目の「次回いつ出すか」を、ユーザーの代わりに AI に今すぐ決めてもらう
+ * （「🤖AIで分別」ボタン）。event_only か similar かを判定して「選んだ」として保存する。
+ */
+export async function recommendItemScopeAction(input: {
+  eventId: string;
+  kind: string;
+  title: string;
+  action: "include" | "exclude";
+}): Promise<{ ok: boolean; scope?: ItemScope }> {
+  const userId = await requireUserId();
+  const title = String(input.title ?? "").trim();
+  if (!title) return { ok: false };
+
+  const event = await prisma.event.findFirst({
+    where: { id: input.eventId, userId },
+    include: { category: { select: { name: true } } },
+  });
+  if (!event) return { ok: false };
+
+  trackEvent(userId, "feature:item-scope-ai-sort");
+  const scope = await recommendItemScopeNow({
+    scope: {
+      userId,
+      eventId: event.id,
+      eventTitle: event.title,
+      eventMemo: event.memo,
+      categoryId: event.categoryId,
+      categoryName: event.category?.name ?? "その他",
+      feature: extractEventFeature({
+        title: event.title,
+        memo: event.memo,
+        eventDatetime: event.eventDatetime,
+        endDatetime: event.endDatetime,
+      }),
+    },
+    kind: String(input.kind || "task"),
+    title,
+    action: input.action,
+  });
+  revalidateAppViews(event.id);
+  return { ok: true, scope };
 }
 
 /**

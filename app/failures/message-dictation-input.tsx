@@ -76,6 +76,12 @@ export function MessageDictationInput({
       setErr("内容がありません。");
       return;
     }
+    if (!draft.keywords.trim()) {
+      const ok = window.confirm(
+        "キーワードが未設定です。このままだと、似た予定が来ても自動では思い出せません。このまま保存しますか？",
+      );
+      if (!ok) return;
+    }
     const targetEventId = eventId ?? (selectedEventId || null);
     const linkedEvent = !eventId
       ? events?.find((e) => e.id === selectedEventId)

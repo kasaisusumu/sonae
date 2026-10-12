@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createFutureMessageAction } from "@/app/actions";
 import { listFutureMessages, getPendingMessageReviews } from "@/lib/future-messages";
 import { buildMessageProposal } from "@/lib/message-proposal";
-import { SubmitButton } from "@/app/components/submit-button";
+import { MessageCreateSubmit } from "./message-create-submit";
 import { InfoHint } from "@/app/components/info-hint";
 import { MessageReviewCard } from "@/app/components/message-review-card";
 import { trackEvent } from "@/lib/track";
@@ -119,7 +119,7 @@ export default async function FuturesMessagesPage() {
           />
 
           <div className="flex flex-wrap items-center gap-2">
-            <SubmitButton>作成する</SubmitButton>
+            <MessageCreateSubmit>作成する</MessageCreateSubmit>
             <MessageDictationInput
               events={events.map((e) => ({
                 id: e.id,

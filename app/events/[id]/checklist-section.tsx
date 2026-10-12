@@ -316,10 +316,11 @@ export async function ChecklistSection({
       )}
 
       <section className="space-y-4" data-coach="checklist">
-        {/* 小さめのボタン2つを横並び。押すとポップアップで開く。 */}
+        {/* 小さめのボタンを横一列に。どれかの表示文言が伸びても折り返して縦に
+            崩れないよう、折り返し（flex-wrap）ではなく横スクロールにする。 */}
         <div
           data-coach="list-reminder"
-          className="flex flex-wrap items-center gap-2"
+          className="flex items-center gap-2 overflow-x-auto"
         >
           <ListReminderControl
             eventId={event.id}

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { formatYen, formatDateOnly, formatDateTime } from "@/lib/format";
+import { formatYen, formatDateOnly } from "@/lib/format";
 import { jstDayKey } from "@/lib/activity";
 import { requireAdminVerified } from "@/lib/require-admin";
 import {
@@ -371,6 +371,64 @@ export default async function AdminPage({
       ? rows.reduce((s, r) => s + r.activeDayRatio, 0) / activeUserCount
       : 0;
 
+  const summaryGroups: {
+    title: string;
+    tiles: { label: string; value: string; warn?: boolean }[];
+  }[] = [
+    {
+      title: "利用状況",
+      tiles: [
+        { label: "ユーザー数", value: String(users.length) },
+        { label: "今日アクティブ（DAU）", value: `${dau} / ${users.length}` },
+        { label: "直近7日アクティブ（WAU）", value: `${wau} / ${users.length}` },
+        { label: "平均累計利用時間", value: formatMinutes(avgTotalMinutes) },
+        {
+          label: "平均継続率（登録日数のうち利用日）",
+          value: `${Math.round(avgActiveDayRatio * 100)}%`,
+        },
+      ],
+    },
+    {
+      title: "はじめかた・Google連携",
+      tiles: [
+        {
+          label: "はじめかた完了（G連携+予定+リスト+通知）",
+          value: `${onboardingDoneCount} / ${users.length}`,
+        },
+        { label: "Google連携率", value: `${googleConnectedCount} / ${users.length}` },
+        {
+          label: "うち連携切れ（再接続要）",
+          value: `${syncBrokenCount} / ${googleConnectedCount}`,
+          warn: syncBrokenCount > 0,
+        },
+        { label: "通知オン率", value: `${notifyOnCount} / ${users.length}` },
+      ],
+    },
+    {
+      title: "データ量",
+      tiles: [
+        { label: "取り込んだ予定数", value: String(eventCount) },
+        { label: "失敗ログ数", value: String(failureLogCount) },
+      ],
+    },
+    {
+      title: "フィードバック",
+      tiles: [
+        { label: "フィードバック件数", value: String(feedback.length) },
+        { label: "うち WTP 回答", value: String(wtp.length) },
+        { label: "うちコメントあり", value: String(withComment) },
+      ],
+    },
+  ];
+
+  const navSections = [
+    { href: "#summary", label: "全体サマリー" },
+    { href: "#users", label: "利用者別アナリティクス" },
+    { href: "#daily", label: "日別の利用時間" },
+    { href: "#ranking", label: "利用状況ランキング" },
+    { href: "#feedback", label: "フィードバック" },
+  ];
+
   return (
     <div className="space-y-8">
       <div>
@@ -379,40 +437,59 @@ export default async function AdminPage({
           このページは ADMIN_EMAIL に一致するアカウントだけが開けます。
           個々の失敗ログ・準備リストの中身は表示せず、件数や利用時間などの集計のみ扱います。
         </p>
+        <nav className="mt-3 flex flex-wrap gap-2 text-[11px]">
+          {navSections.map((s) => (
+            <a
+              key={s.href}
+              href={s.href}
+              className="rounded-full border border-border px-2.5 py-1 text-muted no-underline hover:border-foreground hover:text-foreground"
+            >
+              {s.label}
+            </a>
+          ))}
+        </nav>
+        {syncBrokenCount > 0 && (
+          <a
+            href="#users"
+            className="mt-3 block rounded-lg border border-warn/30 bg-warn-soft px-3 py-2 text-xs text-warn no-underline"
+          >
+            ⚠ {syncBrokenCount}人が Google 連携切れ（再接続が必要）です。利用者別アナリティクスの「連携」列で確認してください。
+          </a>
+        )}
       </div>
 
       {/* ── 全体サマリー ── */}
-      <section className="space-y-3">
+      <section id="summary" className="space-y-3">
         <h2 className="text-sm font-semibold">全体サマリー</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {[
-            ["ユーザー数", String(users.length)],
-            ["取り込んだ予定数", String(eventCount)],
-            ["失敗ログ数", String(failureLogCount)],
-            ["今日アクティブ（DAU）", `${dau} / ${users.length}`],
-            ["直近7日アクティブ（WAU）", `${wau} / ${users.length}`],
-            [
-              "はじめかた完了（G連携+予定+リスト+通知）",
-              `${onboardingDoneCount} / ${users.length}`,
-            ],
-            ["Google連携率", `${googleConnectedCount} / ${users.length}`],
-            ["うち連携切れ（再接続要）", `${syncBrokenCount} / ${googleConnectedCount}`],
-            ["通知オン率", `${notifyOnCount} / ${users.length}`],
-            ["平均累計利用時間", formatMinutes(avgTotalMinutes)],
-            [
-              "平均継続率（登録日数のうち利用日）",
-              `${Math.round(avgActiveDayRatio * 100)}%`,
-            ],
-            ["フィードバック件数", String(feedback.length)],
-            ["うち WTP 回答", String(wtp.length)],
-            ["うちコメントあり", String(withComment)],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-xl border border-border bg-surface p-4 shadow-sm"
-            >
-              <p className="text-xs text-muted">{label}</p>
-              <p className="mt-1 text-xl font-bold tabular-nums">{value}</p>
+        <div className="space-y-4">
+          {summaryGroups.map((g) => (
+            <div key={g.title}>
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                {g.title}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {g.tiles.map((t) => (
+                  <div
+                    key={t.label}
+                    className={`rounded-xl border p-4 shadow-sm ${
+                      t.warn
+                        ? "border-warn/30 bg-warn-soft"
+                        : "border-border bg-surface"
+                    }`}
+                  >
+                    <p className={`text-xs ${t.warn ? "text-warn" : "text-muted"}`}>
+                      {t.label}
+                    </p>
+                    <p
+                      className={`mt-1 text-xl font-bold tabular-nums ${
+                        t.warn ? "text-warn" : ""
+                      }`}
+                    >
+                      {t.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
@@ -437,14 +514,15 @@ export default async function AdminPage({
       </section>
 
       {/* ── 利用者別アナリティクス ── */}
-      <section className="space-y-3">
+      <section id="users" className="space-y-3">
         <h2 className="text-sm font-semibold">利用者別アナリティクス</h2>
         <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
-          <table className="w-full min-w-[860px] text-left text-xs">
+          <table className="w-full min-w-[900px] text-left text-xs">
             <thead className="border-b border-border bg-surface-muted text-muted">
               <tr>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">利用者</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">登録日</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">連携</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">
                   はじめかた
                 </th>
@@ -482,22 +560,33 @@ export default async function AdminPage({
                     {r.signupDays}日前
                   </td>
                   <td className="whitespace-nowrap px-3 py-2">
+                    {!r.steps.step1Google ? (
+                      <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted">
+                        未連携
+                      </span>
+                    ) : r.syncBroken ? (
+                      <span className="rounded-full bg-warn-soft px-1.5 py-0.5 text-[10px] font-medium text-warn">
+                        ⚠ 連携切れ
+                        {r.syncErrorAt && (
+                          <>
+                            <br />
+                            {fmtDateTime(r.syncErrorAt)}ごろから
+                          </>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-teal-soft px-1.5 py-0.5 text-[10px] font-medium text-teal-dark">
+                        ✓ 連携中
+                      </span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
                     <div className="flex flex-wrap gap-1">
-                      <StepBadge ok={r.steps.step1Google} label="連携" />
                       <StepBadge ok={r.steps.step2Event} label="予定" />
                       <StepBadge ok={r.steps.step3List} label="リスト" />
                       <StepBadge ok={r.steps.step5Notify} label="通知" />
                       <StepBadge ok={r.steps.tutorial} label="導入" />
                     </div>
-                    {r.syncBroken && (
-                      <p className="mt-0.5 rounded bg-warn-soft px-1 py-0.5 text-[10px] text-warn">
-                        ⚠ 連携切れ
-                        {r.syncErrorAt && `（${formatDateTime(r.syncErrorAt)}ごろから）`}
-                      </p>
-                    )}
-                    <p className="mt-0.5 text-[10px] text-muted">
-                      ホーム画面追加は端末側の自己申告のみで管理画面では不明
-                    </p>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                     {r.eventCount}
@@ -530,16 +619,16 @@ export default async function AdminPage({
                   <td className="whitespace-nowrap px-3 py-2">
                     <Link
                       href={`/admin/users/${r.id}`}
-                      className="rounded-md border border-border px-2 py-1 text-[11px] text-foreground no-underline hover:bg-surface-muted"
+                      className="inline-flex items-center gap-0.5 rounded-full bg-surface-muted px-2.5 py-1 text-[11px] font-medium text-foreground no-underline hover:bg-border"
                     >
-                      詳細
+                      詳細 ›
                     </Link>
                   </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-6 text-center text-muted">
+                  <td colSpan={13} className="px-3 py-6 text-center text-muted">
                     まだユーザーがいません。
                   </td>
                 </tr>
@@ -550,12 +639,13 @@ export default async function AdminPage({
         <p className="text-[11px] text-muted">
           「アクティブ日数」の（%）は登録からの経過日数のうち実際に開いた日の割合です。
           「今日の利用」「累計利用時間」はログイン中のアクセスを1分単位で数えた近似値で、
-          ページの中身や操作内容は記録していません。
+          ページの中身や操作内容は記録していません。ホーム画面への追加は端末側の自己申告のみで、
+          管理画面からは分かりません。「詳細」から利用者ごとの全期間の利用履歴カレンダーを見られます。
         </p>
       </section>
 
       {/* ── 利用者別・日付別の利用時間 ── */}
-      <section className="space-y-3">
+      <section id="daily" className="space-y-3">
         <h2 className="text-sm font-semibold">
           利用者別・日付別の利用時間（直近{DAYS_SHOWN}日）
         </h2>
@@ -613,7 +703,7 @@ export default async function AdminPage({
       </section>
 
       {/* ── 利用状況ランキング（ページ・機能・ⓘ・案内ポップアップ） ── */}
-      <section className="space-y-6">
+      <section id="ranking" className="space-y-6">
         <div>
           <h2 className="text-sm font-semibold">利用状況ランキング</h2>
           <p className="mt-1 text-[11px] text-muted">
@@ -649,7 +739,7 @@ export default async function AdminPage({
       </section>
 
       {/* ── フィードバック一覧 ── */}
-      <section className="space-y-2">
+      <section id="feedback" className="space-y-2">
         <h2 className="text-sm font-semibold">フィードバック一覧（新しい順）</h2>
         {feedback.length === 0 ? (
           <p className="rounded-xl border border-border bg-surface p-4 text-sm text-muted">

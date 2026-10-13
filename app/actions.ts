@@ -2977,3 +2977,96 @@ export async function tidyCountermeasureDictation(text: string): Promise<string>
   const { tidyCountermeasureText } = await import("@/lib/dictation-to-failure");
   return tidyCountermeasureText(trimmed, userId);
 }
+
+// ─────────────────────────────────────────────
+// 機能モード切替（テスト版／本番版）。lib/feature-mode.ts, lib/mode-conversion.ts
+// ─────────────────────────────────────────────
+
+/**
+ * 切替後、今後の（まだ先の）autoManaged な予定の説明欄を、新しいモードの書式に
+ * 書き直す。Google API の呼び出し回数を抑えるため件数を絞って順に処理し、
+ * 1件失敗しても残りは続ける（呼び出し元の切替自体は、この処理を待たずに
+ * 成功扱いにする＝ after() から呼ぶ想定）。
+ */
+async function resyncUpcomingDescriptions(userId: string): Promise<void> {
+  const events = await prisma.event.findMany({
+    where: {
+      userId,
+      autoManaged: true,
+      source: "google",
+      googleEventId: { not: null },
+      eventDatetime: { gte: new Date() },
+    },
+    orderBy: { eventDatetime: "asc" },
+    take: 20,
+    select: { id: true },
+  });
+  for (const e of events) {
+    try {
+      await syncEventDescription(e.id);
+    } catch (err) {
+      console.error("[resyncUpcomingDescriptions] eventId=%s 失敗", e.id, err);
+    }
+  }
+}
+
+/**
+ * 機能モードを切り替える（設定ページのボタン）。
+ * - 元データ（予定・項目・メモ・EditRecord・メッセージ本文・失敗ログの記録内容）は
+ *   共有のまま変えない。学習結果だけ、切替先モードへ一方向で反映する
+ *   （lib/mode-conversion.ts。ユーザーが「触った」ものは上書きしない）。
+ * - 説明欄の書式は、今後の予定ぶんだけバックグラウンドで書き直す（失敗しても
+ *   切替自体は成功扱い）。
+ */
+export async function switchFeatureModeAction(
+  targetMode: string,
+): Promise<{ ok: boolean; from: string; to: string; converted: number; dormant: number }> {
+  const userId = await requireUserId();
+  const to = targetMode === "production" ? "production" : "test";
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { featureMode: true },
+  });
+  const from = user?.featureMode === "production" ? "production" : "test";
+  if (from === to) {
+    return { ok: true, from, to, converted: 0, dormant: 0 };
+  }
+
+  const { convertScopeRulesToLearnedRules, convertLearnedRulesToScopeRules } =
+    await import("@/lib/mode-conversion");
+  const result =
+    to === "production"
+      ? await convertScopeRulesToLearnedRules(userId)
+      : await convertLearnedRulesToScopeRules(userId);
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: userId }, data: { featureMode: to } }),
+    prisma.featureModeChange.create({
+      data: {
+        userId,
+        fromMode: from,
+        toMode: to,
+        convertedCount: result.converted,
+        dormantCount: result.dormant,
+      },
+    }),
+  ]);
+
+  trackEvent(userId, `feature:mode-switch-${to}`);
+  after(() => resyncUpcomingDescriptions(userId));
+  revalidateAppViews();
+  return { ok: true, from, to, converted: result.converted, dormant: result.dormant };
+}
+
+/** 機能モードの切替履歴（設定ページに小さく出す。最新5件）。 */
+export async function getFeatureModeHistory(): Promise<
+  { fromMode: string; toMode: string; convertedCount: number; dormantCount: number; changedAt: Date }[]
+> {
+  const userId = await requireUserId();
+  const rows = await prisma.featureModeChange.findMany({
+    where: { userId },
+    orderBy: { changedAt: "desc" },
+    take: 5,
+  });
+  return rows;
+}

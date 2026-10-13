@@ -417,6 +417,7 @@ export default async function AdminPage({
       syncBroken: !!u.googleAccount?.syncError,
       syncErrorAt: u.googleAccount?.syncErrorAt ?? null,
       aiCostYen: aiCostByUser.get(u.id) ?? 0,
+      featureMode: u.featureMode === "production" ? "本番版" : "テスト版",
     };
   });
 
@@ -535,6 +536,7 @@ export default async function AdminPage({
             <thead className="border-b border-border bg-surface-muted text-muted">
               <tr>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">利用者</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">機能モード</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">登録日</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">
                   はじめかた
@@ -568,6 +570,17 @@ export default async function AdminPage({
                       {r.name || "（名前未設定）"}
                     </p>
                     <p className="text-[11px] text-muted">{r.email}</p>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                        r.featureMode === "本番版"
+                          ? "border-foreground/30 text-foreground"
+                          : "border-teal/40 text-teal-dark"
+                      }`}
+                    >
+                      {r.featureMode}
+                    </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-muted">
                     {formatDateOnly(r.createdAt)}
@@ -627,7 +640,7 @@ export default async function AdminPage({
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-6 text-center text-muted">
+                  <td colSpan={13} className="px-3 py-6 text-center text-muted">
                     まだユーザーがいません。
                   </td>
                 </tr>

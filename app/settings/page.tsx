@@ -14,7 +14,9 @@ import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmLink } from "@/app/components/confirm-link";
 import { PushControls } from "@/app/components/push-controls";
 import { InfoHint } from "@/app/components/info-hint";
+import { FeatureModeToggle } from "@/app/components/feature-mode-toggle";
 import { trackEvent } from "@/lib/track";
+import { featureModeOf } from "@/lib/feature-mode";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -52,6 +54,13 @@ export default async function SettingsPage() {
         <p className="mt-2 text-sm">
           {user.name ? `${user.name}（${user.email}）` : user.email}
         </p>
+      </section>
+
+      <section data-coach="settings-mode" className="rounded-2xl bg-surface p-5">
+        <h2 className="text-sm font-semibold text-muted">機能モード</h2>
+        <div className="mt-3">
+          <FeatureModeToggle current={featureModeOf(user)} />
+        </div>
       </section>
 
       <section data-coach="settings-google" className="rounded-2xl bg-surface p-5">

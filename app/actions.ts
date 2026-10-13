@@ -1283,6 +1283,7 @@ export async function removeMessageFromEventAction(formData: FormData): Promise<
   const messageId = String(formData.get("messageId") ?? "");
   if (!eventId || !messageId) return;
   await removeMessageFromEvent(eventId, userId, messageId);
+  trackEvent(userId, "feature:future-message-remove");
   revalidateAppViews(eventId);
 }
 
@@ -1296,6 +1297,7 @@ export async function toggleFutureMessageDoneAction(
 ): Promise<void> {
   const userId = await requireUserId();
   await toggleEventFutureMessageDone(userId, linkId, isDone);
+  trackEvent(userId, "feature:future-message-check");
   revalidateAppViews();
 }
 

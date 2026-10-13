@@ -365,10 +365,12 @@ export function ChecklistEditor({
       prev.map((x) => (x.key === it.key ? { ...x, isDone: next } : x)),
     );
     if (it.id) void toggleChecklistItemDone(it.id, next);
+    void trackFeatureUse("feature:checklist-item-check");
   }
 
   function remove(key: string) {
     if (!window.confirm("削除しますか？")) return;
+    void trackFeatureUse("feature:checklist-item-delete");
     setItems((prev) => {
       const target = prev.find((it) => it.key === key);
       // 保存済みの項目を消したときだけ、保存が必要（空の未保存行はそのまま消すだけ）

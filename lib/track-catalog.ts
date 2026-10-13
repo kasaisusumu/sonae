@@ -43,6 +43,12 @@ export const FEATURE_KEYS: TrackedKey[] = [
   { key: "feature:message-dictation", label: "未来の自分へ: 話して記録する（音声入力）" },
   { key: "feature:message-review-confirm", label: "未来の自分へ: 確定カードで確定" },
   { key: "feature:item-scope-choose", label: "準備リスト: 項目の次回の出し方を選び直す" },
+  { key: "feature:item-scope-ai-sort-all", label: "準備リスト: 🤖AIで分別（予定内の全項目）" },
+  { key: "feature:item-scope-keyword", label: "準備リスト: 次回の出し方をキーワードにする" },
+  { key: "feature:checklist-item-check", label: "予定詳細: 準備リスト項目の✓完了チェック" },
+  { key: "feature:checklist-item-delete", label: "予定詳細: 準備リスト項目の✕削除" },
+  { key: "feature:future-message-check", label: "予定詳細: 未来の自分へ行の✓完了チェック" },
+  { key: "feature:future-message-remove", label: "予定詳細: 未来の自分へ行の✕この予定から外す" },
 ];
 
 /** ⓘ（InfoHint）の説明ポップアップ。開かれた回数を数える。 */
@@ -61,6 +67,10 @@ export const INFOHINT_KEYS: TrackedKey[] = [
   { key: "infohint:checklist-autosave", label: "予定詳細: 自動保存の説明" },
   { key: "infohint:checklist-generate-existing", label: "予定詳細: 連携時の既存予定の説明" },
   { key: "infohint:checklist-unreviewed", label: "予定詳細: 未確認リストの説明" },
+  { key: "infohint:ai-sort-all", label: "予定詳細: 🤖AIで分別の説明" },
+  { key: "infohint:future-message-done-vs-remove", label: "予定詳細: 未来の自分への✓と✕の違い" },
+  { key: "infohint:future-message-delete-vs-remove", label: "未来の自分へ: 削除と外すの違い" },
+  { key: "infohint:scope-quick-toggle", label: "次回の出し方: 説明（ⓘ）" },
 ];
 
 /**
@@ -95,5 +105,4 @@ export const POPUP_KEYS: TrackedKey[] = [
   { key: "popup:desc-link-hint:dismiss", label: "説明欄リンクの案内: 今後表示しない" },
   { key: "popup:scope-hint:shown", label: "次回の出し方の案内: 表示" },
   { key: "popup:scope-hint:dismiss", label: "次回の出し方の案内: 今後表示しない" },
-  { key: "infohint:scope-quick-toggle", label: "次回の出し方: 説明（ⓘ）" },
 ];

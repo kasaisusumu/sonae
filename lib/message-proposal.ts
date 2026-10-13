@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
+import { recordAiUsage } from "@/lib/ai-usage";
 import {
   parseStrArray,
   parseGenreKeywords,
@@ -151,6 +152,7 @@ export async function buildMessageProposal(input: {
         },
       ],
     });
+    recordAiUsage(input.userId, "message-proposal", MODEL, completion.usage);
     const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
       body?: unknown;
       keywords?: unknown;

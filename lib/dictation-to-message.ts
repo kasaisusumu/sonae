@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { recordAiUsage } from "@/lib/ai-usage";
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
@@ -61,6 +62,7 @@ function fallback(text: string): MessageDictationItem[] {
  */
 export async function splitDictationIntoMessages(
   text: string,
+  userId?: string | null,
 ): Promise<MessageDictationItem[]> {
   const trimmed = text.trim().slice(0, 2000);
   if (!trimmed) return [];
@@ -82,6 +84,7 @@ export async function splitDictationIntoMessages(
           { role: "user", content: trimmed },
         ],
       });
+      recordAiUsage(userId, "dictation-to-message", MODEL, completion.usage);
       const raw = JSON.parse(
         completion.choices[0]?.message?.content ?? "{}",
       ) as { items?: unknown };

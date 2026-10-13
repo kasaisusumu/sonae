@@ -46,6 +46,7 @@ model User {
   messageProposalRecords MessageProposalRecord[]
   checklistScopeRules ChecklistScopeRule[]
   eventChecklistScopes EventChecklistScope[]
+  aiUsageEvents      AiUsageEvent[]
 }
 
 // Web Push の購読情報（1 ユーザーが複数端末を持てる）
@@ -401,6 +402,24 @@ model FeatureEvent {
 
   @@index([userId, eventKey])
   @@index([eventKey, occurredAt])
+}
+
+// OpenAI 呼び出し1回ぶんの利用量（管理画面「AI利用金額」の元データ）。
+// 金額（estimatedCostYen）はトークン数からの概算で、OpenAI 側の実際の請求額とは
+// 厳密には一致しない（lib/ai-usage.ts の料金表参照）。
+model AiUsageEvent {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature          String // どの機能からの呼び出しか（例: "checklist-generate"）
+  model            String
+  inputTokens      Int
+  outputTokens     Int
+  estimatedCostYen Float
+  createdAt        DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 // 名前を付けて保存できる準備リストのテンプレート。

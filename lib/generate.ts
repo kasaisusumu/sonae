@@ -1,7 +1,9 @@
 import OpenAI from "openai";
 import type { GeneratedItem } from "@/lib/learning";
+import { recordAiUsage } from "@/lib/ai-usage";
 
 export interface GenerateInput {
+  userId: string;
   title: string;
   categoryName: string;
   eventDatetime: Date;
@@ -167,6 +169,7 @@ export async function generateBaseChecklist(
           { role: "user", content: buildUserPrompt(input) },
         ],
       });
+      recordAiUsage(input.userId, "checklist-generate", MODEL, completion.usage);
       const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
         tasks?: unknown;
         belongings?: unknown;

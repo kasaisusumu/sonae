@@ -9,6 +9,7 @@
  */
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
+import { recordAiUsage } from "@/lib/ai-usage";
 import { normTitle, pickKeyword } from "@/lib/text-norm";
 import type { EventFeatureData } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
@@ -67,7 +68,11 @@ interface SimilarKind {
   terms: string[];
 }
 
-async function classifySimilarKind(eventTitle: string, eventText: string): Promise<SimilarKind> {
+async function classifySimilarKind(
+  eventTitle: string,
+  eventText: string,
+  userId?: string | null,
+): Promise<SimilarKind> {
   const fallback: SimilarKind = { kind: eventTitle.slice(0, 40), terms: [] };
   if (!process.env.OPENAI_API_KEY) return fallback;
   try {
@@ -86,6 +91,7 @@ async function classifySimilarKind(eventTitle: string, eventText: string): Promi
         { role: "user", content: eventText.slice(0, 300) },
       ],
     });
+    recordAiUsage(userId, "item-scope-similar-kind", MODEL, completion.usage);
     const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
       kind?: unknown;
       terms?: unknown;
@@ -110,6 +116,7 @@ async function recommend(input: {
   eventTitle: string;
   eventText: string;
   categoryName: string;
+  userId?: string | null;
 }): Promise<Recommendation> {
   const fallback: Recommendation = {
     scope: "auto",
@@ -144,6 +151,7 @@ async function recommend(input: {
         },
       ],
     });
+    recordAiUsage(input.userId, "item-scope-recommend", MODEL, completion.usage);
     const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
       scope?: unknown;
       reason?: unknown;
@@ -218,7 +226,7 @@ async function buildRuleData(
   }
   if (scope === "genre") {
     const genre = rec.genre ?? input.categoryName;
-    const expanded = await expandGenreKeywords([genre], []).catch(() => []);
+    const expanded = await expandGenreKeywords([genre], [], input.userId).catch(() => []);
     return {
       ...base,
       scope,
@@ -244,6 +252,7 @@ async function buildRuleData(
     const { kind, terms } = await classifySimilarKind(
       input.eventTitle,
       eventTextOf(input),
+      input.userId,
     );
     return {
       ...base,
@@ -410,6 +419,7 @@ export async function proposeScopesForSave(input: {
         eventTitle: scope.eventTitle,
         eventText: text,
         categoryName: scope.categoryName,
+        userId: scope.userId,
       });
     }
     await saveScopeForItem(
@@ -469,6 +479,7 @@ export async function recommendItemScopeNow(input: {
     eventTitle: scope.eventTitle,
     eventText: eventTextOf(scope),
     categoryName: scope.categoryName,
+    userId: scope.userId,
   });
   // AI 未設定・失敗時の既定値（"auto"）だけ、安全側の event_only に落とす。
   const finalScope: ItemScope =

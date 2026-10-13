@@ -516,6 +516,7 @@ export async function setItemNotifyLead(
   // 内容とセットで即時学習（notify_override）
   if (item.event.categoryId) {
     await recordEdit({
+      userId: item.event.userId,
       eventId: item.eventId,
       categoryId: item.event.categoryId,
       itemKind: item.kind === "belonging" ? "belonging" : "task",
@@ -788,6 +789,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
       (removed.length || added.length || renotified.length)
     ) {
       await recordEdit({
+        userId,
         eventId: event.id,
         categoryId: event.categoryId,
         itemKind: effectiveKind,
@@ -1310,14 +1312,14 @@ export async function previewDictatedMessages(text: string): Promise<{
   items: { body: string; keywords: string[] }[];
   error?: string;
 }> {
-  await requireUserId();
+  const userId = await requireUserId();
   const trimmed = String(text ?? "").trim();
   if (!trimmed) return { ok: false, items: [], error: "内容がありません。" };
 
   const { splitDictationIntoMessages } = await import("@/lib/dictation-to-message");
   let items;
   try {
-    items = await splitDictationIntoMessages(trimmed);
+    items = await splitDictationIntoMessages(trimmed, userId);
   } catch (e) {
     console.error("[previewDictatedMessages] 失敗", e);
     return {
@@ -1777,7 +1779,7 @@ export async function createListTemplate(formData: FormData): Promise<void> {
   const bulk = String(formData.get("bulkText") ?? "");
   const titles =
     String(formData.get("tidy") ?? "") === "1"
-      ? await (await import("@/lib/tidy-list")).tidyListItems(bulk)
+      ? await (await import("@/lib/tidy-list")).tidyListItems(bulk, userId)
       : parseBulkTitles(bulk);
 
   await prisma.listTemplate.upsert({
@@ -1849,9 +1851,9 @@ export async function saveTemplateItems(
  * DB へは書かない（呼び出し側が saveTemplateItems で保存する）。
  */
 export async function tidyTemplateBulkText(text: string): Promise<string[]> {
-  await requireUserId();
+  const userId = await requireUserId();
   const { tidyListItems } = await import("@/lib/tidy-list");
-  return tidyListItems(text);
+  return tidyListItems(text, userId);
 }
 
 /** 名前を付けたリストに、一括貼り付けで項目を追記する。 */
@@ -1925,10 +1927,14 @@ export async function buildListFromDictation(input: {
   const { splitDictationIntoList } = await import("@/lib/dictation-to-list");
   let parsed;
   try {
-    parsed = await splitDictationIntoList(text, {
-      title: event.title,
-      categoryName: event.category?.name ?? "その他",
-    });
+    parsed = await splitDictationIntoList(
+      text,
+      {
+        title: event.title,
+        categoryName: event.category?.name ?? "その他",
+      },
+      userId,
+    );
   } catch (e) {
     console.error("[buildListFromDictation] 失敗", e);
     return {

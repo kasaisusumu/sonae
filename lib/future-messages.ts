@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { stripSonaeBlock } from "@/lib/description";
 import { sendPushToUser } from "@/lib/push";
+import { recordAiUsage } from "@/lib/ai-usage";
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
@@ -154,7 +155,7 @@ const GENRE_SYSTEM = `あなたは日本語アシスタントです。ユーザ�
 - 6〜12個程度、短い日本語の単語で。
 - 出力は必ず次の JSON のみ: {"terms":["...", "..."]}`;
 
-async function expandOneGenre(genre: string): Promise<string[]> {
+async function expandOneGenre(genre: string, userId?: string | null): Promise<string[]> {
   const base = genre.replace(/系$|関連$/, "").trim() || genre;
   if (!process.env.OPENAI_API_KEY) return [base];
   try {
@@ -173,6 +174,7 @@ async function expandOneGenre(genre: string): Promise<string[]> {
         { role: "user", content: `ジャンル: ${genre}` },
       ],
     });
+    recordAiUsage(userId, "message-genre-expand", MODEL, completion.usage);
     const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
       terms?: unknown;
     };
@@ -193,6 +195,7 @@ async function expandOneGenre(genre: string): Promise<string[]> {
 export async function expandGenreKeywords(
   genres: string[],
   existing: GenreKeywordEntry[],
+  userId?: string | null,
 ): Promise<GenreKeywordEntry[]> {
   const byGenre = new Map(existing.map((e) => [e.genre, e]));
   const out: GenreKeywordEntry[] = [];
@@ -204,7 +207,7 @@ export async function expandGenreKeywords(
       out.push(prev);
       continue;
     }
-    const terms = await expandOneGenre(g2);
+    const terms = await expandOneGenre(g2, userId);
     out.push({ genre: g2, terms });
   }
   return out;
@@ -266,7 +269,7 @@ export async function createFutureMessage(
   const body = input.body.trim().slice(0, 2000);
   if (!body) return null;
   const genres = (input.genres ?? []).slice(0, 5);
-  const genreKeywords = await expandGenreKeywords(genres, []);
+  const genreKeywords = await expandGenreKeywords(genres, [], userId);
   const created = await prisma.futureMessage.create({
     data: {
       userId,
@@ -312,6 +315,7 @@ export async function updateFutureMessage(
     const genreKeywords = await expandGenreKeywords(
       genres,
       parseGenreKeywords(existing.genreKeywords),
+      userId,
     );
     data.genres = stringifyStrArray(genres);
     data.genreKeywords = stringifyGenreKeywords(genreKeywords);
@@ -480,6 +484,7 @@ async function aiJudgeMessages(
         },
       ],
     });
+    recordAiUsage(event.userId, "message-ai-judge", MODEL, completion.usage);
     const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
       matches?: { idx?: unknown; match?: unknown; reason?: unknown }[];
     };
@@ -870,6 +875,7 @@ export async function confirmMessageReview(
       (await prisma.futureMessage.findUnique({ where: { id: link.messageId } }))
         ?.genreKeywords ?? "[]",
     ),
+    userId,
   );
 
   await prisma.$transaction([

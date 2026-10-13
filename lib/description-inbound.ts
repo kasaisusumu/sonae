@@ -230,6 +230,7 @@ export async function applyInboundDescription(
       const d = diffs[kind];
       if (d.removed.length || d.added.length || d.renotified.length) {
         await recordEdit({
+          userId: event.userId,
           eventId,
           categoryId: event.categoryId,
           itemKind: kind,

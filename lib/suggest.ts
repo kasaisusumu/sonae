@@ -204,6 +204,7 @@ async function buildPatternItems(
   const match = await matchEventToSlotType(
     { title: eventTitle, keywords: feature.keywords },
     knownSlotTypes,
+    userId,
   );
   if (!match) return [];
 
@@ -318,6 +319,7 @@ export async function buildChecklistForEvent(
         })
       : allowAiGeneration
         ? generateBaseChecklist({
+            userId: event.userId,
             title: event.title,
             categoryName: event.category?.name ?? "その他",
             eventDatetime: event.eventDatetime,

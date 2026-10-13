@@ -408,6 +408,7 @@ export async function refineFallbackCategories(
     const names = await classifyEventCategoriesBatch(
       needsAi.map((e) => ({ title: e.title, description: e.memo })),
       existing,
+      userId,
     );
     for (let i = 0; i < needsAi.length; i++) {
       const name = names[i];

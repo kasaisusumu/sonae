@@ -12,7 +12,7 @@ import {
   getMessagesForEvent,
   getPendingMessageReviewsForEvent,
 } from "@/lib/future-messages";
-import { buildMessageProposal } from "@/lib/message-proposal";
+import { getCachedOrBuildMessageProposal } from "@/lib/message-proposal";
 import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
@@ -226,7 +226,7 @@ export async function ChecklistSection({
   const reviewCards = await Promise.all(
     pendingReviews.map(async (r) => ({
       review: r,
-      proposal: await buildMessageProposal({
+      proposal: await getCachedOrBuildMessageProposal(r.linkId, {
         userId: event.userId,
         eventTitle: event.title,
         eventMemo: event.memo,

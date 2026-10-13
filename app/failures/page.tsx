@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { createFutureMessageAction } from "@/app/actions";
 import { listFutureMessages, getPendingMessageReviews } from "@/lib/future-messages";
-import { buildMessageProposal } from "@/lib/message-proposal";
+import { getCachedOrBuildMessageProposal } from "@/lib/message-proposal";
 import { MessageCreateSubmit } from "./message-create-submit";
 import { InfoHint } from "@/app/components/info-hint";
 import { MessageReviewCard } from "@/app/components/message-review-card";
@@ -33,7 +33,7 @@ export default async function FuturesMessagesPage() {
       });
       return {
         review: r,
-        proposal: await buildMessageProposal({
+        proposal: await getCachedOrBuildMessageProposal(r.linkId, {
           userId: user.id,
           eventTitle: r.eventTitle,
           eventMemo: event?.memo ?? null,
@@ -58,8 +58,9 @@ export default async function FuturesMessagesPage() {
           いつ入るか分からない予定のために、思い出したいことを書いておくページです。
           該当する予定が入ったときに知らせます。
           <InfoHint id="failures-intro">
-            使うほど直す量が減っていきます。次に同じ種類の予定が来たとき、内容を見直すか
-            聞かれるので、直すところだけ直せば育っていきます。
+            予定が終わるたびに、書いた内容を見直すか聞かれます（最初に書いた予定でも、
+            次に似た予定が来たときでも同じです）。直すところだけ直せば、使うほど
+            直す量が減っていきます。
           </InfoHint>
         </p>
       </div>

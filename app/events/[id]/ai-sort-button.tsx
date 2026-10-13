@@ -40,10 +40,9 @@ export function AiSortButton({ eventId }: { eventId: string }) {
   }
 
   return (
-    // relative + 固定サイズの中身（ボタン＋ⓘ）だけで幅・高さを決め、結果メッセージは
-    // absolute で下に重ねて表示する（通常のフローに含めない）。結果メッセージの文字数が
-    // 変わっても、同じ行に並ぶ他のボタン（🔔リマインド・🎤話して作る）の折り返し位置や
-    // 高さが変わらないようにするため。
+    // 結果（件数／0件／失敗）は、OKで閉じる中央ポップアップで出す（2026-10-13〜。
+    // 以前はボタン下に小さく重ねていたが、同じ行の他のボタンと並べたときに
+    // 気づきにくかったためポップアップに変更）。
     <span className="relative inline-flex shrink-0 items-center gap-1">
       <button
         type="button"
@@ -77,8 +76,23 @@ export function AiSortButton({ eventId }: { eventId: string }) {
         </p>
       </InfoHint>
       {note && (
-        <span className="absolute left-0 top-full z-10 mt-1 whitespace-nowrap rounded-md bg-surface px-1.5 py-0.5 text-[11px] text-muted shadow-sm">
-          {note}
+        <span
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setNote(null)}
+        >
+          <span
+            className="block w-full max-w-xs rounded-2xl border border-border bg-surface p-4 text-center shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="block text-sm text-foreground">{note}</span>
+            <button
+              type="button"
+              onClick={() => setNote(null)}
+              className="mt-4 rounded-lg bg-foreground px-4 py-1.5 text-sm font-medium text-surface hover:opacity-90"
+            >
+              OK
+            </button>
+          </span>
         </span>
       )}
     </span>

@@ -525,6 +525,11 @@ model EventFutureMessage {
   isDone      Boolean   @default(false)
   notifiedAt       DateTime? // 一致時のプッシュ（1予定1回）
   reviewNotifiedAt DateTime? // 予定後の確定うながしプッシュ（1予定1回）
+  // 振り返りカードのAI提案のキャッシュ（2026-10-13〜）。ページ表示のたびにAIを呼び直さず、
+  // 元データ（予定タイトル・メモ・カテゴリ・メッセージの現在値）が変わっていない間は
+  // このキャッシュをそのまま返す（lib/message-proposal.ts の getCachedOrBuildMessageProposal）。
+  proposalJson      String? // ProposalFields の JSON
+  proposalInputHash String? // キャッシュを作ったときの入力のハッシュ（変わったら再生成）
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

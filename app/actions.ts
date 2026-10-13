@@ -48,7 +48,7 @@ import {
   getLinkForReview,
 } from "@/lib/future-messages";
 import {
-  buildMessageProposal,
+  getCachedOrBuildMessageProposal,
   recordProposalOutcome,
   type ProposalFields as MessageProposalFields,
   type MessageFields,
@@ -1387,7 +1387,7 @@ export async function loadMessageProposalAction(
   const userId = await requireUserId();
   const link = await getLinkForReview(userId, linkId);
   if (!link) return null;
-  return buildMessageProposal({
+  return getCachedOrBuildMessageProposal(linkId, {
     userId,
     eventTitle: link.eventTitle,
     eventMemo: link.eventMemo,

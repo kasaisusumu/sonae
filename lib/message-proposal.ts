@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { recordAiUsage } from "@/lib/ai-usage";
@@ -196,6 +197,52 @@ export async function buildMessageProposal(input: {
     console.error("[message-proposal] buildMessageProposal 失敗", e);
     return fallback;
   }
+}
+
+type ProposalInput = Parameters<typeof buildMessageProposal>[0];
+
+function hashProposalInput(input: ProposalInput): string {
+  const canonical = JSON.stringify({
+    eventTitle: input.eventTitle,
+    eventMemo: input.eventMemo,
+    categoryId: input.categoryId,
+    current: input.current,
+  });
+  return crypto.createHash("sha256").update(canonical).digest("hex");
+}
+
+/**
+ * 振り返りカードの提案を、キャッシュがあればそれを返し、無ければ AI で作ってキャッシュする。
+ * ページを表示するたび（確定・編集していない間はずっと同じ）に AI を呼び直すのを防ぐ
+ * （`/failures` の一覧・予定詳細ページ、どちらも毎回の描画でこの提案を使うため）。
+ * 元データ（予定タイトル・メモ・カテゴリ・メッセージの現在値）が前回と変わっていなければ
+ * キャッシュをそのまま返す。変わっていれば（キーワードを直した等）作り直す。
+ */
+export async function getCachedOrBuildMessageProposal(
+  linkId: string,
+  input: ProposalInput,
+): Promise<ProposalFields> {
+  const inputHash = hashProposalInput(input);
+  const link = await prisma.eventFutureMessage.findUnique({
+    where: { id: linkId },
+    select: { proposalJson: true, proposalInputHash: true },
+  });
+  if (link?.proposalInputHash === inputHash && link.proposalJson) {
+    try {
+      return JSON.parse(link.proposalJson) as ProposalFields;
+    } catch {
+      // 壊れていたら作り直す（下に続く）。
+    }
+  }
+
+  const proposal = await buildMessageProposal(input);
+  await prisma.eventFutureMessage
+    .update({
+      where: { id: linkId },
+      data: { proposalJson: JSON.stringify(proposal), proposalInputHash: inputHash },
+    })
+    .catch(() => {});
+  return proposal;
 }
 
 /** 確定ボタンを押した時点で、提案と最終結果の差分を記録する（学習用）。 */

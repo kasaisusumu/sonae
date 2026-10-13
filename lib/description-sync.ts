@@ -7,6 +7,8 @@ import {
 } from "@/lib/description";
 import { resolveSections } from "@/lib/sections";
 import { getEventDescriptionMessages } from "@/lib/future-messages";
+import { getEventDescriptionFailures } from "@/lib/failures";
+import { getFeatureMode, isFailureLogEnabled } from "@/lib/feature-mode";
 
 /**
  * 予定の説明欄に、そなえの準備リスト（リンク＋箇条書き）を書き込む。
@@ -59,7 +61,17 @@ export async function syncEventDescription(eventId: string): Promise<void> {
     event.checklistItems.map((c) => c.kind),
   );
 
-  const futureMessages = await getEventDescriptionMessages(eventId);
+  // 情報セクション（【未来の自分へ】または【予想される失敗】等）は、このユーザーの
+  // 現在のモードに応じた方だけを書く（読み取り側は lib/description.ts の
+  // INFO_HEADINGS が両方の見出しを認識するので、モードを切り替えても過去に
+  // 書いた方の見出しを項目と誤認しない）。
+  const mode = await getFeatureMode(event.userId);
+  const futureMessages = isFailureLogEnabled(mode)
+    ? undefined
+    : await getEventDescriptionMessages(eventId);
+  const failures = isFailureLogEnabled(mode)
+    ? await getEventDescriptionFailures(eventId)
+    : undefined;
 
   // src=cal: 説明欄のこのリンクから開いたときだけ、直接編集の説明ポップアップを出す。
   const url = `${appBaseUrl()}/events/${eventId}?src=cal`;
@@ -73,7 +85,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
       isDone: c.isDone,
       comment: c.comment,
     })),
-    { unreviewed, sections, futureMessages },
+    { unreviewed, sections, futureMessages, failures },
   );
   const hash = hashDescription(description);
   if (hash === event.lastWrittenHash) return;

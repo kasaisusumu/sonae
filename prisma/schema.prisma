@@ -29,6 +29,11 @@ model User {
   // 「次回の出し方」（3択）の説明ポップアップを、「今後表示しない」で消したかどうか。
   // null の間は予定詳細を開くたびに毎回表示する（desc-link-hint と同じ方式）。
   scopeHintDismissedAt DateTime?
+  // 機能モード切替（2026-10-14 追加、テスト環境のみ）。"test" = テスト版の機能
+  // （未来の自分へ・次回の出し方3択）／"production" = 本番版の機能（失敗ログ・
+  // 節約額ダッシュボード）。既定は "test"（これまでの挙動を変えない）。
+  // lib/feature-mode.ts の getFeatureMode が読む。
+  featureMode String @default("test")
 
   googleAccount  UserGoogleAccount?
   categories     Category[]
@@ -47,6 +52,21 @@ model User {
   checklistScopeRules ChecklistScopeRule[]
   eventChecklistScopes EventChecklistScope[]
   aiUsageEvents      AiUsageEvent[]
+  featureModeChanges FeatureModeChange[]
+}
+
+// 機能モード切替の操作履歴（時刻・変更前後）。設定ページの切替操作ごとに1行。
+model FeatureModeChange {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromMode       String
+  toMode         String
+  convertedCount Int      @default(0) // 自動変換した学習結果の件数
+  dormantCount   Int      @default(0) // 休眠にした（相手モード専用で変換対象外の）件数
+  changedAt      DateTime @default(now())
+
+  @@index([userId, changedAt])
 }
 
 // Web Push の購読情報（1 ユーザーが複数端末を持てる）
@@ -312,6 +332,13 @@ model LearnedRule {
   slotType        String? // 一般化した対象の種類。例: "交通手段"（pattern_item のときのみ使用）
   patternTemplate String? // 一般化テンプレート。例: "{slot}の時間を確認する"
   aiConfidence    Float? // AI による初回判定時の確信度（0.0〜1.0）
+
+  // ── 機能モード切替（2026-10-14〜）: テスト版（ChecklistScopeRule）から自動変換した行か ──
+  // true の行は「触られていない」（isUserLocked=false のまま）限り、モード切替のたびに
+  // 元データ（ChecklistScopeRule）から上書きしてよい。ユーザーが「学習内容の確認」で
+  // 固定（isUserLocked=true）したら、以後は再変換で上書きしない。
+  autoConverted           Boolean @default(false)
+  convertedFromScopeRuleId String?
 
   @@unique([categoryId, itemKind, ruleType, target, featureSignature])
   @@index([categoryId, itemKind, ruleType])
@@ -583,6 +610,14 @@ model ChecklistScopeRule {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   eventScopes      EventChecklistScope[]
+
+  // ── 機能モード切替（2026-10-14〜）: 本番版（LearnedRule）から自動変換した行か ──
+  // true の行は、紐づく LearnedRule が isUserLocked でない限り、モード切替のたびに
+  // 元データ（LearnedRule）から上書きしてよい。ユーザーがこの項目の「次回の出し方」を
+  // 自分で選び直す（status="chosen" の EventChecklistScope ができる）と、そちらが優先され、
+  // この行は archive されて再変換の対象から外れる。
+  autoConverted            Boolean @default(false)
+  convertedFromLearnedRuleId String?
 
   @@index([userId, archivedAt])
 }

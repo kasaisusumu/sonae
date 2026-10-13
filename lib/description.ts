@@ -94,23 +94,74 @@ function progress(items: DescItem[]): string {
   return ` ${done}/${items.length}`;
 }
 
+/** 失敗まわりの追記（本番版モードのときだけ使う。リンクの下・準備リストの前に置く）。 */
+export interface DescFailureSections {
+  /** 予定終了前: 予想される（＝過去に似た予定であった）失敗の内容と対策候補。 */
+  anticipated?: { text: string; countermeasure: string | null }[];
+  /** 予定終了後: 今回は回避できた失敗（内容と、有効だった対策）。 */
+  avoided?: { text: string; countermeasure: string | null }[];
+  /** 予定終了後: 今回起きてしまった失敗の内容。 */
+  occurred?: string[];
+}
+
 export interface BuildBlockOpts {
   /** 生成後まだ確認も編集もされていない → 冒頭に注記を入れる。 */
   unreviewed?: boolean;
   /** 枠（セクション）のキー順。省略時は項目から task→belonging→その他 で導出。 */
   sections?: string[];
-  /** この予定に結びついた「未来の自分へのメッセージ」本文。空なら見出しごと出さない。 */
+  /** この予定に結びついた「未来の自分へのメッセージ」本文（テスト版）。空なら見出しごと出さない。 */
   futureMessages?: string[];
+  /** 失敗の予想／結果（本番版）。中身のある枠だけ書き出す（無ければ見出しごと出さない）。 */
+  failures?: DescFailureSections;
 }
 
-/** 情報表示だけの見出し（逆パースでは項目として取り込まない）。 */
-export const INFO_HEADINGS = new Set(["未来の自分へ"]);
+/**
+ * 情報表示だけの見出し（逆パースでは項目として取り込まない）。
+ * 機能モード切替（2026-10-14〜）で両方のモードの書式が混在する可能性があるため、
+ * どちらの見出しも常にここに含める（他モードで書いた予定の説明欄を開いても、
+ * その情報セクションを誤って準備リストの項目として読み込んでしまわないように）。
+ */
+export const INFO_HEADINGS = new Set([
+  "未来の自分へ",
+  "予想される失敗",
+  "回避した失敗",
+  "今回の失敗",
+]);
 
 /** 「未来の自分へ」セクションを行配列にする。中身が無ければ出さない。 */
 function futureMessageLines(messages: string[] | undefined): string[] {
   if (!messages || messages.length === 0) return [];
   const out = ["", "【未来の自分へ】"];
   for (const m of messages) out.push(`💌 ${oneLine(m)}`);
+  return out;
+}
+
+/** 失敗セクション（予想／回避／今回）を行配列にする。中身が無い枠は出さない。 */
+function failureLines(f: DescFailureSections | undefined): string[] {
+  if (!f) return [];
+  const out: string[] = [];
+  if (f.anticipated && f.anticipated.length > 0) {
+    out.push("", "【予想される失敗】");
+    for (const a of f.anticipated) {
+      out.push(`⚠ ${oneLine(a.text)}`);
+      if (a.countermeasure) {
+        out.push(`${COMMENT_INDENT}対策: ${oneLine(a.countermeasure)}`);
+      }
+    }
+  }
+  if (f.avoided && f.avoided.length > 0) {
+    out.push("", "【回避した失敗】");
+    for (const a of f.avoided) {
+      out.push(`🛡 ${oneLine(a.text)}`);
+      if (a.countermeasure) {
+        out.push(`${COMMENT_INDENT}対策: ${oneLine(a.countermeasure)}`);
+      }
+    }
+  }
+  if (f.occurred && f.occurred.length > 0) {
+    out.push("", "【今回の失敗】");
+    for (const t of f.occurred) out.push(`😓 ${oneLine(t)}`);
+  }
   return out;
 }
 
@@ -134,8 +185,9 @@ export function buildSonaeBlock(
   const lines = [START, `準備リスト: ${url}`];
   if (opts.unreviewed) lines.push("", UNREVIEWED_NOTE);
 
-  // リンクの下・準備リストの前に「未来の自分へ」。
+  // リンクの下・準備リストの前に「未来の自分へ」（テスト版）または失敗の予想／結果（本番版）。
   lines.push(...futureMessageLines(opts.futureMessages));
+  lines.push(...failureLines(opts.failures));
 
   const seen = new Set<string>();
   for (const key of order) {

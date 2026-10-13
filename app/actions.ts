@@ -32,6 +32,14 @@ import {
   type GeneratedItem,
 } from "@/lib/learning";
 import { extractEventFeature } from "@/lib/features";
+import { featureSignature } from "@/lib/signature";
+import { clusterKey, ensureSuggestedFailures } from "@/lib/failures";
+import {
+  getFeatureMode,
+  isFailureLogEnabled,
+  isFutureMessageEnabled,
+  isScopeRuleEnabled,
+} from "@/lib/feature-mode";
 import { parseLead, stringifyLeads } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
 import { parseJstDateTimeLocal } from "@/lib/format";
@@ -415,7 +423,12 @@ export async function generateChecklistForEvent(
   if (!event) return;
 
   await ensureChecklistForEvent(eventId);
-  await ensureFutureMessageMatchesForEvent(eventId, { allowAi: true }).catch(() => {});
+  const mode = await getFeatureMode(userId);
+  if (isFailureLogEnabled(mode)) {
+    await ensureSuggestedFailures(eventId, userId).catch(() => {});
+  } else {
+    await ensureFutureMessageMatchesForEvent(eventId, { allowAi: true }).catch(() => {});
+  }
   await markAutoManaged(eventId);
   revalidateAppViews(eventId);
   after(() => void syncEventDescription(eventId));
@@ -745,8 +758,10 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   // 項目ごとの範囲（次回いつ出すか）を推奨・保存する。範囲が決まった項目は、
   // 従来の自動学習（recordEdit）の対象から外す（「この予定だけ」は学習しない）。
   // 失敗しても保存自体は済ませる（範囲はあとから直せる）。
+  // テスト版モードだけの機能（本番版は旧来の自動学習だけに一本化する）。
   let scopeDecided = new Map<string, ItemScope>();
-  if (removed.length > 0 || added.length > 0) {
+  const scopeRuleMode = await getFeatureMode(userId);
+  if (isScopeRuleEnabled(scopeRuleMode) && (removed.length > 0 || added.length > 0)) {
     try {
       const cat = event.categoryId
         ? await prisma.category.findUnique({
@@ -1209,6 +1224,7 @@ function parseCsv(raw: FormDataEntryValue | null): string[] {
  */
 export async function createFutureMessageAction(formData: FormData): Promise<void> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
   const body = String(formData.get("body") ?? "").trim();
   if (!body) return;
   const keywords = parseCsv(formData.get("keywords"));
@@ -1229,6 +1245,7 @@ export async function createFutureMessageAction(formData: FormData): Promise<voi
 /** 予定詳細ページの「💌 未来の自分へ」枠の「＋ 追加」。新規メッセージを作り、この予定にも結びつける。 */
 export async function createMessageForEventAction(formData: FormData): Promise<void> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
   const eventId = String(formData.get("eventId") ?? "");
   const body = String(formData.get("body") ?? "").trim();
   if (!eventId || !body) return;
@@ -1245,6 +1262,7 @@ export async function createMessageForEventAction(formData: FormData): Promise<v
 /** メッセージ本体の内容・条件をその場で編集（自動保存）。 */
 export async function updateFutureMessageAction(formData: FormData): Promise<void> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   const eventId = String(formData.get("eventId") ?? "") || undefined;
@@ -1262,6 +1280,7 @@ export async function updateFutureMessageAction(formData: FormData): Promise<voi
 /** メッセージのアーカイブ／復活（削除ではなく、一覧から退避）。 */
 export async function archiveFutureMessageAction(formData: FormData): Promise<void> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
   const id = String(formData.get("id") ?? "");
   const archived = String(formData.get("archived") ?? "") === "1";
   if (!id) return;
@@ -1272,6 +1291,7 @@ export async function archiveFutureMessageAction(formData: FormData): Promise<vo
 /** メッセージを完全に削除する（確認ポップアップ必須）。 */
 export async function deleteFutureMessageAction(formData: FormData): Promise<void> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await deleteFutureMessage(userId, id);
@@ -1281,6 +1301,7 @@ export async function deleteFutureMessageAction(formData: FormData): Promise<voi
 /** ✕ この予定からだけ外す（メッセージ本体は残り、同じ条件でも再結びつけしない）。 */
 export async function removeMessageFromEventAction(formData: FormData): Promise<void> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
   const eventId = String(formData.get("eventId") ?? "");
   const messageId = String(formData.get("messageId") ?? "");
   if (!eventId || !messageId) return;
@@ -1298,6 +1319,7 @@ export async function toggleFutureMessageDoneAction(
   isDone: boolean,
 ): Promise<void> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
   await toggleEventFutureMessageDone(userId, linkId, isDone);
   trackEvent(userId, "feature:future-message-check");
   revalidateAppViews();
@@ -1313,6 +1335,7 @@ export async function previewDictatedMessages(text: string): Promise<{
   error?: string;
 }> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return { ok: false, items: [] };
   const trimmed = String(text ?? "").trim();
   if (!trimmed) return { ok: false, items: [], error: "内容がありません。" };
 
@@ -1340,6 +1363,7 @@ export async function saveDictatedMessages(input: {
   items: { body: string; keywords: string[] }[];
 }): Promise<{ ok: boolean; added: number; error?: string }> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return { ok: false, added: 0 };
   const cleanItems = (input.items ?? [])
     .map((it) => ({
       body: String(it.body ?? "").trim(),
@@ -1385,6 +1409,7 @@ export async function loadMessageProposalAction(
   linkId: string,
 ): Promise<MessageProposalFields | null> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return null;
   const link = await getLinkForReview(userId, linkId);
   if (!link) return null;
   return getCachedOrBuildMessageProposal(linkId, {
@@ -1407,6 +1432,7 @@ export async function setItemScopeAction(input: {
   scope: string;
 }): Promise<{ ok: boolean }> {
   const userId = await requireUserId();
+  if (!isScopeRuleEnabled(await getFeatureMode(userId))) return { ok: false };
   const scope = (ITEM_SCOPES as readonly string[]).includes(input.scope)
     ? (input.scope as ItemScope)
     : null;
@@ -1451,6 +1477,7 @@ export async function recommendAllItemScopesAction(input: {
   eventId: string;
 }): Promise<{ ok: boolean; count: number }> {
   const userId = await requireUserId();
+  if (!isScopeRuleEnabled(await getFeatureMode(userId))) return { ok: false, count: 0 };
 
   const event = await prisma.event.findFirst({
     where: { id: input.eventId, userId },
@@ -1497,6 +1524,7 @@ export async function setItemKeywordScopeAction(input: {
   keyword: string;
 }): Promise<{ ok: boolean }> {
   const userId = await requireUserId();
+  if (!isScopeRuleEnabled(await getFeatureMode(userId))) return { ok: false };
   const title = String(input.title ?? "").trim();
   const keyword = String(input.keyword ?? "").trim();
   if (!title) return { ok: false };
@@ -1540,6 +1568,7 @@ export async function confirmMessageReviewAction(input: {
   acceptedNewMessages?: { body: string; keywords: string[] }[];
 }): Promise<{ ok: boolean }> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return { ok: false };
   trackEvent(userId, "feature:message-review-confirm");
 
   const link = await confirmMessageReview(userId, input.linkId, input.final);
@@ -1565,6 +1594,7 @@ export async function confirmMessageReviewAction(input: {
 /** 予定後の確定カード：「今回は更新しない」。 */
 export async function skipMessageReviewAction(formData: FormData): Promise<void> {
   const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
   const linkId = String(formData.get("linkId") ?? "");
   if (!linkId) return;
   await skipMessageReview(userId, linkId);
@@ -2169,4 +2199,781 @@ export async function duplicateListTemplate(
     },
   });
   revalidateAppViews();
+}
+
+// ─────────────────────────────────────────────
+// 失敗ログ & 再発防止（本番版モード。lib/feature-mode.ts の isFailureLogEnabled）
+// ─────────────────────────────────────────────
+
+const PREVENT_GOAL_LABELS = [
+  "寝坊",
+  "スマホを触ってて遅刻",
+  "予約、連絡忘れ",
+  "忘れ物",
+  "バス・電車の乗り過ごし",
+] as const;
+
+/**
+ * 初回オンボーディングの「防ぎたい失敗はなんですか?」で選ばれたものを、
+ * カテゴリ全体の失敗ログとして初めから登録する。金額・予定紐付けはしない
+ * （振り返りのときに金額を入れてもらう）。
+ */
+export async function seedFailureGoals(labels: string[]): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const allow = new Set<string>(PREVENT_GOAL_LABELS);
+  const picked = [...new Set(labels)].filter((l) => allow.has(l));
+  if (picked.length === 0) return;
+
+  const existing = await prisma.failureLog.findMany({
+    where: { userId, eventId: null },
+    select: { description: true },
+  });
+  const have = new Set(existing.map((e) => e.description.trim()));
+  const fresh = picked.filter((l) => !have.has(l));
+  if (fresh.length === 0) return;
+
+  await prisma.$transaction(
+    fresh.map((description) =>
+      prisma.failureLog.create({
+        data: {
+          userId,
+          categoryId: null,
+          eventId: null,
+          featureSignature: "{}",
+          description,
+          estimatedLossYen: 0,
+          outcome: null,
+          occurredAt: new Date(),
+        },
+      }),
+    ),
+  );
+  revalidateAppViews();
+}
+
+/**
+ * 「うっかり失敗」を1件作る中核処理（ひとこと記録する／音声入力どちらも共通）。
+ * 予定に紐づくなら、その予定の特徴シグネチャ・カテゴリ・日付を使う。
+ */
+async function insertFailureLog(
+  userId: string,
+  description: string,
+  countermeasure: string | null,
+  eventId: string | null,
+): Promise<{ id: string } | null> {
+  const linkedEvent = eventId
+    ? await prisma.event.findFirst({
+        where: { id: eventId, userId },
+        select: {
+          id: true,
+          categoryId: true,
+          title: true,
+          memo: true,
+          eventDatetime: true,
+          endDatetime: true,
+        },
+      })
+    : null;
+
+  const featureSig = linkedEvent
+    ? featureSignature(
+        extractEventFeature({
+          title: linkedEvent.title,
+          memo: linkedEvent.memo,
+          eventDatetime: linkedEvent.eventDatetime,
+          endDatetime: linkedEvent.endDatetime,
+        }),
+      )
+    : "{}";
+
+  await prisma.failureLog.create({
+    data: {
+      userId,
+      categoryId: linkedEvent?.categoryId ?? null,
+      eventId: linkedEvent?.id ?? null,
+      featureSignature: featureSig,
+      description,
+      countermeasure,
+      // ユーザーが予定に紐づけて自分で追加したものは初めから「紐付け」。
+      // 予定なし（カテゴリ全体）の記録は「未確認」のまま。
+      outcome: linkedEvent ? "linked" : null,
+      occurredAt: linkedEvent?.eventDatetime ?? new Date(),
+    },
+  });
+
+  if (linkedEvent) {
+    const eid = linkedEvent.id;
+    await markAutoManaged(eid);
+    after(() => void syncEventDescription(eid));
+  }
+  return linkedEvent ? { id: linkedEvent.id } : null;
+}
+
+/**
+ * 「うっかり失敗」を記録する。必須は「何が起きたか」だけ。
+ * 金額・日付・カテゴリは聞かない（予定に紐づけた場合はその予定の日・カテゴリを使う）。
+ * 有効だった対策は任意（空欄でもOK。あとから書き足せる）。
+ */
+export async function createFailureLog(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const description = String(formData.get("description") ?? "").trim();
+  const countermeasure = String(formData.get("countermeasure") ?? "").trim() || null;
+  const eventId = String(formData.get("eventId") ?? "").trim() || null;
+  if (!description) return;
+  trackEvent(userId, "feature:failure-quick-record");
+
+  const linkedEvent = await insertFailureLog(userId, description, countermeasure, eventId);
+  revalidateAppViews(linkedEvent?.id);
+}
+
+/**
+ * 予定詳細ページの「考えられる失敗」を一括削除する。提案由来（未確認／紐付けで
+ * 結果未定）は再提案されないよう FailureDismissal に記録する。この予定に紐づく
+ * 節約計上（SavingsEntry）も一緒に外す。
+ */
+export async function clearEventFailureLogs(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const eventId = String(formData.get("eventId") ?? "");
+  if (!eventId) return;
+
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    select: { id: true },
+  });
+  if (!event) return;
+
+  const logs = await prisma.failureLog.findMany({
+    where: { userId, eventId },
+    select: { description: true, outcome: true },
+  });
+  if (logs.length === 0) return;
+
+  await prisma.savingsEntry.deleteMany({ where: { userId, eventId } });
+  await prisma.failureLog.deleteMany({ where: { userId, eventId } });
+
+  const dismissKeys = new Set(
+    logs
+      .filter((l) => l.outcome === null || l.outcome === "linked")
+      .map((l) => clusterKey(l.description))
+      .filter((k): k is string => !!k),
+  );
+  for (const descKey of dismissKeys) {
+    await prisma.failureDismissal
+      .upsert({
+        where: { eventId_descKey: { eventId, descKey } },
+        create: { userId, eventId, descKey },
+        update: {},
+      })
+      .catch(() => {});
+  }
+
+  revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
+}
+
+/**
+ * 「過去の失敗をこの予定に足す」1タップ記録。
+ * - 既定（outcome 指定なし）: 予定詳細の「📆 過去の失敗から追加」。初期状態は「紐付け」。
+ * - `outcome=not_prevented`: 事後の振り返りで「今回もやってしまった」。この予定の
+ *   結果として「防げなかった」を記録する（同じ内容の未確認/紐付け行があれば昇格）。
+ */
+export async function logRepeatedFailure(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const eventId = String(formData.get("eventId") ?? "");
+  const failureLogId = String(formData.get("failureLogId") ?? "");
+  if (!eventId || !failureLogId) return;
+
+  const asNotPrevented =
+    String(formData.get("outcome") ?? "") === "not_prevented";
+  const newOutcome = asNotPrevented ? "not_prevented" : "linked";
+
+  const [event, template] = await Promise.all([
+    prisma.event.findFirst({ where: { id: eventId, userId } }),
+    prisma.failureLog.findFirst({ where: { id: failureLogId, userId } }),
+  ]);
+  if (!event || !template) return;
+
+  // 同じ予定・同じ内容の二重記録を避ける
+  const dup = await prisma.failureLog.findFirst({
+    where: { userId, eventId, description: template.description },
+    select: { id: true, outcome: true },
+  });
+  if (dup) {
+    // 振り返りの「今回もやってしまった」は、未確認/紐付けの行を「防げなかった」に昇格。
+    if (
+      asNotPrevented &&
+      (dup.outcome === null || dup.outcome === "linked")
+    ) {
+      await prisma.failureLog.update({
+        where: { id: dup.id },
+        data: { outcome: "not_prevented" },
+      });
+    }
+  } else {
+    const featureSig = featureSignature(
+      extractEventFeature({
+        title: event.title,
+        memo: event.memo,
+        eventDatetime: event.eventDatetime,
+        endDatetime: event.endDatetime,
+      }),
+    );
+    await prisma.failureLog.create({
+      data: {
+        userId,
+        categoryId: event.categoryId ?? template.categoryId ?? null,
+        eventId: event.id,
+        featureSignature: featureSig,
+        description: template.description,
+        estimatedLossYen: template.estimatedLossYen,
+        countermeasure: template.countermeasure,
+        outcome: newOutcome,
+        occurredAt: event.eventDatetime,
+      },
+    });
+  }
+
+  await markAutoManaged(eventId);
+  revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
+}
+
+/**
+ * 提案（または既存）の失敗を、内容・金額・成功/失敗を選んだ上でこの予定に記録する。
+ * outcome:
+ *   "prevented"     … 防げた → 推定損失額を節約に計上
+ *   "not_prevented" … 防げなかった
+ *   ""              … まだ選ばない
+ */
+export async function attachFailureToEvent(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const eventId = String(formData.get("eventId") ?? "");
+  const description = String(formData.get("description") ?? "").trim();
+  if (!eventId || !description) return;
+
+  const rawAmount = formData.get("estimatedLossYen");
+  const estimatedLossYen = parseYen(rawAmount);
+  const rawOutcome = String(formData.get("outcome") ?? "");
+
+  // 「今回は関係ない」= この予定では以後この内容を提案しない（記録はしない）
+  if (rawOutcome === "dismiss") {
+    const descKey = clusterKey(description);
+    if (descKey) {
+      await prisma.failureDismissal.upsert({
+        where: { eventId_descKey: { eventId, descKey } },
+        create: { userId, eventId, descKey },
+        update: {},
+      });
+    }
+    revalidateAppViews(eventId);
+    return;
+  }
+
+  // 追加時は結果を選ばせない。初期値は「まだ」（null）。あとから一覧で編集する。
+  const outcome =
+    rawOutcome === "prevented" || rawOutcome === "not_prevented"
+      ? rawOutcome
+      : null;
+
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, userId },
+    select: {
+      id: true,
+      title: true,
+      memo: true,
+      eventDatetime: true,
+      endDatetime: true,
+      categoryId: true,
+    },
+  });
+  if (!event) return;
+
+  // 同じ内容がこの予定に既にあるなら二重記録しない
+  const dup = await prisma.failureLog.findFirst({
+    where: { userId, eventId, description },
+    select: { id: true },
+  });
+  if (dup) {
+    revalidateAppViews(eventId);
+    return;
+  }
+
+  const featureSig = featureSignature(
+    extractEventFeature({
+      title: event.title,
+      memo: event.memo,
+      eventDatetime: event.eventDatetime,
+      endDatetime: event.endDatetime,
+    }),
+  );
+
+  const log = await prisma.failureLog.create({
+    data: {
+      userId,
+      categoryId: event.categoryId,
+      eventId: event.id,
+      featureSignature: featureSig,
+      description,
+      estimatedLossYen,
+      occurredAt: event.eventDatetime,
+      outcome,
+    },
+  });
+
+  if (outcome === "prevented") {
+    await prisma.savingsEntry.upsert({
+      where: { eventId_failureLogId: { eventId, failureLogId: log.id } },
+      update: { amountYen: estimatedLossYen, confirmedByUser: true },
+      create: {
+        userId,
+        eventId,
+        failureLogId: log.id,
+        amountYen: estimatedLossYen,
+        confirmedByUser: true,
+      },
+    });
+  }
+
+  await markAutoManaged(eventId);
+  revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
+}
+
+/** 失敗ログを削除する。 */
+export async function deleteFailureLog(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const id = String(formData.get("id") ?? "");
+  const log = await prisma.failureLog.findFirst({
+    where: { id, userId },
+    select: { eventId: true, outcome: true, description: true },
+  });
+  await prisma.failureLog.deleteMany({ where: { id, userId } });
+
+  // 自動提案された「未確認」を消したときは、この予定で再提案しないよう記録する。
+  if (log?.eventId && log.outcome === null) {
+    const descKey = clusterKey(log.description);
+    if (descKey) {
+      await prisma.failureDismissal
+        .upsert({
+          where: { eventId_descKey: { eventId: log.eventId, descKey } },
+          create: { userId, eventId: log.eventId, descKey },
+          update: {},
+        })
+        .catch(() => {});
+    }
+  }
+
+  revalidateAppViews(log?.eventId ?? undefined);
+  if (log?.eventId) {
+    const eid = log.eventId;
+    await markAutoManaged(eid);
+    after(() => void syncEventDescription(eid));
+  }
+}
+
+/**
+ * 失敗ログ 1 件の振り返り結果を切り替える。
+ *   "prevented"     … 防げた → 1 回だけ節約（件数）に計上。ダッシュボードに残る。
+ *   "not_prevented" … 防げなかった → 計上は取り消し。ダッシュボードには出さない。
+ *   "irrelevant"    … 今回は関係ない → 計上は取り消し。振り返り済み扱いにして一覧から下げる。
+ *   "unset"         … 未選択に戻す → 計上取り消し。失敗ログ一覧で選び直す。
+ * 同じボタンをもう一度押したら "unset"（トグル）。金額は聞かない（件数のみで計上）。
+ * 対策（countermeasure）フィールドが送られてきたら一緒に保存する（例: ReviewQueue の
+ * 「今回は防げた」フォーム）。フィールドが無いとき（結果だけ変えるボタン類）は現状維持。
+ */
+export async function setFailureOutcome(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const failureLogId = String(formData.get("failureLogId") ?? "");
+  const raw = String(formData.get("outcome") ?? "");
+  const outcome =
+    raw === "prevented" ||
+    raw === "not_prevented" ||
+    raw === "irrelevant" ||
+    raw === "linked"
+      ? raw
+      : "unset";
+  if (!failureLogId) return;
+
+  const log = await prisma.failureLog.findFirst({
+    where: { id: failureLogId, userId },
+    select: { id: true, eventId: true },
+  });
+  if (!log) return;
+
+  const rawCountermeasure = formData.get("countermeasure");
+  const hasCountermeasure = rawCountermeasure !== null;
+  const countermeasure = String(rawCountermeasure ?? "").trim() || null;
+
+  if (outcome === "prevented") {
+    const existing = await prisma.savingsEntry.findFirst({
+      where: { userId, failureLogId },
+      select: { id: true },
+    });
+    if (!existing) {
+      await prisma.savingsEntry.create({
+        data: {
+          userId,
+          failureLogId,
+          eventId: log.eventId,
+          confirmedByUser: true,
+        },
+      });
+    }
+    await prisma.failureLog.update({
+      where: { id: failureLogId },
+      data: {
+        outcome: "prevented",
+        ...(hasCountermeasure ? { countermeasure } : {}),
+      },
+    });
+  } else {
+    await prisma.savingsEntry.deleteMany({ where: { userId, failureLogId } });
+    await prisma.failureLog.update({
+      where: { id: failureLogId },
+      data: {
+        outcome: outcome === "unset" ? null : outcome,
+        ...(hasCountermeasure ? { countermeasure } : {}),
+      },
+    });
+  }
+
+  revalidateAppViews(log.eventId ?? undefined);
+  if (log.eventId) {
+    const eid = log.eventId;
+    await markAutoManaged(eid);
+    after(() => void syncEventDescription(eid));
+  }
+}
+
+/**
+ * 失敗ログの内容（失敗内容・対策・結果／状態）をまとめて編集する。
+ * 予定ページからいつでも呼べる。結果（防げた／防げなかった／未選択）を変えたら
+ * 節約ダッシュボードの計上も揃える。
+ */
+export async function updateFailureLog(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+
+  const log = await prisma.failureLog.findFirst({
+    where: { id, userId },
+    select: { id: true, eventId: true },
+  });
+  if (!log) return;
+
+  const description = String(formData.get("description") ?? "").trim();
+  // 対策フィールドが送られてきたら採用（空欄でもOK＝消せる）。フィールドが無いときだけ現状維持。
+  const rawCountermeasure = formData.get("countermeasure");
+  const hasCountermeasure = rawCountermeasure !== null;
+  const countermeasure = hasCountermeasure
+    ? String(rawCountermeasure).trim() || null
+    : null;
+
+  const rawOutcome = formData.get("outcome");
+  const hasOutcome = rawOutcome !== null;
+  const outcomeStr = String(rawOutcome ?? "");
+  const outcome: string | null =
+    outcomeStr === "prevented" ||
+    outcomeStr === "not_prevented" ||
+    outcomeStr === "irrelevant" ||
+    outcomeStr === "linked"
+      ? outcomeStr
+      : null;
+
+  await prisma.failureLog.update({
+    where: { id },
+    data: {
+      ...(description ? { description } : {}),
+      ...(hasCountermeasure ? { countermeasure } : {}),
+      ...(hasOutcome ? { outcome } : {}),
+    },
+  });
+
+  if (log.eventId) {
+    const eid = log.eventId;
+    await markAutoManaged(eid);
+    after(() => void syncEventDescription(eid));
+  }
+
+  // 結果を変えたら節約計上（件数）も合わせる（setFailureOutcome と同じ扱い）。
+  if (hasOutcome) {
+    if (outcome === "prevented") {
+      const existing = await prisma.savingsEntry.findFirst({
+        where: { userId, failureLogId: id },
+        select: { id: true },
+      });
+      if (!existing) {
+        await prisma.savingsEntry.create({
+          data: {
+            userId,
+            failureLogId: id,
+            eventId: log.eventId,
+            confirmedByUser: true,
+          },
+        });
+      }
+    } else {
+      await prisma.savingsEntry.deleteMany({ where: { userId, failureLogId: id } });
+    }
+  }
+
+  revalidateAppViews(log.eventId ?? undefined);
+}
+
+/** 予定の再発防止警告を「確認した」ことにして畳む。 */
+export async function ackEventWarning(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const eventId = String(formData.get("eventId") ?? "");
+  await prisma.event.updateMany({
+    where: { id: eventId, userId },
+    data: { failureWarningAckAt: new Date() },
+  });
+  revalidateAppViews(eventId);
+}
+
+/** 終了後の「失敗あった？」に「なかった」と答える（undo=1 で取り消し）。 */
+export async function markNoFailure(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const eventId = String(formData.get("eventId") ?? "");
+  const undo = String(formData.get("undo") ?? "") === "1";
+  await prisma.event.updateMany({
+    where: { id: eventId, userId },
+    data: { noFailureAt: undo ? null : new Date() },
+  });
+  await markAutoManaged(eventId);
+  revalidateAppViews(eventId);
+}
+
+/** 警告の失敗内容を、この予定の準備リストに「再発防止」項目として追加する。 */
+export async function addPreventionItem(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const eventId = String(formData.get("eventId") ?? "");
+  const label = String(formData.get("label") ?? "").trim();
+  const notifyLeadMinutes = cleanLead(formData.get("notifyLeadMinutes")) ?? 1440;
+  if (!label) return;
+
+  const event = await prisma.event.findFirst({ where: { id: eventId, userId } });
+  if (!event) return;
+
+  const max = await prisma.checklistItem.aggregate({
+    where: { eventId },
+    _max: { sortOrder: true },
+  });
+
+  await prisma.checklistItem.create({
+    data: {
+      eventId,
+      title: `【再発防止】${label}`,
+      notifyLeadMinutes,
+      isUserAdded: true,
+      sortOrder: (max._max.sortOrder ?? -1) + 1,
+    },
+  });
+
+  await markAutoManaged(eventId);
+  revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
+}
+
+/**
+ * 「これは防げた」と自己申告し、件数を節約に計上する。有効だった対策があれば
+ * 一緒に記録し、次に似た失敗を提案するときの対策候補として引き継がれる。
+ * 振り返りの結果は「この予定に紐づく失敗ログ」1件に集約する（なければ複製）ので、
+ * あとから RetroOutcomeSelect でその 1 件を選び直すだけで結果を変えられる。
+ */
+export async function markPrevented(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return;
+  const eventId = String(formData.get("eventId") ?? "");
+  const failureLogId = String(formData.get("failureLogId") ?? "");
+  if (!eventId || !failureLogId) return;
+
+  const [event, template] = await Promise.all([
+    prisma.event.findFirst({ where: { id: eventId, userId } }),
+    prisma.failureLog.findFirst({ where: { id: failureLogId, userId } }),
+  ]);
+  if (!event || !template) return;
+
+  // 有効だった対策を改めて入力・修正できる。フィールドが送られてきたら採用
+  // （空欄なら消える）。フィールド自体が無いときだけ、元の失敗ログの対策を引き継ぐ。
+  const rawCountermeasure = formData.get("countermeasure");
+  const hasCountermeasure = rawCountermeasure !== null;
+  const countermeasure = hasCountermeasure
+    ? String(rawCountermeasure).trim() || null
+    : template.countermeasure;
+
+  // この予定に紐づく「今回の結果」ログを 1 件用意する。
+  const existing = await prisma.failureLog.findFirst({
+    where: { userId, eventId, description: template.description },
+    select: { id: true },
+  });
+  let targetId: string;
+  if (existing) {
+    targetId = existing.id;
+    await prisma.failureLog.update({
+      where: { id: targetId },
+      data: {
+        outcome: "prevented",
+        countermeasure,
+      },
+    });
+  } else {
+    const featureSig = featureSignature(
+      extractEventFeature({
+        title: event.title,
+        memo: event.memo,
+        eventDatetime: event.eventDatetime,
+        endDatetime: event.endDatetime,
+      }),
+    );
+    const created = await prisma.failureLog.create({
+      data: {
+        userId,
+        categoryId: event.categoryId ?? template.categoryId ?? null,
+        eventId: event.id,
+        featureSignature: featureSig,
+        description: template.description,
+        countermeasure,
+        outcome: "prevented",
+        occurredAt: event.eventDatetime,
+      },
+      select: { id: true },
+    });
+    targetId = created.id;
+  }
+
+  await prisma.savingsEntry.upsert({
+    where: { eventId_failureLogId: { eventId, failureLogId: targetId } },
+    update: { confirmedByUser: true },
+    create: {
+      userId,
+      eventId,
+      failureLogId: targetId,
+      confirmedByUser: true,
+    },
+  });
+
+  await markAutoManaged(eventId);
+  revalidateAppViews(eventId);
+  after(() => void syncEventDescription(eventId));
+}
+
+/**
+ * 音声入力（スマホのマイクキーで話した自由文）を、AI で「何が起きたか」と
+ * 「有効だった対策」の配列に整える（まだ保存しない）。記録は残る性質のものなので、
+ * ユーザーが内容を確認・修正してから `saveDictatedFailures` で保存する2段階にする。
+ */
+export async function previewDictatedFailures(text: string): Promise<{
+  ok: boolean;
+  items: { description: string; countermeasure: string | null }[];
+  error?: string;
+}> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return { ok: false, items: [] };
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed) return { ok: false, items: [], error: "内容がありません。" };
+
+  const { splitDictationIntoFailures } = await import("@/lib/dictation-to-failure");
+  let items;
+  try {
+    items = await splitDictationIntoFailures(trimmed, userId);
+  } catch (e) {
+    console.error("[previewDictatedFailures] 失敗", e);
+    return {
+      ok: false,
+      items: [],
+      error: "うまく整えられませんでした。少し短くして試してみてください。",
+    };
+  }
+  if (items.length === 0) {
+    return { ok: false, items: [], error: "何が起きたか読み取れませんでした。" };
+  }
+
+  // 話した中で内容が同じものが重複したら1件にまとめる（言い直し対策）。
+  const seen = new Set<string>();
+  const unique = items.filter((it) => {
+    const k = it.description.toLowerCase().replace(/\s+/g, "");
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  return { ok: true, items: unique };
+}
+
+/**
+ * `previewDictatedFailures` でユーザーが確認・修正した内容をまとめて保存する。
+ * 音声入力の失敗ログはこの2段階（整える→確認→保存）で作る。
+ */
+export async function saveDictatedFailures(input: {
+  eventId: string | null;
+  items: { description: string; countermeasure: string | null }[];
+}): Promise<{ ok: boolean; added: number; error?: string }> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return { ok: false, added: 0 };
+  const cleanItems = (input.items ?? [])
+    .map((it) => ({
+      description: String(it.description ?? "").trim(),
+      countermeasure: String(it.countermeasure ?? "").trim() || null,
+    }))
+    .filter((it) => it.description.length > 0);
+  if (cleanItems.length === 0) {
+    return { ok: false, added: 0, error: "内容がありません。" };
+  }
+
+  // 予定を指定したのに見つからない（他人の予定・消えた予定など）なら、黙って
+  // 「紐づけない」で保存せず、はっきりエラーを返す。書き込みより前に確認することで、
+  // 中途半端な（意図と違う）レコードを作らないようにする。
+  const eventId = input.eventId ? String(input.eventId).trim() || null : null;
+  if (eventId) {
+    const owns = await prisma.event.findFirst({
+      where: { id: eventId, userId },
+      select: { id: true },
+    });
+    if (!owns) {
+      return {
+        ok: false,
+        added: 0,
+        error: "選んだ予定が見つかりませんでした。もう一度選び直してください。",
+      };
+    }
+  }
+
+  trackEvent(userId, "feature:failure-dictation");
+  let lastEventId: string | undefined;
+  for (const it of cleanItems) {
+    const linkedEvent = await insertFailureLog(
+      userId,
+      it.description,
+      it.countermeasure,
+      eventId,
+    );
+    if (linkedEvent) lastEventId = linkedEvent.id;
+  }
+  revalidateAppViews(lastEventId);
+  return { ok: true, added: cleanItems.length };
+}
+
+/**
+ * 対策の自由文（音声入力）を短い一文に整えるだけ（DB へは書かない）。
+ * 振り返り・失敗ログ編集の「有効だった対策」欄すべてで共通利用。
+ */
+export async function tidyCountermeasureDictation(text: string): Promise<string> {
+  const userId = await requireUserId();
+  if (!isFailureLogEnabled(await getFeatureMode(userId))) return "";
+  const trimmed = String(text ?? "").trim();
+  if (!trimmed) return "";
+  void trackFeatureUse("feature:countermeasure-tidy");
+  const { tidyCountermeasureText } = await import("@/lib/dictation-to-failure");
+  return tidyCountermeasureText(trimmed, userId);
 }

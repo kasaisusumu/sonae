@@ -49,9 +49,12 @@ function jstMonthKey(d: Date): string {
   return jstDayKey(d).slice(0, 7);
 }
 
-/** 円の概算額を表示用に丸める（小数は出さない。元が概算のため）。 */
+/** 円の概算額を表示用に整形する。0.0001円単位まで（末尾の0は省略）、1円未満も省略せず出す。 */
 function formatYenApprox(n: number): string {
-  return `${n < 0 ? "-" : ""}¥${Math.round(Math.abs(n)).toLocaleString("ja-JP")}`;
+  const sign = n < 0 ? "-" : "";
+  const rounded = Math.round(Math.abs(n) * 10_000) / 10_000;
+  const formatted = rounded.toLocaleString("ja-JP", { maximumFractionDigits: 4 });
+  return `${sign}¥${formatted}`;
 }
 
 /** JST 暦日どうしの日数差（切り捨て）。「登録から◯日」「最終アクセスから◯日」に使う。 */

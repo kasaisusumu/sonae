@@ -5,8 +5,10 @@ import { isDevLoginEnabled } from "@/lib/dev-login";
 import { getPendingMessageReviews } from "@/lib/future-messages";
 import { primeNotifiedChecklists } from "@/lib/checklist";
 import { trackEvent } from "@/lib/track";
+import { prisma } from "@/lib/prisma";
 import { GettingStarted } from "@/app/components/getting-started";
 import { Landing } from "@/app/components/landing";
+import { NotifyOffBanner } from "@/app/components/notify-off-banner";
 
 export const maxDuration = 60;
 
@@ -68,7 +70,11 @@ export default async function HomePage({
     );
   }
 
-  const pendingReviews = await getPendingMessageReviews(user.id);
+  const [pendingReviews, pushCount] = await Promise.all([
+    getPendingMessageReviews(user.id),
+    prisma.pushSubscription.count({ where: { userId: user.id } }),
+  ]);
+  const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
 
   trackEvent(user.id, "page:/");
   after(() => primeNotifiedChecklists(user.id));
@@ -77,6 +83,9 @@ export default async function HomePage({
     <div className="space-y-6">
       {/* 未オンボーディングのときだけ出る。出ているならこれがこのページの主役。 */}
       <GettingStarted userId={user.id} />
+
+      {/* はじめかたが済んだあとに通知だけオフへ戻った人にも気づかせる、常時表示の警告。 */}
+      {pushCount === 0 && <NotifyOffBanner publicKey={vapidPublicKey} />}
 
       {pendingReviews.length > 0 && (
         <Link

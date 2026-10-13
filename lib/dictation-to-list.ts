@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { recordAiUsage } from "@/lib/ai-usage";
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
@@ -97,6 +98,7 @@ function fallback(text: string): DictationResult {
 export async function splitDictationIntoList(
   text: string,
   ctx: { title: string; categoryName: string },
+  userId?: string | null,
 ): Promise<DictationResult> {
   const trimmed = text.trim().slice(0, 4000);
   if (!trimmed) return { task: [], belonging: [], sections: [], failures: [] };
@@ -121,6 +123,7 @@ export async function splitDictationIntoList(
           },
         ],
       });
+      recordAiUsage(userId, "dictation-to-list", MODEL, completion.usage);
       const raw = JSON.parse(
         completion.choices[0]?.message?.content ?? "{}",
       ) as {

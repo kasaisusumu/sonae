@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { parseBulkTitles } from "@/lib/bulk";
+import { recordAiUsage } from "@/lib/ai-usage";
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
@@ -19,7 +20,10 @@ const SYSTEM = `あなたは、段取りが苦手な人を支える日本語ア�
  * 自由文（音声入力を含む）を、準備リストの項目配列に整える。
  * OpenAI 未設定・失敗時は、記号や番号を落とす素朴な行分割にフォールバックする。
  */
-export async function tidyListItems(text: string): Promise<string[]> {
+export async function tidyListItems(
+  text: string,
+  userId?: string | null,
+): Promise<string[]> {
   const trimmed = text.trim().slice(0, 4000);
   if (!trimmed) return [];
 
@@ -40,6 +44,7 @@ export async function tidyListItems(text: string): Promise<string[]> {
           { role: "user", content: trimmed },
         ],
       });
+      recordAiUsage(userId, "tidy-list", MODEL, completion.usage);
       const raw = JSON.parse(
         completion.choices[0]?.message?.content ?? "{}",
       ) as { items?: unknown };

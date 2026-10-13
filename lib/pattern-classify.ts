@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { recordAiUsage } from "@/lib/ai-usage";
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
@@ -47,6 +48,7 @@ isPattern=true のときだけ、以下も返す:
  * OpenAI 未設定・失敗時・自信が持てないときは isPattern:false（何もしない）。
  */
 export async function classifyItemPattern(input: {
+  userId?: string | null;
   title: string;
   categoryName: string;
   keywords: string[];
@@ -77,6 +79,7 @@ export async function classifyItemPattern(input: {
         },
       ],
     });
+    recordAiUsage(input.userId, "pattern-classify-item", MODEL, completion.usage);
     const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
       isPattern?: unknown;
       slotType?: unknown;
@@ -138,6 +141,7 @@ function findKeywordSlotMatch(
 export async function matchEventToSlotType(
   event: { title: string; keywords: string[] },
   knownSlotTypes: string[],
+  userId?: string | null,
 ): Promise<{ slotType: string; value: string } | null> {
   if (knownSlotTypes.length === 0) return null;
   const known = new Set(knownSlotTypes);
@@ -174,6 +178,7 @@ export async function matchEventToSlotType(
         },
       ],
     });
+    recordAiUsage(userId, "pattern-classify-event", MODEL, completion.usage);
     const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
       slotType?: unknown;
       value?: unknown;

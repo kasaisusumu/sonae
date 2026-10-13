@@ -97,6 +97,7 @@ export async function resolveCategoryForEvent(
     select: { name: true },
   });
   const aiName = await classifyEventCategory({
+    userId,
     title: title ?? "(タイトルなし)",
     description,
     existingCategories: existing.map((c) => c.name),

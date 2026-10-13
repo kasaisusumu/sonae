@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { recordAiUsage } from "@/lib/ai-usage";
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
@@ -79,6 +80,7 @@ function fallback(text: string): FailureDictationItem[] {
  */
 export async function splitDictationIntoFailures(
   text: string,
+  userId?: string | null,
 ): Promise<FailureDictationItem[]> {
   const trimmed = text.trim().slice(0, 2000);
   if (!trimmed) return [];
@@ -100,6 +102,7 @@ export async function splitDictationIntoFailures(
           { role: "user", content: trimmed },
         ],
       });
+      recordAiUsage(userId, "dictation-to-failure", MODEL, completion.usage);
       const raw = JSON.parse(
         completion.choices[0]?.message?.content ?? "{}",
       ) as { items?: unknown };
@@ -123,7 +126,10 @@ const COUNTERMEASURE_SYSTEM = `あなたは日本語アシスタントです。
  * 対策の自由文（音声入力）を短い一文に整える。内容の追加・削除はしない。
  * OpenAI 未設定・失敗時は、前後の空白を整えただけの元の文を返す。
  */
-export async function tidyCountermeasureText(text: string): Promise<string> {
+export async function tidyCountermeasureText(
+  text: string,
+  userId?: string | null,
+): Promise<string> {
   const trimmed = text.trim().slice(0, 1000);
   if (!trimmed) return "";
 
@@ -143,6 +149,7 @@ export async function tidyCountermeasureText(text: string): Promise<string> {
           { role: "user", content: trimmed },
         ],
       });
+      recordAiUsage(userId, "tidy-countermeasure", MODEL, completion.usage);
       const out = completion.choices[0]?.message?.content?.trim();
       if (out) return norm(out).slice(0, 200);
     } catch (e) {

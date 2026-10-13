@@ -305,6 +305,7 @@ export async function buildChecklistForEvent(
           source: "recall",
         })
       : generateBaseChecklist({
+          userId: event.userId,
           title: event.title,
           categoryName: event.category?.name ?? "その他",
           eventDatetime: event.eventDatetime,

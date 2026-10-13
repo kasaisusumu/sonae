@@ -362,6 +362,7 @@ export async function createPatternRuleIfNew(input: {
 }
 
 export interface EditForLearning {
+  userId?: string | null;
   eventId: string;
   categoryId: string;
   feature: EventFeatureData;
@@ -443,6 +444,7 @@ export async function recordEdit(input: EditForLearning): Promise<void> {
     const categoryName = category?.name ?? "その他";
     for (const title of newTitles) {
       const cls = await classifyItemPattern({
+        userId: input.userId,
         title,
         categoryName,
         keywords: feature.keywords,

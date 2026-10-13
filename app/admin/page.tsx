@@ -44,6 +44,16 @@ function formatMinutes(min: number): string {
   return `${h}時間${m}分`;
 }
 
+/** JST 年月キー "YYYY-MM"（AI利用金額の月別集計に使う）。 */
+function jstMonthKey(d: Date): string {
+  return jstDayKey(d).slice(0, 7);
+}
+
+/** 円の概算額を表示用に丸める（小数は出さない。元が概算のため）。 */
+function formatYenApprox(n: number): string {
+  return `${n < 0 ? "-" : ""}¥${Math.round(Math.abs(n)).toLocaleString("ja-JP")}`;
+}
+
 /** JST 暦日どうしの日数差（切り捨て）。「登録から◯日」「最終アクセスから◯日」に使う。 */
 function daysSince(d: Date, now: Date): number {
   const a = jstDayKey(d);
@@ -195,6 +205,7 @@ export default async function AdminPage({
     activityByUser,
     activityByUserDay,
     usageByKeyUser,
+    aiUsageEvents,
   ] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: "asc" },
@@ -250,6 +261,11 @@ export default async function AdminPage({
       by: ["userId", "eventKey"],
       _count: { _all: true },
     }),
+    // AI（OpenAI）利用金額の元データ。月別・人別はここから JS 側で集計する
+    // （件数が少ない検証版という前提。件数が増えたら DB 側の集計に切り替えること）。
+    prisma.aiUsageEvent.findMany({
+      select: { userId: true, createdAt: true, estimatedCostYen: true },
+    }),
   ]);
 
   const hasChecklistSet = new Set(checklistEvents.map((e) => e.userId));
@@ -292,6 +308,23 @@ export default async function AdminPage({
     m.set(row.userId, row._count._all);
   }
 
+  // AI利用金額: 人別の累計、全期間合計、今月合計、月別推移。
+  const todayMonthKey = jstMonthKey(now);
+  const aiCostByUser = new Map<string, number>();
+  const aiCostByMonth = new Map<string, number>();
+  let aiCostTotal = 0;
+  let aiCostThisMonth = 0;
+  for (const e of aiUsageEvents) {
+    aiCostByUser.set(e.userId, (aiCostByUser.get(e.userId) ?? 0) + e.estimatedCostYen);
+    const mk = jstMonthKey(e.createdAt);
+    aiCostByMonth.set(mk, (aiCostByMonth.get(mk) ?? 0) + e.estimatedCostYen);
+    aiCostTotal += e.estimatedCostYen;
+    if (mk === todayMonthKey) aiCostThisMonth += e.estimatedCostYen;
+  }
+  const aiCostMonthRows = [...aiCostByMonth.entries()].sort((a, b) =>
+    b[0].localeCompare(a[0]),
+  );
+
   const rows = users.map((u) => {
     const activity = activityMap.get(u.id);
     const byDay = minutesByUserDay.get(u.id);
@@ -328,6 +361,7 @@ export default async function AdminPage({
       byDay: days.map((d) => byDay?.get(d.key) ?? 0),
       syncBroken: !!u.googleAccount?.syncError,
       syncErrorAt: u.googleAccount?.syncErrorAt ?? null,
+      aiCostYen: aiCostByUser.get(u.id) ?? 0,
     };
   });
 
@@ -419,11 +453,19 @@ export default async function AdminPage({
         { label: "うちコメントあり", value: String(withComment) },
       ],
     },
+    {
+      title: "AI利用金額（概算）",
+      tiles: [
+        { label: "全期間合計", value: formatYenApprox(aiCostTotal) },
+        { label: "今月合計", value: formatYenApprox(aiCostThisMonth) },
+      ],
+    },
   ];
 
   const navSections = [
     { href: "#summary", label: "全体サマリー" },
     { href: "#users", label: "利用者別アナリティクス" },
+    { href: "#ai-cost", label: "AI利用金額" },
     { href: "#daily", label: "日別の利用時間" },
     { href: "#ranking", label: "利用状況ランキング" },
     { href: "#feedback", label: "フィードバック" },
@@ -542,6 +584,9 @@ export default async function AdminPage({
                   最終アクセス
                 </th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">WTP</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">
+                  AI利用金額（累計・概算）
+                </th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium"></th>
               </tr>
             </thead>
@@ -616,6 +661,9 @@ export default async function AdminPage({
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                     {r.wtpYen !== null ? formatYen(r.wtpYen) : "—"}
                   </td>
+                  <td className="whitespace-nowrap px-3 py-2 tabular-nums">
+                    {formatYenApprox(r.aiCostYen)}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2">
                     <Link
                       href={`/admin/users/${r.id}`}
@@ -628,7 +676,7 @@ export default async function AdminPage({
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-3 py-6 text-center text-muted">
+                  <td colSpan={14} className="px-3 py-6 text-center text-muted">
                     まだユーザーがいません。
                   </td>
                 </tr>
@@ -641,8 +689,44 @@ export default async function AdminPage({
           「今日の利用」「累計利用時間」はログイン中のアクセスを1分単位で数えた近似値で、
           ページの中身や操作内容は記録していません。ホーム画面への追加は端末側の自己申告のみで、
           管理画面からは分かりません。「詳細」から利用者ごとの全期間の利用履歴カレンダーを見られます。
+          「AI利用金額」はOpenAI呼び出し時のトークン数からの概算で、実際の請求額とは
+          一致しない場合があります。
         </p>
       </section>
+
+      {/* ── AI利用金額の月別推移 ── */}
+      {aiCostMonthRows.length > 0 && (
+        <section id="ai-cost" className="space-y-3">
+          <h2 className="text-sm font-semibold">AI利用金額: 月別推移（全員合計・概算）</h2>
+          <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+            <table className="w-full max-w-sm text-left text-xs">
+              <thead className="border-b border-border bg-surface-muted text-muted">
+                <tr>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">月</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
+                    金額（概算）
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {aiCostMonthRows.map(([mk, yen]) => (
+                  <tr key={mk} className={mk === todayMonthKey ? "bg-teal-soft/40" : undefined}>
+                    <td className="whitespace-nowrap px-3 py-2 font-medium text-foreground">
+                      {mk}
+                      {mk === todayMonthKey && (
+                        <span className="ml-1 text-[10px] text-teal-dark">（今月）</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                      {formatYenApprox(yen)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* ── 利用者別・日付別の利用時間 ── */}
       <section id="daily" className="space-y-3">

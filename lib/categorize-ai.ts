@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { recordAiUsage } from "@/lib/ai-usage";
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
@@ -7,6 +8,7 @@ const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
  * キーワード規則で決まらなかったときだけ呼ぶ想定。OpenAI 未設定・失敗時は null。
  */
 export async function classifyEventCategory(input: {
+  userId?: string | null;
   title: string;
   description?: string | null;
   existingCategories: string[];
@@ -42,6 +44,7 @@ export async function classifyEventCategory(input: {
         },
       ],
     });
+    recordAiUsage(input.userId, "categorize", MODEL, completion.usage);
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw) as { category?: unknown };
@@ -62,11 +65,14 @@ export async function classifyEventCategory(input: {
 export async function classifyEventCategoriesBatch(
   items: { title: string; description?: string | null }[],
   existingCategories: string[],
+  userId?: string | null,
 ): Promise<(string | null)[]> {
   if (items.length === 0) return [];
   if (!process.env.OPENAI_API_KEY) return items.map(() => null);
   if (items.length === 1) {
-    return [await classifyEventCategory({ ...items[0], existingCategories })];
+    return [
+      await classifyEventCategory({ ...items[0], existingCategories, userId }),
+    ];
   }
 
   try {
@@ -106,6 +112,7 @@ export async function classifyEventCategoriesBatch(
         },
       ],
     });
+    recordAiUsage(userId, "categorize-batch", MODEL, completion.usage);
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw) as { categories?: unknown };

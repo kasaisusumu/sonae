@@ -723,15 +723,6 @@ export function ChecklistEditor({
                         hintOpen={scopeHintOpen}
                         onHintOpenChange={setScopeHintOpen}
                       />
-                      {shownScope(it) === "keyword" && it.scope?.keyword && (
-                        <button
-                          type="button"
-                          onClick={() => toggleOpen(it.key)}
-                          className="text-[11px] text-muted hover:text-foreground"
-                        >
-                          「{it.scope.keyword}」
-                        </button>
-                      )}
                     </div>
                   )}
                 </div>

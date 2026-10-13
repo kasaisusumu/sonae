@@ -68,7 +68,7 @@ export function ScopeQuickToggle({
                 className="pointer-events-none font-semibold ring-2 ring-offset-1 ring-[var(--foreground)]/15"
               />
             ) : (
-              <span className="pointer-events-none inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-0.5 text-[11px] leading-tight text-muted">
+              <span className="pointer-events-none inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-px text-[11px] leading-tight text-muted">
                 {meta.icon && <span aria-hidden>{meta.icon}</span>}
                 <span className="truncate">{meta.label}</span>
               </span>

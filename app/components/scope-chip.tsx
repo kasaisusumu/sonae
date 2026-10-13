@@ -63,7 +63,7 @@ export function ScopeChip({
 }) {
   const meta = SCOPE_CHIP[scope] ?? SCOPE_CHIP.auto;
   const tone = TONE_CLASS[meta.tone];
-  const cls = `inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] leading-tight ${
+  const cls = `inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-px text-[11px] leading-tight ${
     status === "proposed" ? tone.outline : tone.solid
   } ${onClick ? "hover:opacity-80" : ""} ${className}`;
   const body = (

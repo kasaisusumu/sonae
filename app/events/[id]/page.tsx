@@ -15,6 +15,7 @@ import { DescLinkHint } from "./desc-link-hint";
 import { ScopeHint } from "./scope-hint";
 import { InfoHint } from "@/app/components/info-hint";
 import { trackEvent } from "@/lib/track";
+import { featureModeOf, isScopeRuleEnabled } from "@/lib/feature-mode";
 
 // 初回表示時に準備リストを OpenAI で生成することがあるため長めに
 export const maxDuration = 60;
@@ -49,7 +50,11 @@ export default async function EventDetailPage({
   const showDescLinkHint = src === "cal" && !user.descLinkHintDismissedAt;
   // 「次回の出し方」の説明。全画面ポップアップが重ならないよう、DescLinkHint を
   // 出さない回だけ出す（「今後表示しない」が押されるまで、毎回開くたびに表示する）。
-  const showScopeHint = !showDescLinkHint && !user.scopeHintDismissedAt;
+  // テスト版モードだけ（本番版には「次回の出し方」3択自体が無い）。
+  const showScopeHint =
+    isScopeRuleEnabled(featureModeOf(user)) &&
+    !showDescLinkHint &&
+    !user.scopeHintDismissedAt;
 
   const categoryNames = Array.from(
     new Set([...DEFAULT_CATEGORIES, ...categories.map((c) => c.name)]),

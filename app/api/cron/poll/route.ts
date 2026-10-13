@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { syncAndNotify } from "@/lib/sync";
 import { ensureWatch } from "@/lib/google";
 import { notifyPendingMessageReviews } from "@/lib/future-messages";
+import { notifyPostEventFailureChecks } from "@/lib/failures";
+import { getFeatureMode, isFailureLogEnabled } from "@/lib/feature-mode";
 import {
   sendDueItemNotifications,
   sendDueListReminders,
@@ -62,7 +64,10 @@ async function handler(req: NextRequest) {
       generated += result.generated;
       genBudget -= result.generated;
       if (await ensureWatch(userId)) watches++;
-      postChecks += await notifyPendingMessageReviews(userId);
+      const mode = await getFeatureMode(userId);
+      postChecks += isFailureLogEnabled(mode)
+        ? await notifyPostEventFailureChecks(userId)
+        : await notifyPendingMessageReviews(userId);
     } catch (e) {
       errors++;
       console.error("[cron/poll] userId=%s の処理に失敗", userId, e);

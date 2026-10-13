@@ -12,8 +12,14 @@ export const BUILTIN_SECTIONS = ["task", "belonging"] as const;
  * 説明欄・学習など実枠を扱う所では isRealSection で除外する。
  */
 export const FUTURE_MESSAGE_KEY = "@futuremsg";
-/** 旧「考えられる失敗」枠の後方互換キー。読み込み時に除去する（失敗ログ機能は全廃済み）。 */
-const LEGACY_FAILURE_LOG_KEY = "@faillog";
+/**
+ * 「考えられる失敗」枠（本番版モードだけ使う）。機能モード切替（2026-10-14〜）で
+ * 本番版のコードを復元したため、以前の「失敗ログ機能は全廃済み」の前提は外れた。
+ * sectionOrder には常にそのまま残す（どちらのモードのキーも保存上は区別しない。
+ * 表示側だけモードで出し分ける。lib/sections.ts はストレージ用の純粋関数なので、
+ * ここでモードを見る必要はない）。
+ */
+export const FAILURE_LOG_KEY = "@faillog";
 export function isRealSection(key: string): boolean {
   return !!key && !key.startsWith("@");
 }
@@ -41,14 +47,12 @@ export function sectionKeyFromLabel(label: string): string {
   return LABEL_TO_KEY[t] ?? t;
 }
 
-/** JSON 文字列を string[] にパース。壊れていたら既定の 2 枠。旧「考えられる失敗」枠キーは読み捨てる。 */
+/** JSON 文字列を string[] にパース。壊れていたら既定の 2 枠。 */
 export function parseSectionOrder(raw: string | null | undefined): string[] {
   try {
     const a = JSON.parse(raw ?? "[]");
     if (Array.isArray(a)) {
-      const out = a
-        .filter((x): x is string => typeof x === "string" && !!x)
-        .filter((x) => x !== LEGACY_FAILURE_LOG_KEY);
+      const out = a.filter((x): x is string => typeof x === "string" && !!x);
       if (out.length > 0) return dedupe(out);
     }
   } catch {

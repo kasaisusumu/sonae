@@ -49,6 +49,8 @@ export const FEATURE_KEYS: TrackedKey[] = [
   { key: "feature:checklist-item-delete", label: "予定詳細: 準備リスト項目の✕削除" },
   { key: "feature:future-message-check", label: "予定詳細: 未来の自分へ行の✓完了チェック" },
   { key: "feature:future-message-remove", label: "予定詳細: 未来の自分へ行の✕この予定から外す" },
+  { key: "feature:mode-switch-test", label: "設定: 機能モードをテスト版に切替" },
+  { key: "feature:mode-switch-production", label: "設定: 機能モードを本番版に切替" },
 ];
 
 /** ⓘ（InfoHint）の説明ポップアップ。開かれた回数を数える。 */
@@ -57,11 +59,12 @@ export const INFOHINT_KEYS: TrackedKey[] = [
   { key: "infohint:savings-cleared", label: "マニュアル: 準備リストは空" },
   { key: "infohint:savings-intro", label: "マニュアル: ページの説明" },
   { key: "infohint:savings-templates-intro", label: "マニュアル: 名前付きマニュアルの説明" },
-  { key: "infohint:failures-intro", label: "未来の自分へ: ページの説明" },
-  { key: "infohint:failures-quick-record", label: "未来の自分へ: メッセージを書く" },
-  { key: "infohint:failures-review-queue", label: "未来の自分へ: 結果を記録しよう" },
+  { key: "infohint:failures-intro", label: "/failures: ページの説明（モード共通id）" },
+  { key: "infohint:failures-quick-record", label: "/failures: 記録・メッセージを書く（モード共通id）" },
+  { key: "infohint:failures-review-queue", label: "/failures: 結果を記録しよう（テスト版）" },
   { key: "infohint:settings-write-description", label: "設定: 説明欄への書き込み" },
   { key: "infohint:settings-notify", label: "設定: 通知" },
+  { key: "infohint:feature-mode-toggle", label: "設定: 機能モードとは" },
   { key: "infohint:events-upcoming", label: "予定一覧: これからの予定" },
   { key: "infohint:event-checklist-heading", label: "予定詳細: 準備リストの見出し" },
   { key: "infohint:checklist-autosave", label: "予定詳細: 自動保存の説明" },

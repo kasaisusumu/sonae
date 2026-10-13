@@ -110,6 +110,7 @@ export function ChecklistEditor({
   templates = [],
   pastEvents = [],
   allowImages = true,
+  showScopeUi = true,
 }: {
   eventId: string;
   kind?: string;
@@ -120,6 +121,8 @@ export function ChecklistEditor({
   pastEvents?: { id: string; label: string; count: number }[];
   /** 項目メモへの写真添付を出すか（予定ページでは true、学習ページでは false）。 */
   allowImages?: boolean;
+  /** 「次回の出し方」の絵文字ボタンを出すか（テスト版モードだけ。本番版は false）。 */
+  showScopeUi?: boolean;
 }) {
   const isBelonging = kind === "belonging";
   const kindLabel = label ?? (isBelonging ? "持ち物" : "準備すること");
@@ -766,7 +769,7 @@ export function ChecklistEditor({
                   >
                     {open ? "∧" : "∨"}
                   </button>
-                  {it.title.trim() && (
+                  {showScopeUi && it.title.trim() && (
                     <ScopeEmojiToggle
                       value={shownScope(it)}
                       onChange={(sc) => chooseScope(it, sc)}
@@ -786,26 +789,30 @@ export function ChecklistEditor({
               {open && (
                 <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
                   {/* 次回の出し方（範囲）。絵文字ボタンは行に常時表示済み（タップでポップアップ）。
-                      ここでは大きい3択＋キーワードを直す欄（任意）を出す。 */}
-                  <ScopeQuickToggle
-                    value={shownScope(it)}
-                    onChange={(sc) => chooseScope(it, sc)}
-                    hintOpen={scopeHintOpen}
-                    onHintOpenChange={setScopeHintOpen}
-                  />
-                  <div className="space-y-1">
-                    <p className="text-[11px] text-muted">
-                      {shownStatus(it) === "proposed"
-                        ? "AI の提案のまま適用中です。選び直すと、その内容になります。"
-                        : "選んだ内容で、次に同じ条件の予定を作ったときに扱います。"}
-                      {it.scope?.reason && `（${it.scope.reason}）`}
-                    </p>
-                    <KeywordSentenceField
-                      initialKeyword={shownScope(it) === "keyword" ? (it.scope?.keyword ?? "") : ""}
-                      onCommit={(kw) => chooseKeyword(it, kw)}
-                      onClear={() => chooseKeyword(it, "")}
-                    />
-                  </div>
+                      ここでは大きい3択＋キーワードを直す欄（任意）を出す。テスト版モードだけ。 */}
+                  {showScopeUi && (
+                    <>
+                      <ScopeQuickToggle
+                        value={shownScope(it)}
+                        onChange={(sc) => chooseScope(it, sc)}
+                        hintOpen={scopeHintOpen}
+                        onHintOpenChange={setScopeHintOpen}
+                      />
+                      <div className="space-y-1">
+                        <p className="text-[11px] text-muted">
+                          {shownStatus(it) === "proposed"
+                            ? "AI の提案のまま適用中です。選び直すと、その内容になります。"
+                            : "選んだ内容で、次に同じ条件の予定を作ったときに扱います。"}
+                          {it.scope?.reason && `（${it.scope.reason}）`}
+                        </p>
+                        <KeywordSentenceField
+                          initialKeyword={shownScope(it) === "keyword" ? (it.scope?.keyword ?? "") : ""}
+                          onCommit={(kw) => chooseKeyword(it, kw)}
+                          onClear={() => chooseKeyword(it, "")}
+                        />
+                      </div>
+                    </>
+                  )}
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
                     <span className="shrink-0">通知</span>
                     <select

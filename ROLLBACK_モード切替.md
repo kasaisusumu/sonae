@@ -81,8 +81,38 @@
 戻した後、`scripts/mode-switch-baseline-2026-10-14.json` の値と一致するか
 （テーブル行数・主要テーブルのハッシュ・適用済みマイグレーション一覧）を確認する。
 
-## 3. 実装の記録（着手後に追記）
-- 実装ブランチ: `feature/mode-switch`（`test` から分岐）
-- マイグレーション（追加のみ）: （実装時に追記）
-- `test` へのマージコミット: （実装完了後に追記）
-- `sonae-test` への反映デプロイ: （実装完了後に追記）
+## 3. 実装の記録
+
+- 実装ブランチ: `feature/mode-switch`（`test` から分岐。push 済み）
+- マイグレーション（追加のみ、test ブランチの実DBに適用済み）:
+  `20261014090000_feature_mode`（`User.featureMode`、`LearnedRule`/`ChecklistScopeRule`
+  の変換用列、`FeatureModeChange` テーブル）
+- down SQL: `prisma/rollback/20261014090000_feature_mode.down.sql`
+- `test` へのマージコミット: （マージ実行後にこの行へ追記する）
+- `sonae-test` への反映デプロイ: （マージ実行後にこの行へ追記する）
+
+## 4. 巻き戻しの検証結果（実装後・2026-10-14 実施）
+
+§8 の手順どおり、バックアップ用ブランチ `test-pre-mode-switch-2026-10-14`
+（`br-fragrant-voice-a77o78bl`）からさらに一時ブランチ `_tmp-rollback-verify-2026-10-14`
+（`br-soft-glitter-a7ragtcb`、検証後に削除済み）を作り、そこにマイグレーション
+`20261014090000_feature_mode` を適用してから `scripts/rollback-mode-switch.mjs --execute`
+を実行した。結果、`scripts/mode-switch-baseline-2026-10-14.json`（着手前の基準値）と比較して:
+
+- テーブル一覧: 一致
+- 全テーブルの行数: **不一致 0 件**
+- 主要9テーブル（User, Event, ChecklistItem, EditRecord, LearnedRule,
+  ChecklistScopeRule, EventChecklistScope, FutureMessage, EventFutureMessage）の
+  内容ハッシュ: **不一致 0 件**
+- 適用済みマイグレーション一覧: 一致
+- `User`/`LearnedRule`/`ChecklistScopeRule` に機能モード関連の列が残っていない: 確認済み
+- `FeatureModeChange` テーブルが削除された: 確認済み
+
+→ **着手前の状態と完全に一致することを確認した。**
+
+検証中に、`scripts/rollback-mode-switch.mjs` の dry-run 表示で down SQL の文を
+1文（`FeatureModeChange` の外部キー制約の削除）数え落としていた不具合を発見・修正した
+（コメント行が直後の文とまとめて除外されていたため。実害は無かった＝その文の対象
+テーブル自体を直後に DROP TABLE するので、どちらにせよ制約は一緒に消えていた）。
+あわせて、自動変換の派生行（`autoConverted=true`）を down SQL の列削除より前に
+削除する処理も追加した（列が消えると判別できなくなるため、順序が重要）。

@@ -185,7 +185,18 @@ function Visual({ id }: { id: string }): ReactNode {
   return null;
 }
 
-export function Tutorial({ tutorialDone = false }: { tutorialDone?: boolean }) {
+export function Tutorial({
+  tutorialDone = false,
+  waitForPreventGoals = false,
+}: {
+  tutorialDone?: boolean;
+  /**
+   * 本番版モードだけ true にする。「防ぎたい失敗」(PreventGoals) の初回プロンプトを
+   * 先に出し、それが終わってから自動表示する（終了時に mm:open-tutorial を投げる）。
+   * テスト版モードは PreventGoals 自体が無いので、待たずに自動表示する。
+   */
+  waitForPreventGoals?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [i, setI] = useState(0);
 
@@ -199,14 +210,16 @@ export function Tutorial({ tutorialDone = false }: { tutorialDone?: boolean }) {
     try {
       // ログイン直後、最初に出す案内。完了状態はサーバー側でも持つ
       //（PWA でも再表示しないため）。手動再生は EVENT で常に可能。
-      if (!tutorialDone && !localStorage.getItem(KEY)) {
+      const preventGoalsDone =
+        !waitForPreventGoals || !!localStorage.getItem("mm_prevent_goals_v1");
+      if (!tutorialDone && !localStorage.getItem(KEY) && preventGoalsDone) {
         queueMicrotask(show);
       }
     } catch {
       /* localStorage 不可の環境では出さない */
     }
     return () => window.removeEventListener(EVENT, show);
-  }, [tutorialDone]);
+  }, [tutorialDone, waitForPreventGoals]);
 
   function finish(skipped: boolean) {
     try {

@@ -7,6 +7,8 @@ import { loadEventScopeMap, type EventScopeEntry } from "@/lib/item-scope";
 import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
+import { getFeatureMode, isFailureLogEnabled } from "@/lib/feature-mode";
+import { getWarningForEvent, ensureSuggestedFailures } from "@/lib/failures";
 import {
   ensureFutureMessageMatchesForEvent,
   getMessagesForEvent,
@@ -17,8 +19,13 @@ import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
 import { parseLeads } from "@/lib/lead-time";
-import { markListReviewed, generateChecklistForEvent } from "@/app/actions";
 import {
+  markListReviewed,
+  generateChecklistForEvent,
+  markNoFailure,
+} from "@/app/actions";
+import {
+  FAILURE_LOG_KEY,
   FUTURE_MESSAGE_KEY,
   isBuiltinSection,
   resolveSections,
@@ -26,6 +33,12 @@ import {
 } from "@/lib/sections";
 import { InfoHint } from "@/app/components/info-hint";
 import { ChecklistEditor } from "./checklist-editor";
+import {
+  FailureListEditor,
+  type FLOther,
+  type FLRow,
+} from "./failure-list-editor";
+import { WarningPanel } from "./warning-panel";
 import { FutureMessageEditor, type EMRow } from "./future-message-editor";
 import { MessageReviewCard } from "@/app/components/message-review-card";
 import { ListReminderControl } from "./list-reminder-control";
@@ -33,6 +46,7 @@ import { AddSectionButton } from "./section-manager";
 import { SectionList, type SectionEntry } from "./section-list";
 import { DictationInput } from "./dictation-input";
 import { AiSortButton } from "./ai-sort-button";
+import { FailureDictationInput } from "@/app/failures/failure-dictation-input";
 import { SubmitButton } from "@/app/components/submit-button";
 
 type TplOpt = { id: string; name: string };
@@ -63,6 +77,7 @@ function KindBlock({
   pastEvents,
   imagesBySlot,
   scopes,
+  showScopeUi,
 }: {
   eventId: string;
   kind: string;
@@ -72,6 +87,8 @@ function KindBlock({
   pastEvents: PastOpt[];
   imagesBySlot: Map<string, ItemImg[]>;
   scopes: Map<string, ScopeEntry>;
+  /** 「次回の出し方」UI を出すか（テスト版モードだけ）。 */
+  showScopeUi: boolean;
 }) {
   const mine = rows.filter((r) => r.kind === kind);
   const normal = mine.filter((r) => !r.isSuggested);
@@ -84,6 +101,7 @@ function KindBlock({
         label={label}
         templates={templates}
         pastEvents={pastEvents}
+        showScopeUi={showScopeUi}
         initialItems={normal.map((c) => ({
           id: c.id,
           title: c.title,
@@ -126,6 +144,10 @@ export async function ChecklistSection({
     if (changed) revalidatePath(`/events/${event.id}`);
   });
 
+  // 機能モード（§ lib/feature-mode.ts）。本番版=失敗ログ／テスト版=未来の自分へ・範囲ルール。
+  const mode = await getFeatureMode(event.userId);
+  const isProd = isFailureLogEnabled(mode);
+
   const itemsAndFlag = await Promise.all([
     prisma.checklistItem.findMany({
       where: { eventId: event.id },
@@ -156,13 +178,110 @@ export async function ChecklistSection({
     after(() => syncEventDescription(event.id));
   }
 
-  // 未来の自分へのメッセージ。以前の「考えられる失敗」枠と同じ理由で、
-  // ChecklistSection 本体の非同期処理に統合している（Suspense 境界を分けると
-  // 自動保存のたびの再検証でエディタの開閉状態が消えるため）。
+  // 失敗ログ（考えられる失敗）／未来の自分へのメッセージ。以前は <Suspense> で
+  // 別コンポーネントに切り出していたが、自動保存のたびの再検証でその Suspense
+  // 境界だけ再サスペンドし、中のエディタがまるごと作り直されて開閉状態が消える
+  // 不具合があったため、ChecklistSection 本体の非同期処理に統合している。
   if (!needsManualGenerate) {
-    await ensureFutureMessageMatchesForEvent(event.id, { allowAi: true });
+    if (isProd) {
+      await ensureSuggestedFailures(event.id, event.userId);
+    } else {
+      await ensureFutureMessageMatchesForEvent(event.id, { allowAi: true });
+    }
   }
-  const linkedMessages = await getMessagesForEvent(event.id, event.userId);
+
+  const [linkedFailures, otherFailures, failureEv, linkedMessages] =
+    await Promise.all([
+      isProd
+        ? prisma.failureLog.findMany({
+            where: { userId: event.userId, eventId: event.id },
+            orderBy: { occurredAt: "desc" },
+            select: {
+              id: true,
+              description: true,
+              outcome: true,
+              countermeasure: true,
+              occurredAt: true,
+            },
+          })
+        : Promise.resolve([]),
+      isProd
+        ? prisma.failureLog.findMany({
+            where: { userId: event.userId, eventId: { not: event.id } },
+            orderBy: { occurredAt: "desc" },
+            take: 80,
+            select: {
+              id: true,
+              description: true,
+              occurredAt: true,
+              event: { select: { title: true } },
+            },
+          })
+        : Promise.resolve([]),
+      isProd
+        ? prisma.event.findFirst({
+            where: { id: event.id, userId: event.userId },
+            select: { eventDatetime: true, endDatetime: true, noFailureAt: true },
+          })
+        : Promise.resolve(null),
+      isProd ? Promise.resolve([]) : getMessagesForEvent(event.id, event.userId),
+    ]);
+
+  const linkedFailureDesc = new Set(
+    linkedFailures.map((l) => l.description.trim()),
+  );
+  const otherFailureCandidates: FLOther[] = otherFailures
+    .filter((o) => !linkedFailureDesc.has(o.description.trim()))
+    .map((o) => ({
+      id: o.id,
+      description: o.description,
+      occurredAt: o.occurredAt,
+      eventTitle: o.event?.title ?? null,
+    }));
+  const failureIsPast =
+    !!failureEv &&
+    (failureEv.endDatetime ?? failureEv.eventDatetime) <= new Date();
+  const askFailureOutcome = failureIsPast && linkedFailures.length === 0;
+  const failureLogNode = (
+    <div id="failure-check" className="scroll-mt-4 space-y-2">
+      {askFailureOutcome &&
+        (failureEv?.noFailureAt ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl bg-surface-muted p-3 text-xs text-muted">
+            <span>「失敗はなかった」で記録済み。</span>
+            <form action={markNoFailure}>
+              <input type="hidden" name="eventId" value={event.id} />
+              <input type="hidden" name="undo" value="1" />
+              <button type="submit" className="underline hover:text-foreground">
+                取り消す
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-surface-muted p-3">
+            <p className="text-xs font-medium text-foreground">
+              この予定、うっかりはありましたか？
+            </p>
+            <p className="mt-0.5 text-[11px] text-muted">
+              あったら話すか、下の「＋ 追加」で一言。なければワンタップで。
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <form action={markNoFailure}>
+                <input type="hidden" name="eventId" value={event.id} />
+                <SubmitButton variant="ghost">なかった 🙆</SubmitButton>
+              </form>
+              <FailureDictationInput eventId={event.id} />
+            </div>
+          </div>
+        ))}
+
+      <FailureListEditor
+        eventId={event.id}
+        label="考えられる失敗"
+        initial={linkedFailures as FLRow[]}
+        others={otherFailureCandidates}
+      />
+    </div>
+  );
 
   const feature = extractEventFeature({
     title: event.title,
@@ -171,6 +290,7 @@ export async function ChecklistSection({
     endDatetime: event.endDatetime,
   });
   const [
+    warning,
     pendingReviews,
     taskRules,
     belongingRules,
@@ -179,7 +299,10 @@ export async function ChecklistSection({
     pastEventsRaw,
     itemImages,
   ] = await Promise.all([
-    getPendingMessageReviewsForEvent(event.id, event.userId),
+    isProd ? getWarningForEvent(event.id) : Promise.resolve(null),
+    isProd
+      ? Promise.resolve([])
+      : getPendingMessageReviewsForEvent(event.id, event.userId),
     getApplicableRules(event.categoryId, feature, "task"),
     getApplicableRules(event.categoryId, feature, "belonging"),
     prisma.event.findUnique({
@@ -223,24 +346,26 @@ export async function ChecklistSection({
       )}
     />
   );
-  const reviewCards = await Promise.all(
-    pendingReviews.map(async (r) => ({
-      review: r,
-      proposal: await getCachedOrBuildMessageProposal(r.linkId, {
-        userId: event.userId,
-        eventTitle: event.title,
-        eventMemo: event.memo,
-        categoryId: event.categoryId,
-        current: {
-          body: r.body,
-          keywords: r.keywords,
-          genres: r.genres,
-          categoryIds: r.categoryIds,
-          scope: r.scope,
-        },
-      }),
-    })),
-  );
+  const reviewCards = isProd
+    ? []
+    : await Promise.all(
+        pendingReviews.map(async (r) => ({
+          review: r,
+          proposal: await getCachedOrBuildMessageProposal(r.linkId, {
+            userId: event.userId,
+            eventTitle: event.title,
+            eventMemo: event.memo,
+            categoryId: event.categoryId,
+            current: {
+              body: r.body,
+              keywords: r.keywords,
+              genres: r.genres,
+              categoryIds: r.categoryIds,
+              scope: r.scope,
+            },
+          }),
+        })),
+      );
   const forced = [...taskRules, ...belongingRules].filter((r) => r.forced);
   const rows = items as unknown as Row[];
 
@@ -266,16 +391,25 @@ export async function ChecklistSection({
     reviewState?.sectionOrder ?? null,
     items.map((i) => i.kind),
   );
-  // 「未来の自分へ」もリスト枠として並べ替え対象にする。
-  // まだ並べ替えたことがなければ、話して作るのすぐ下（先頭）に置く。
-  // ただし、この予定に結びついたメッセージが1件も無ければ枠自体を出さない
+  // 「考えられる失敗」（本番版）／「未来の自分へ」（テスト版）もリスト枠として
+  // 並べ替え対象にする。まだ並べ替えたことがなければ、話して作るのすぐ下（先頭）に置く。
+  // テスト版は、この予定に結びついたメッセージが1件も無ければ枠自体を出さない
   // （空の「＋追加」だけの枠が毎回出るのを避ける。追加は /failures からできる）。
   const hasFutureMessages = linkedMessages.length > 0;
-  const orderedKeys = hasFutureMessages
-    ? sections.includes(FUTURE_MESSAGE_KEY)
-      ? sections
-      : [FUTURE_MESSAGE_KEY, ...sections]
-    : sections.filter((k) => k !== FUTURE_MESSAGE_KEY);
+  const specialKey = isProd ? FAILURE_LOG_KEY : FUTURE_MESSAGE_KEY;
+  // 今のモードで使わない方の特別キーは、以前のモードで保存された sectionOrder に
+  // 残っていても表示上は除く（データとしては保ったまま。モードを戻せば復帰する）。
+  const otherSpecialKey = isProd ? FUTURE_MESSAGE_KEY : FAILURE_LOG_KEY;
+  const sectionsOwn = sections.filter((k) => k !== otherSpecialKey);
+  const orderedKeys = isProd
+    ? sectionsOwn.includes(FAILURE_LOG_KEY)
+      ? sectionsOwn
+      : [FAILURE_LOG_KEY, ...sectionsOwn]
+    : hasFutureMessages
+      ? sectionsOwn.includes(FUTURE_MESSAGE_KEY)
+        ? sectionsOwn
+        : [FUTURE_MESSAGE_KEY, ...sectionsOwn]
+      : sectionsOwn.filter((k) => k !== FUTURE_MESSAGE_KEY);
 
   // ユーザーが足した枠（買うもの等）の名前付きリストも、その枠名が一致すれば拾う
   // （組み込みの2枠に限らない。「引き出す」も別枠として独立させるため）。
@@ -291,8 +425,11 @@ export async function ChecklistSection({
         count: k === "belonging" ? e.belongingCount : e.taskCount,
       }))
       .filter((e) => e.count > 0);
-  // 項目ごとの「次回の出し方」（範囲）。項目の保存のたびに作り直されても、タイトルで引けるように。
-  const scopeMap = await loadEventScopeMap(event.userId, event.id);
+  // 項目ごとの「次回の出し方」（範囲）。テスト版モードだけ（本番版は空のまま）。
+  // 項目の保存のたびに作り直されても、タイトルで引けるように。
+  const scopeMap = isProd
+    ? new Map<string, ScopeEntry>()
+    : await loadEventScopeMap(event.userId, event.id);
   const unreviewed =
     !!reviewState &&
     !reviewState.listReviewedAt &&
@@ -302,17 +439,28 @@ export async function ChecklistSection({
 
   return (
     <>
-      {reviewCards.length > 0 && (
-        <div id="message-review" className="scroll-mt-4 space-y-4">
-          {reviewCards.map(({ review, proposal }) => (
-            <MessageReviewCard
-              key={review.linkId}
-              linkId={review.linkId}
-              eventTitle={review.eventTitle}
-              proposal={proposal}
-            />
-          ))}
-        </div>
+      {/* 本番版: 「過去に失敗の記録があります」の警告（終わった予定の振り返りだけ）。
+          テスト版: 確定待ちの振り返りカード（複数件ぶん）。 */}
+      {isProd ? (
+        warning &&
+        warning.isPast && (
+          <div id="failure-review" className="scroll-mt-4">
+            <WarningPanel warning={warning} />
+          </div>
+        )
+      ) : (
+        reviewCards.length > 0 && (
+          <div id="message-review" className="scroll-mt-4 space-y-4">
+            {reviewCards.map(({ review, proposal }) => (
+              <MessageReviewCard
+                key={review.linkId}
+                linkId={review.linkId}
+                eventTitle={review.eventTitle}
+                proposal={proposal}
+              />
+            ))}
+          </div>
+        )
       )}
 
       <section className="space-y-4" data-coach="checklist">
@@ -329,7 +477,7 @@ export async function ChecklistSection({
             )}
           />
           <DictationInput eventId={event.id} />
-          <AiSortButton eventId={event.id} />
+          {!isProd && <AiSortButton eventId={event.id} />}
         </div>
 
         {needsManualGenerate && (
@@ -341,7 +489,10 @@ export async function ChecklistSection({
               連携時に取り込んだ予定です。準備リストはまだ作っていません
               <InfoHint id="checklist-generate-existing">
                 自分で予定に入れる前からあった予定は、開いても自動では作りません。
-                このボタンを押すと、今この場で準備リストを作り、未来の自分へのメッセージとの一致も確認します。
+                このボタンを押すと、今この場で準備リストを作り、
+                {isProd
+                  ? "考えられる失敗を作ります。"
+                  : "未来の自分へのメッセージとの一致も確認します。"}
               </InfoHint>
             </p>
             <form action={generateChecklistForEvent}>
@@ -369,12 +520,12 @@ export async function ChecklistSection({
         <SectionList
           eventId={event.id}
           entries={orderedKeys.map((key): SectionEntry => {
-            if (key === FUTURE_MESSAGE_KEY) {
+            if (key === specialKey) {
               return {
                 key,
-                label: "未来の自分へ",
+                label: isProd ? "考えられる失敗" : "未来の自分へ",
                 builtin: true, // 名前変更・削除はさせない
-                node: futureMessageNode,
+                node: isProd ? failureLogNode : futureMessageNode,
               };
             }
             const builtin = isBuiltinSection(key);
@@ -394,6 +545,7 @@ export async function ChecklistSection({
                   }
                   imagesBySlot={imagesByKind.get(key) ?? EMPTY_IMG_MAP}
                   scopes={scopeMap}
+                  showScopeUi={!isProd}
                 />
               ),
             };

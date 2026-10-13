@@ -4,10 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const TABS = [
+const BASE_TABS = [
   { href: "/", label: "ホーム" },
   { href: "/events", label: "予定" },
-  { href: "/failures", label: "未来の自分へ" },
   { href: "/savings", label: "マニュアル" },
   { href: "/settings", label: "設定" },
 ];
@@ -71,9 +70,23 @@ function useKeyboardOpen(): boolean {
   return shrunk && focusedEditable;
 }
 
-export function BottomNav({ pendingReview = 0 }: { pendingReview?: number }) {
+export function BottomNav({
+  pendingReview = 0,
+  failuresLabel = "未来の自分へ",
+}: {
+  pendingReview?: number;
+  /** 機能モードで変わる「/failures」タブの表示名（本番版=失敗ログ／テスト版=未来の自分へ）。 */
+  failuresLabel?: string;
+}) {
   const pathname = usePathname();
   const keyboardOpen = useKeyboardOpen();
+  const TABS = [
+    BASE_TABS[0],
+    BASE_TABS[1],
+    { href: "/failures", label: failuresLabel },
+    BASE_TABS[2],
+    BASE_TABS[3],
+  ];
 
   // キーボードが出ている間はバーを出さない（せり上がり防止）。
   if (keyboardOpen) return null;

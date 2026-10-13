@@ -365,9 +365,14 @@ export async function buildChecklistForEvent(
 
   // 項目ごとの範囲つきルール（「この予定だけ」以外の指定）を最後に当てる。
   // 範囲ルールは自動学習（LearnedRule）より優先する。
+  // 一致判定の対象テキストは、予定タイトル・説明欄に加えて、ここまでに組み立てた
+  // 準備リストの項目名も含める（キーワードが予定名に出ず、項目名にだけ出ることがあるため）。
+  const candidateTitles = [...composed, ...dedupedPatternItems]
+    .map((it) => it.title)
+    .join("\n");
   const scopeRules = await loadActiveScopeRules(event.userId);
   const decisions = resolveScopeRules(scopeRules, {
-    text: `${event.title}\n${stripSonaeBlock(event.memo)}`,
+    text: `${event.title}\n${stripSonaeBlock(event.memo)}\n${candidateTitles}`,
     categoryId: event.categoryId,
     feature,
   });

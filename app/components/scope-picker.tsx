@@ -17,6 +17,45 @@ export type QuickScope = Extract<ItemScope, "event_only" | "similar" | "keyword"
  */
 export const QUICK_SCOPES: QuickScope[] = ["event_only", "similar", "keyword"];
 
+/** ⓘ の説明文の中身。`ScopeQuickToggle`・`ScopeEmojiToggle` の両方の InfoHint から共通で使う。 */
+function ScopeHintBody() {
+  return (
+    <>
+      <p className="mb-3 text-sm font-semibold text-foreground">
+        「次回の出し方」の3つのボタン
+      </p>
+
+      <p className="mb-1">
+        <ScopeChip scope="event_only" status="chosen" />
+      </p>
+      <p className="mb-3 text-[13px]">
+        この予定の中だけ。次回以降の予定には影響しません。例えば「ホテルに電話する」
+        のような、この予定限定の内容に向いています。
+      </p>
+
+      <p className="mb-1">
+        <ScopeChip scope="similar" status="chosen" />
+      </p>
+      <p className="mb-3 text-[13px]">
+        日時や長さではなく、用途が同じ種類の予定（例: バスも新幹線も「移動」）でも
+        同じように出す／出さないようにします。種類はAIが自動で判断します。
+        例えば「新幹線のチケットを確認」なら、バス移動・飛行機移動の予定にも
+        同じように出るようにできます。
+      </p>
+
+      <p className="mb-1">
+        <ScopeChip scope="keyword" status="chosen" />
+      </p>
+      <p className="text-[13px]">
+        この予定の名前から自動でキーワードを決めて、次にそのキーワードを含む予定が
+        来たときだけ出す／出さないようにします。例えば「田中さんと商談」なら
+        キーワード「田中さん」が決まり、次に「田中さん」を含む予定が来たときだけ
+        出ます。∨ を開くとキーワードを直せます。
+      </p>
+    </>
+  );
+}
+
 export function ScopeQuickToggle({
   value,
   onChange,
@@ -78,40 +117,101 @@ export function ScopeQuickToggle({
       })}
       {showHint && (
         <InfoHint id="scope-quick-toggle" open={hintOpen} onOpenChange={onHintOpenChange}>
-          <p className="mb-3 text-sm font-semibold text-foreground">
-            「次回の出し方」の3つのボタン
-          </p>
-
-          <p className="mb-1">
-            <ScopeChip scope="event_only" status="chosen" />
-          </p>
-          <p className="mb-3 text-[13px]">
-            この予定の中だけ。次回以降の予定には影響しません。例えば「ホテルに電話する」
-            のような、この予定限定の内容に向いています。
-          </p>
-
-          <p className="mb-1">
-            <ScopeChip scope="similar" status="chosen" />
-          </p>
-          <p className="mb-3 text-[13px]">
-            日時や長さではなく、用途が同じ種類の予定（例: バスも新幹線も「移動」）でも
-            同じように出す／出さないようにします。種類はAIが自動で判断します。
-            例えば「新幹線のチケットを確認」なら、バス移動・飛行機移動の予定にも
-            同じように出るようにできます。
-          </p>
-
-          <p className="mb-1">
-            <ScopeChip scope="keyword" status="chosen" />
-          </p>
-          <p className="text-[13px]">
-            この予定の名前から自動でキーワードを決めて、次にそのキーワードを含む予定が
-            来たときだけ出す／出さないようにします。例えば「田中さんと商談」なら
-            キーワード「田中さん」が決まり、次に「田中さん」を含む予定が来たときだけ
-            出ます。∨ を開くとキーワードを直せます。
-          </p>
+          <ScopeHintBody />
         </InfoHint>
       )}
     </div>
+  );
+}
+
+/**
+ * 行に常時表示する、絵文字1つだけのコンパクトな「次回の出し方」ボタン（∨と同じ大きさ）。
+ * タップすると3択＋ⓘのポップアップを出す（選ぶと即座に閉じる）。
+ * ポップアップの開閉は呼び出し元に持たせる（`open`/`onOpenChange`）: 自動保存のたびに
+ * 行が再マウントされる画面では、内部 state だと保存完了の瞬間に閉じてしまうため。
+ */
+export function ScopeEmojiToggle({
+  value,
+  onChange,
+  open,
+  onOpenChange,
+  disabled,
+  hintOpen,
+  onHintOpenChange,
+}: {
+  value: string;
+  onChange: (next: QuickScope) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  disabled?: boolean;
+  hintOpen?: boolean;
+  onHintOpenChange?: (open: boolean) => void;
+}) {
+  const current = (QUICK_SCOPES as string[]).includes(value)
+    ? SCOPE_CHIP[value as QuickScope]
+    : SCOPE_CHIP.auto;
+  return (
+    <span className="relative mt-0.5 inline-flex shrink-0">
+      <button
+        type="button"
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`次回の出し方: ${current.label}（変更する）`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenChange(!open);
+        }}
+        className={`rounded-md border px-2 py-1 text-sm leading-none transition-colors ${
+          open
+            ? "border-teal bg-teal-soft text-teal-dark"
+            : "border-border text-muted hover:border-teal hover:text-teal-dark"
+        }`}
+      >
+        <span aria-hidden>{current.icon || "🔘"}</span>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => onOpenChange(false)} />
+          <div className="absolute right-0 top-full z-50 mt-1 flex w-max items-center gap-1 rounded-xl border border-border bg-surface p-1.5 shadow-lg">
+            {QUICK_SCOPES.map((sc) => {
+              const selected = value === sc;
+              const meta = SCOPE_CHIP[sc];
+              return (
+                <button
+                  key={sc}
+                  type="button"
+                  disabled={disabled}
+                  aria-pressed={selected}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(sc);
+                    onOpenChange(false);
+                  }}
+                  className="shrink-0 rounded-full disabled:opacity-40"
+                >
+                  {selected ? (
+                    <ScopeChip
+                      scope={sc}
+                      status="chosen"
+                      className="pointer-events-none font-semibold ring-2 ring-offset-1 ring-[var(--foreground)]/15"
+                    />
+                  ) : (
+                    <span className="pointer-events-none inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-px text-[11px] leading-tight text-muted">
+                      {meta.icon && <span aria-hidden>{meta.icon}</span>}
+                      <span className="truncate">{meta.label}</span>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+            <InfoHint id="scope-quick-toggle" open={hintOpen} onOpenChange={onHintOpenChange}>
+              <ScopeHintBody />
+            </InfoHint>
+          </div>
+        </>
+      )}
+    </span>
   );
 }
 

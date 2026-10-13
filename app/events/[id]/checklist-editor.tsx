@@ -19,7 +19,12 @@ import { InfoHint } from "@/app/components/info-hint";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { useFlushOnHide } from "@/app/components/use-flush-on-hide";
 import { ItemImages, Linkify, type ItemImage } from "./item-media";
-import { ScopeQuickToggle, KeywordSentenceField, type QuickScope } from "@/app/components/scope-picker";
+import {
+  ScopeQuickToggle,
+  ScopeEmojiToggle,
+  KeywordSentenceField,
+  type QuickScope,
+} from "@/app/components/scope-picker";
 import type { ItemScope } from "@/lib/item-scope";
 
 /** 項目の「次回の出し方」（範囲）。予定ごとの指定（EventChecklistScope）から来る。 */
@@ -188,6 +193,10 @@ export function ChecklistEditor({
   // 行の中の useState だとその瞬間に開いたポップアップが即閉じてしまうため、再マウントされない
   // この階層で共有して持つ（内容は全項目共通なので、1つの boolean で足りる）。
   const [scopeHintOpen, setScopeHintOpen] = useState(false);
+  // 「次回の出し方」絵文字ボタンのポップアップ（3択＋ⓘ）がどの項目向けに開いているか。
+  // it.key ではなく正規化タイトルで持つ: it.key は自動保存の再マウントのたびに変わるが、
+  // タイトル文字列はその間変わらないため、開いている最中に別項目の自動保存が走っても閉じない。
+  const [scopePopupFor, setScopePopupFor] = useState<string | null>(null);
   const toggleOpen = (key: string) =>
     setOpenKeys((prev) => {
       const next = new Set(prev);
@@ -715,16 +724,6 @@ export function ChecklistEditor({
                       it.isDone ? "text-muted line-through" : ""
                     }`}
                   />
-                  {it.title.trim() && (
-                    <div className="ml-1 flex flex-wrap items-center gap-1">
-                      <ScopeQuickToggle
-                        value={shownScope(it)}
-                        onChange={(sc) => chooseScope(it, sc)}
-                        hintOpen={scopeHintOpen}
-                        onHintOpenChange={setScopeHintOpen}
-                      />
-                    </div>
-                  )}
                 </div>
                 {it.isUserAdded && (
                   <span className="mt-1.5 hidden shrink-0 rounded bg-accent-soft px-1 text-[10px] text-teal-dark sm:inline">
@@ -740,6 +739,18 @@ export function ChecklistEditor({
                   <span className="mt-1.5 shrink-0 text-[11px] tabular-nums text-muted">
                     🖼️{it.images.length}
                   </span>
+                )}
+                {it.title.trim() && (
+                  <ScopeEmojiToggle
+                    value={shownScope(it)}
+                    onChange={(sc) => chooseScope(it, sc)}
+                    open={scopePopupFor === normTitle(it.title)}
+                    onOpenChange={(v) =>
+                      setScopePopupFor(v ? normTitle(it.title) : null)
+                    }
+                    hintOpen={scopeHintOpen}
+                    onHintOpenChange={setScopeHintOpen}
+                  />
                 )}
                 <button
                   type="button"
@@ -768,7 +779,14 @@ export function ChecklistEditor({
               {/* 詳細（チップを押したときだけ）：通知タイミング・メモ・削除 */}
               {open && (
                 <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
-                  {/* 次回の出し方（範囲）。3択は行に常時表示済み。ここではキーワードを直す（任意）だけ。 */}
+                  {/* 次回の出し方（範囲）。絵文字ボタンは行に常時表示済み（タップでポップアップ）。
+                      ここでは大きい3択＋キーワードを直す欄（任意）を出す。 */}
+                  <ScopeQuickToggle
+                    value={shownScope(it)}
+                    onChange={(sc) => chooseScope(it, sc)}
+                    hintOpen={scopeHintOpen}
+                    onHintOpenChange={setScopeHintOpen}
+                  />
                   <div className="space-y-1">
                     <p className="text-[11px] text-muted">
                       {shownStatus(it) === "proposed"

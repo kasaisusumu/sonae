@@ -30,7 +30,11 @@ export interface ScopeRuleRow {
 }
 
 export interface ScopeContext {
-  /** 一致判定の対象テキスト（予定タイトル＋説明欄の元メモ。自アプリのブロックは除く）。 */
+  /**
+   * 一致判定の対象テキスト。呼び出し元（lib/suggest.ts）が、予定タイトル＋説明欄の元メモ
+   * （自アプリのブロックは除く）に、組み立て済みの準備リストの項目名も連結して渡す
+   * （キーワードが予定名に出ず、項目名にだけ出ることがあるため、2026-10〜）。
+   */
   text: string;
   categoryId: string | null;
   feature: EventFeatureData;

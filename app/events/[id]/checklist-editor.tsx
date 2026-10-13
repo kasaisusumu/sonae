@@ -740,40 +740,46 @@ export function ChecklistEditor({
                     🖼️{it.images.length}
                   </span>
                 )}
-                {it.title.trim() && (
-                  <ScopeEmojiToggle
-                    value={shownScope(it)}
-                    onChange={(sc) => chooseScope(it, sc)}
-                    open={scopePopupFor === normTitle(it.title)}
-                    onOpenChange={(v) =>
-                      setScopePopupFor(v ? normTitle(it.title) : null)
-                    }
-                    hintOpen={scopeHintOpen}
-                    onHintOpenChange={setScopeHintOpen}
-                  />
-                )}
-                <button
-                  type="button"
-                  data-coach="item-expand"
-                  onClick={() => toggleOpen(it.key)}
-                  aria-expanded={open}
-                  aria-label={open ? "詳細を閉じる" : "詳細を開く"}
-                  className={`mt-0.5 shrink-0 rounded-md border px-2 py-1 text-sm leading-none transition-colors ${
-                    open
-                      ? "border-teal bg-teal-soft text-teal-dark"
-                      : "border-border text-muted hover:border-teal hover:text-teal-dark"
-                  }`}
-                >
-                  {open ? "∧" : "∨"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove(it.key)}
-                  aria-label="削除"
-                  className="mt-0.5 shrink-0 rounded-full border border-border px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn"
-                >
-                  ✕
-                </button>
+                {/* 3つは横幅をできるだけ詰めて1かたまりに。入りきらなければ
+                    「∨✕」の行＋「🏷」の行の2段に折り返してよい（DOM順は✕→∨→🏷、
+                    flex-row-reverse+flex-wrap で、1行なら🏷∨✕、2段なら上∨✕・下🏷になる）。 */}
+                <span className="mt-0.5 flex shrink-0 flex-row-reverse flex-wrap items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => remove(it.key)}
+                    aria-label="削除"
+                    className="shrink-0 rounded-full border border-border px-1.5 py-1 text-xs text-muted hover:border-warn hover:text-warn"
+                  >
+                    ✕
+                  </button>
+                  <button
+                    type="button"
+                    data-coach="item-expand"
+                    onClick={() => toggleOpen(it.key)}
+                    aria-expanded={open}
+                    aria-label={open ? "詳細を閉じる" : "詳細を開く"}
+                    className={`shrink-0 rounded-md border px-1.5 py-1 text-sm leading-none transition-colors ${
+                      open
+                        ? "border-teal bg-teal-soft text-teal-dark"
+                        : "border-border text-muted hover:border-teal hover:text-teal-dark"
+                    }`}
+                  >
+                    {open ? "∧" : "∨"}
+                  </button>
+                  {it.title.trim() && (
+                    <ScopeEmojiToggle
+                      value={shownScope(it)}
+                      onChange={(sc) => chooseScope(it, sc)}
+                      open={scopePopupFor === normTitle(it.title)}
+                      onOpenChange={(v) =>
+                        setScopePopupFor(v ? normTitle(it.title) : null)
+                      }
+                      hintOpen={scopeHintOpen}
+                      onHintOpenChange={setScopeHintOpen}
+                      className="mt-0"
+                    />
+                  )}
+                </span>
               </div>
 
               {/* 詳細（チップを押したときだけ）：通知タイミング・メモ・削除 */}

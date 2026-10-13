@@ -138,6 +138,7 @@ export function ScopeEmojiToggle({
   disabled,
   hintOpen,
   onHintOpenChange,
+  className = "mt-0.5",
 }: {
   value: string;
   onChange: (next: QuickScope) => void;
@@ -146,12 +147,14 @@ export function ScopeEmojiToggle({
   disabled?: boolean;
   hintOpen?: boolean;
   onHintOpenChange?: (open: boolean) => void;
+  /** 外側の余白調整用（既定 `mt-0.5`。他のボタンとまとめて並べる場合は呼び出し元で上書きする）。 */
+  className?: string;
 }) {
   const current = (QUICK_SCOPES as string[]).includes(value)
     ? SCOPE_CHIP[value as QuickScope]
     : SCOPE_CHIP.auto;
   return (
-    <span className="relative mt-0.5 inline-flex shrink-0">
+    <span className={`relative inline-flex shrink-0 ${className}`}>
       <button
         type="button"
         disabled={disabled}
@@ -162,7 +165,7 @@ export function ScopeEmojiToggle({
           e.stopPropagation();
           onOpenChange(!open);
         }}
-        className={`rounded-md border px-2 py-1 text-sm leading-none transition-colors ${
+        className={`rounded-md border px-1.5 py-1 text-sm leading-none transition-colors ${
           open
             ? "border-teal bg-teal-soft text-teal-dark"
             : "border-border text-muted hover:border-teal hover:text-teal-dark"
@@ -171,45 +174,54 @@ export function ScopeEmojiToggle({
         <span aria-hidden>{current.icon || "🔘"}</span>
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => onOpenChange(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 flex w-max items-center gap-1 rounded-xl border border-border bg-surface p-1.5 shadow-lg">
-            {QUICK_SCOPES.map((sc) => {
-              const selected = value === sc;
-              const meta = SCOPE_CHIP[sc];
-              return (
-                <button
-                  key={sc}
-                  type="button"
-                  disabled={disabled}
-                  aria-pressed={selected}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChange(sc);
-                    onOpenChange(false);
-                  }}
-                  className="shrink-0 rounded-full disabled:opacity-40"
-                >
-                  {selected ? (
-                    <ScopeChip
-                      scope={sc}
-                      status="chosen"
-                      className="pointer-events-none font-semibold ring-2 ring-offset-1 ring-[var(--foreground)]/15"
-                    />
-                  ) : (
-                    <span className="pointer-events-none inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-px text-[11px] leading-tight text-muted">
-                      {meta.icon && <span aria-hidden>{meta.icon}</span>}
-                      <span className="truncate">{meta.label}</span>
+        <span
+          className="fixed inset-0 z-[55] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => onOpenChange(false)}
+        >
+          <span
+            className="block w-full max-w-xs rounded-2xl border border-border bg-surface p-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-foreground">
+                次回の出し方
+              </span>
+              <InfoHint id="scope-quick-toggle" open={hintOpen} onOpenChange={onHintOpenChange}>
+                <ScopeHintBody />
+              </InfoHint>
+            </span>
+            <span className="mt-3 block space-y-2">
+              {QUICK_SCOPES.map((sc) => {
+                const selected = value === sc;
+                const meta = SCOPE_CHIP[sc];
+                return (
+                  <button
+                    key={sc}
+                    type="button"
+                    disabled={disabled}
+                    aria-pressed={selected}
+                    onClick={() => {
+                      onChange(sc);
+                      onOpenChange(false);
+                    }}
+                    className={`flex w-full flex-col items-center gap-0.5 rounded-xl border px-3 py-2.5 transition-colors disabled:opacity-40 ${
+                      selected
+                        ? "border-teal bg-teal-soft text-teal-dark"
+                        : "border-border text-foreground hover:border-teal/50"
+                    }`}
+                  >
+                    <span aria-hidden className="text-xl leading-none">
+                      {meta.icon}
                     </span>
-                  )}
-                </button>
-              );
-            })}
-            <InfoHint id="scope-quick-toggle" open={hintOpen} onOpenChange={onHintOpenChange}>
-              <ScopeHintBody />
-            </InfoHint>
-          </div>
-        </>
+                    <span className="text-sm font-medium leading-none">
+                      {meta.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </span>
+          </span>
+        </span>
       )}
     </span>
   );

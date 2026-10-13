@@ -10,7 +10,7 @@
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { recordAiUsage } from "@/lib/ai-usage";
-import { normTitle, pickKeyword } from "@/lib/text-norm";
+import { looksTooSpecific, normTitle, pickKeyword } from "@/lib/text-norm";
 import type { EventFeatureData } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
 import {
@@ -125,6 +125,18 @@ async function recommend(input: {
     reason: DEFAULT_REASON,
     source: "default",
   };
+  // 日付・番号・時刻などを含む項目は、ほぼ確実に「今回だけ」の内容（一度きり）。
+  // AI を呼ぶまでもなく event_only に決める（呼び出し回数を減らすための足切り。
+  // lib/pattern-classify.ts の looksTooSpecific と同じ判断基準）。
+  if (looksTooSpecific(input.title)) {
+    return {
+      scope: "event_only",
+      keyword: null,
+      genre: null,
+      reason: DEFAULT_REASON,
+      source: "default",
+    };
+  }
   if (!process.env.OPENAI_API_KEY) return fallback;
   try {
     const client = new OpenAI({
@@ -411,7 +423,18 @@ export async function proposeScopesForSave(input: {
       reason: DEFAULT_REASON,
       source: "default",
     };
-    if (aiLeft > 0 && process.env.OPENAI_API_KEY) {
+    // 明らかに今回限定の項目は、AI 枠（aiLeft）を使わずに event_only へ即決める
+    // （recommend 内にも同じ足切りがあるが、ここで止めれば AI 枠を消費しない分、
+    // 他の本当に判断が要る項目に枠を残せる）。
+    if (looksTooSpecific(t.title)) {
+      rec = {
+        scope: "event_only",
+        keyword: null,
+        genre: null,
+        reason: DEFAULT_REASON,
+        source: "default",
+      };
+    } else if (aiLeft > 0 && process.env.OPENAI_API_KEY) {
       aiLeft -= 1;
       rec = await recommend({
         action: t.action,

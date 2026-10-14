@@ -59,15 +59,25 @@
 ## 2. 巻き戻しの方法
 
 ### 2.1 軽い巻き戻し（既定）— 作業後に作ったデータは残す
-1. マージコミットを `git revert -m 1 <マージコミットのハッシュ>` で戻す
-   （マージコミットのハッシュは実装完了後にこの節へ追記する）。
-2. `prisma/rollback/<マイグレーション名>.down.sql` を、適用したマイグレーションの
-   **逆順**で実行する（追加した列・テーブル・インデックスを削除）。
-3. モード切替で作った「自動変換の派生行」（`autoConverted=true` の行）だけを削除する
-   （元データ・ユーザーが手で触った行は消さない）。
-4. `scripts/rollback-mode-switch.mjs --execute` を実行する（既定は dry-run。
-   接続先が `test` ブランチ以外なら即中止する安全策あり）。
-5. `public/sw.js` を変更していた場合は、バージョン番号を進める（戻す方向でも進める。
+1. マージコミットを戻す:
+   ```
+   git checkout test
+   git revert -m 1 e297d25cc2a6d3d68f356dbf33eb5bec14dc9424
+   git push origin test
+   ```
+2. DB を戻す（`scripts/rollback-mode-switch.mjs` が、自動変換の派生行
+   〈`autoConverted=true`〉の削除と、down SQL による列・テーブルの削除を両方行う。
+   既定は dry-run、接続先が test ブランチ以外なら即中止する安全策あり）:
+   ```
+   # まず dry-run で内容を確認
+   DATABASE_URL="postgresql://neondb_owner:npg_jc0oDL1ubTKm@ep-bitter-queen-a7bsqfo8-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require" \
+   DIRECT_URL="postgresql://neondb_owner:npg_jc0oDL1ubTKm@ep-bitter-queen-a7bsqfo8.ap-southeast-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require" \
+   node scripts/rollback-mode-switch.mjs
+
+   # 内容を確認したら --execute を付けて実行
+   DATABASE_URL="..." DIRECT_URL="..." node scripts/rollback-mode-switch.mjs --execute
+   ```
+3. `public/sw.js` を変更していた場合は、バージョン番号を進める（戻す方向でも進める。
    同じ番号に戻すと端末の古いキャッシュが残るため）。
 
 ### 2.2 完全な巻き戻し — 作業後に作ったデータも含めて失う
@@ -88,8 +98,13 @@
   `20261014090000_feature_mode`（`User.featureMode`、`LearnedRule`/`ChecklistScopeRule`
   の変換用列、`FeatureModeChange` テーブル）
 - down SQL: `prisma/rollback/20261014090000_feature_mode.down.sql`
-- `test` へのマージコミット: （マージ実行後にこの行へ追記する）
-- `sonae-test` への反映デプロイ: （マージ実行後にこの行へ追記する）
+- `test` へのマージコミット: `e297d25cc2a6d3d68f356dbf33eb5bec14dc9424`
+  （`--no-ff`。戻すときは `git revert -m 1 e297d25cc2a6d3d68f356dbf33eb5bec14dc9424`）
+- `sonae-test` への反映デプロイ: `dpl_2DZf3svGobycutihREQW2MB3bFqA`
+  （`https://sonae-test.vercel.app` のエイリアスがこのデプロイを指している。
+  ビルドは成功、エラー無し。マイグレーションはこのデプロイより前に
+  `scripts/rollback-mode-switch.mjs` と同じ接続確認の作法で直接 `prisma migrate deploy`
+  済みのため、ビルド時の自動適用は無し）
 
 ## 4. 巻き戻しの検証結果（実装後・2026-10-14 実施）
 

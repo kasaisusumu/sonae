@@ -701,6 +701,16 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   }
   await prisma.$transaction(ops);
 
+  // この枠（kind）を保存した＝ユーザーがこの枠の内容を自分で確定させたということなので、
+  // ここに残っている未確認の提案（isSuggested、入れる/不要を選ばれないまま放置されたもの）
+  // はもう古い・関係ない提案として一緒に消す。消さないと、画面のどこにも出てこないのに
+  // 件数の集計（準備 ◯/◯ 等）にだけ残り続けて実数とずれる（ユーザー指摘により2026-10-14修正）。
+  // 既存の提案は改名前の kind のまま保存されているので、effectiveKind ではなく
+  // 元の kind で絞る（改名が起きるのは組み込み枠以外のみ。lib/sections.ts 参照）。
+  await prisma.checklistItem.deleteMany({
+    where: { eventId: input.eventId, isSuggested: true, kind },
+  });
+
   // 全種別を通じて非提案項目が 0 になったか＝「リストを全部消した」状態。
   const remaining = await prisma.checklistItem.count({
     where: { eventId: input.eventId, isSuggested: false },
@@ -711,7 +721,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     data: { listCleared },
   });
   if (listCleared) {
-    // 全部消したなら、残っている提案（isSuggested）も消す。ユーザーが自分で足す。
+    // 全部消したなら、他の枠に残っている提案（isSuggested）も消す。ユーザーが自分で足す。
     await prisma.checklistItem.deleteMany({
       where: { eventId: input.eventId, isSuggested: true },
     });

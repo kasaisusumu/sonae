@@ -11,6 +11,13 @@
  *                    複数回指定すると合算してOpenAIの値と比べる。
  *   --out-md <path>  省略時 tmp/ai-usage-report.md
  *   --out-csv <path> 省略時 tmp/ai-usage-report.csv
+ *   --write-snapshot <path>  指定すると、OpenAI実績の合計USDと「その時点」を
+ *     { asOfUtc, totalUsd, updatedAt, source } のJSONで書き出す（集計値のみ。生の
+ *     CSV内容は一切含まない）。管理画面（app/admin/page.tsx）が、この合計に
+ *     「それ以降のこのアプリの概算」を足して「現在の推定合計」を出すのに使う。
+ *     「その時点」= --cost で渡したCSVファイル自身の最終更新日時（＝そのCSVを
+ *     ダウンロードした時刻のつもり）。日単位のCSVなので厳密な時刻の切れ目では
+ *     ないが、「このCSVより後に使った分だけアプリの概算を足す」の基準として使う。
  *
  * 比較の3段階（①→②→③の順でずれを見る。①が合っていないと②③の差は当然ずれる）:
  *   ① リクエスト数（モデル別）
@@ -29,6 +36,7 @@ function parseArgs(argv) {
     else if (a === "--env") out.env.push(argv[++i]);
     else if (a === "--out-md") out.outMd = argv[++i];
     else if (a === "--out-csv") out.outCsv = argv[++i];
+    else if (a === "--write-snapshot") out.writeSnapshot = argv[++i];
   }
   return out;
 }
@@ -302,6 +310,20 @@ function main() {
     console.log(
       `件数差が最大: ${biggestReqDiff.day} / ${biggestReqDiff.model}（差 ${biggestReqDiff.reqDiff}件）`,
     );
+  }
+
+  // --- スナップショット（任意。管理画面の「現在の推定合計」用） ---
+  if (args.writeSnapshot) {
+    const asOfUtc = fs.statSync(args.cost).mtime.toISOString();
+    const snapshot = {
+      asOfUtc,
+      totalUsd: totalOpenaiUsd,
+      source: path.basename(args.cost),
+      updatedAt: new Date().toISOString(),
+    };
+    fs.mkdirSync(path.dirname(args.writeSnapshot), { recursive: true });
+    fs.writeFileSync(args.writeSnapshot, JSON.stringify(snapshot, null, 2) + "\n");
+    console.log(`スナップショット: ${args.writeSnapshot}（asOfUtc=${asOfUtc}）`);
   }
 }
 

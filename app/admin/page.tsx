@@ -1,3 +1,5 @@
+import fs from "fs";
+import path from "path";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { formatYen, formatDateOnly } from "@/lib/format";
@@ -52,6 +54,29 @@ function jstMonthKey(d: Date): string {
 /** UTC 日キー "YYYY-MM-DD"（OpenAI の実績CSVはUTC基準のため、照合用にこちらも出す）。 */
 function utcDayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+interface AiCostSnapshot {
+  asOfUtc: string;
+  totalUsd: number;
+  source: string;
+  updatedAt: string;
+}
+
+/**
+ * OpenAI実績の合計（全環境・ある時点まで）のスナップショット。
+ * scripts/reconcile-ai-usage.mjs --write-snapshot が data/ai-cost-snapshot.json に書き出す
+ * （生のCSVは含まない、合計USDと時刻だけ）。無ければ null（「現在の推定合計」は出さない）。
+ */
+function readAiCostSnapshot(): AiCostSnapshot | null {
+  try {
+    const raw = fs.readFileSync(path.join(process.cwd(), "data", "ai-cost-snapshot.json"), "utf8");
+    const parsed = JSON.parse(raw) as Partial<AiCostSnapshot>;
+    if (typeof parsed.asOfUtc !== "string" || typeof parsed.totalUsd !== "number") return null;
+    return parsed as AiCostSnapshot;
+  } catch {
+    return null;
+  }
 }
 
 /** 円の概算額を表示用に整形する。0.0001円単位まで（末尾の0は省略）、1円未満も省略せず出す。 */
@@ -370,6 +395,21 @@ export default async function AdminPage({
     b.utcDay.localeCompare(a.utcDay) || a.model.localeCompare(b.model),
   );
 
+  // AI利用金額: 「現在の推定合計」= OpenAI実績（data/ai-cost-snapshot.jsonのスナップショット、
+  // 全環境・asOfUtc時点まで）＋ それ以降にこの環境で記録された分の概算。
+  // スナップショットは scripts/reconcile-ai-usage.mjs --write-snapshot で、OpenAIのCost CSVを
+  // 読んだときに作る（生のCSVは含まない、合計USDと時刻だけの小さいJSON）。
+  const costSnapshot = readAiCostSnapshot();
+  let currentEstimateYen: number | null = null;
+  let estimatedSinceSnapshotYen = 0;
+  if (costSnapshot) {
+    const asOf = new Date(costSnapshot.asOfUtc);
+    for (const e of aiUsageEvents) {
+      if (e.createdAt > asOf) estimatedSinceSnapshotYen += e.estimatedCostYen;
+    }
+    currentEstimateYen = costSnapshot.totalUsd * AI_USD_TO_JPY + estimatedSinceSnapshotYen;
+  }
+
   const rows = users.map((u) => {
     const activity = activityMap.get(u.id);
     const byDay = minutesByUserDay.get(u.id);
@@ -503,6 +543,9 @@ export default async function AdminPage({
       tiles: [
         { label: "全期間合計", value: formatYenApprox(aiCostTotal) },
         { label: "今月合計", value: formatYenApprox(aiCostThisMonth) },
+        ...(currentEstimateYen !== null
+          ? [{ label: "現在の推定合計", value: formatYenApprox(currentEstimateYen) }]
+          : []),
       ],
     },
   ];
@@ -580,6 +623,18 @@ export default async function AdminPage({
             </div>
           ))}
         </div>
+
+        {costSnapshot && (
+          <p className="text-[11px] text-muted">
+            「AI利用金額（現在の推定合計）」= OpenAI実績（全環境・
+            {fmtDateTime(new Date(costSnapshot.asOfUtc))}ごろ時点、{costSnapshot.source}）
+            {" + "}
+            それ以降にこの環境で記録された分の概算（{formatYenApprox(estimatedSinceSnapshotYen)}）。
+            実績は取得時点までの金額で、それより後の分はこの環境の記録だけの概算（他環境・
+            ローカルでの利用は含まない）。最新の実績に更新するには
+            scripts/reconcile-ai-usage.mjs を新しいCSVで実行し直す。
+          </p>
+        )}
 
         {wtp.length > 0 && (
           <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">

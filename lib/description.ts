@@ -141,7 +141,7 @@ function futureMessageLines(
   if (!messages || messages.length === 0) return [];
   const out = ["", "【未来の自分へ】"];
   for (const m of messages) {
-    out.push(`${m.isDone ? CHECK_DONE : CHECK_TODO} 💌 ${oneLine(m.body)}`);
+    out.push(`${m.isDone ? CHECK_DONE : CHECK_TODO} ${oneLine(m.body)}`);
   }
   return out;
 }

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { switchFeatureModeAction } from "@/app/actions";
 import { InfoHint } from "@/app/components/info-hint";
+import { ScopeChip } from "@/app/components/scope-chip";
 
 type Mode = "test" | "production";
 
@@ -70,23 +71,93 @@ export function FeatureModeToggle({ current }: { current: string }) {
           </button>
         ))}
         {pending && <span className="text-xs text-muted">切替中…</span>}
-        <InfoHint id="feature-mode-toggle">
-          <p className="mb-2 text-sm font-semibold text-foreground">機能モードとは</p>
-          <p className="mb-2 text-[13px]">
-            ver1（本番の機能: 失敗ログ・節約額ダッシュボード）と ver2（テストの機能: 未来の
-            自分へ・次回の出し方3択）を切り替えられます。予定・準備リスト・メモ・編集履歴
-            などの元データは、どちらのモードでも共有され、切り替えても消えません。
-          </p>
-          <p className="mb-2 text-[13px]">
-            学習結果（自動で覚えた内容）は、あなたが直接選んだ・直したものはそのまま保たれ、
-            まだ誰も触っていない分だけ、切り替えた先のモードの形に自動で反映されます。
-          </p>
-          <p className="text-[13px]">
-            切替直後に自動でカレンダーの説明欄を書き直すのは、今日以降の予定のうち
-            <strong>直近20件まで</strong>です。それより先の予定は、その予定の準備リストを
-            何か編集するなど説明欄が書き直されるタイミングまで、古いモードの表記のまま残ります。
-          </p>
-        </InfoHint>
+        <InfoHint
+          id="feature-mode-toggle"
+          pages={[
+            <div key="p1">
+              <p className="mb-2 text-sm font-semibold text-foreground">機能モードとは</p>
+              <p className="mb-2 text-[13px]">
+                ver1（本番の機能: 失敗ログ・節約額ダッシュボード）と ver2（テストの機能: 未来の
+                自分へ・次回の出し方3択）を切り替えられます。予定・準備リスト・メモ・編集履歴
+                などの元データは、どちらのモードでも共有され、切り替えても消えません。
+              </p>
+              <p className="mb-2 text-[13px]">
+                学習結果（自動で覚えた内容）は、あなたが直接選んだ・直したものはそのまま保たれ、
+                まだ誰も触っていない分だけ、切り替えた先のモードの形に自動で反映されます。
+              </p>
+              <p className="text-[13px]">
+                切替直後に自動でカレンダーの説明欄を書き直すのは、今日以降の予定のうち
+                <strong>直近20件まで</strong>です。それより先の予定は、その予定の準備リストを
+                何か編集するなど説明欄が書き直されるタイミングまで、古いモードの表記のまま残ります。
+              </p>
+            </div>,
+            <div key="p2">
+              <p className="mb-3 text-sm font-semibold text-foreground">
+                ver1 / ver2 で画面はどう変わる？
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1 text-[11px] font-semibold text-muted">
+                    予定一覧の下のタブ
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-xl bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-teal-dark">
+                      失敗ログ
+                    </span>
+                    <span className="text-[11px] text-muted">← ver1</span>
+                  </div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="rounded-xl bg-accent-soft px-2.5 py-1 text-[11px] font-semibold text-teal-dark">
+                      未来の自分へ
+                    </span>
+                    <span className="text-[11px] text-muted">← ver2</span>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-1 text-[11px] font-semibold text-muted">ホーム画面</p>
+                  <p className="text-[12px]">
+                    ver1: 節約額ダッシュボード＋気をつけたい予定の警告
+                  </p>
+                  <p className="text-[12px]">ver2: 確定待ちメッセージの案内</p>
+                </div>
+
+                <div>
+                  <p className="mb-1 text-[11px] font-semibold text-muted">予定詳細ページ</p>
+                  <p className="text-[12px]">ver1: ⚠ 警告パネル＋考えられる失敗</p>
+                  <p className="text-[12px]">ver2: 💌 確定カード＋未来の自分へ枠</p>
+                </div>
+
+                <div>
+                  <p className="mb-1 text-[11px] font-semibold text-muted">
+                    項目の「次回の出し方」ボタン
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <ScopeChip scope="event_only" />
+                    <ScopeChip scope="similar" />
+                    <ScopeChip scope="keyword" />
+                    <span className="text-[11px] text-muted">← ver2だけ</span>
+                  </div>
+                  <p className="mt-1 text-[12px] text-muted">
+                    ver1ではこのボタンは出ず、従来通りの自動学習だけで決まります。
+                  </p>
+                </div>
+
+                <div>
+                  <p className="mb-1 text-[11px] font-semibold text-muted">
+                    カレンダーの説明欄に入る見出し
+                  </p>
+                  <p className="rounded-lg bg-surface-muted px-2 py-1 font-mono text-[11px]">
+                    【予想される失敗】 ← ver1
+                  </p>
+                  <p className="mt-1 rounded-lg bg-surface-muted px-2 py-1 font-mono text-[11px]">
+                    【未来の自分へ】 ← ver2
+                  </p>
+                </div>
+              </div>
+            </div>,
+          ]}
+        />
       </div>
       {error && <p className="mt-2 text-xs text-warn">{error}</p>}
       {result && (

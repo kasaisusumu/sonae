@@ -37,7 +37,9 @@ export default async function EventsPage({
         categoryId: true,
         memo: true,
         category: { select: { name: true } },
-        checklistItems: { select: { isDone: true, title: true } },
+        // 提案（isSuggested=true、まだ確認・却下していないAIの提案）は、
+        // 準備リストの他の集計（lib/description-sync.ts 等）と同じく数えない。
+        checklistItems: { where: { isSuggested: false }, select: { isDone: true, title: true } },
       },
     }),
   ]);

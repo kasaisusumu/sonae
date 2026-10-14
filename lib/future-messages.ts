@@ -840,13 +840,21 @@ export async function getPendingMessageReviewsForEvent(
 
 // ── Google カレンダー説明欄に書く「未来の自分へ」の内容 ──
 
-export async function getEventDescriptionMessages(eventId: string): Promise<string[]> {
+export interface EventDescriptionMessage {
+  body: string;
+  /** 準備リストの項目と同じ「チェックで完了」。説明欄でも☑/・で反映する。 */
+  isDone: boolean;
+}
+
+export async function getEventDescriptionMessages(
+  eventId: string,
+): Promise<EventDescriptionMessage[]> {
   const links = await prisma.eventFutureMessage.findMany({
     where: { eventId, status: "shown" },
     include: { message: { select: { body: true } } },
     orderBy: { createdAt: "asc" },
   });
-  return links.map((l) => l.message.body);
+  return links.map((l) => ({ body: l.message.body, isDone: l.isDone }));
 }
 
 // ── 確定カードの操作（§2.6） ──

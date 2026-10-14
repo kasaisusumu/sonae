@@ -109,8 +109,11 @@ export interface BuildBlockOpts {
   unreviewed?: boolean;
   /** 枠（セクション）のキー順。省略時は項目から task→belonging→その他 で導出。 */
   sections?: string[];
-  /** この予定に結びついた「未来の自分へのメッセージ」本文（テスト版）。空なら見出しごと出さない。 */
-  futureMessages?: string[];
+  /**
+   * この予定に結びついた「未来の自分へのメッセージ」（テスト版）。空なら見出しごと出さない。
+   * `isDone` は準備リストの項目と同じ「チェックで完了」で、☑/・として書き出す。
+   */
+  futureMessages?: { body: string; isDone: boolean }[];
   /** 失敗の予想／結果（本番版）。中身のある枠だけ書き出す（無ければ見出しごと出さない）。 */
   failures?: DescFailureSections;
 }
@@ -128,11 +131,18 @@ export const INFO_HEADINGS = new Set([
   "今回の失敗",
 ]);
 
-/** 「未来の自分へ」セクションを行配列にする。中身が無ければ出さない。 */
-function futureMessageLines(messages: string[] | undefined): string[] {
+/**
+ * 「未来の自分へ」セクションを行配列にする。中身が無ければ出さない。
+ * 完了は準備リストの項目と同じ `CHECK_DONE`=☑、未完了は `CHECK_TODO`=・で示す。
+ */
+function futureMessageLines(
+  messages: { body: string; isDone: boolean }[] | undefined,
+): string[] {
   if (!messages || messages.length === 0) return [];
   const out = ["", "【未来の自分へ】"];
-  for (const m of messages) out.push(`💌 ${oneLine(m)}`);
+  for (const m of messages) {
+    out.push(`${m.isDone ? CHECK_DONE : CHECK_TODO} 💌 ${oneLine(m.body)}`);
+  }
   return out;
 }
 

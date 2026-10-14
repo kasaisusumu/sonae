@@ -76,20 +76,12 @@ export function FeatureModeToggle({ current }: { current: string }) {
           pages={[
             <div key="p1">
               <p className="mb-2 text-sm font-semibold text-foreground">機能モードとは</p>
-              <p className="mb-2 text-[13px]">
-                ver1（本番の機能: 失敗ログ・節約額ダッシュボード）と ver2（テストの機能: 未来の
-                自分へ・次回の出し方3択）を切り替えられます。予定・準備リスト・メモ・編集履歴
-                などの元データは、どちらのモードでも共有され、切り替えても消えません。
-              </p>
-              <p className="mb-2 text-[13px]">
-                学習結果（自動で覚えた内容）は、あなたが直接選んだ・直したものはそのまま保たれ、
-                まだ誰も触っていない分だけ、切り替えた先のモードの形に自動で反映されます。
-              </p>
-              <p className="text-[13px]">
-                切替直後に自動でカレンダーの説明欄を書き直すのは、今日以降の予定のうち
-                <strong>直近20件まで</strong>です。それより先の予定は、その予定の準備リストを
-                何か編集するなど説明欄が書き直されるタイミングまで、古いモードの表記のまま残ります。
-              </p>
+              <ul className="space-y-1.5 text-[13px]">
+                <li>ver1=本番の機能、ver2=テストの機能。いつでも切り替え可能（次のページに違い）</li>
+                <li>予定・準備リスト・メモなどの元データは共有。切り替えても消えない</li>
+                <li>学習結果は、まだ触っていない分だけ切替先の形に自動で引き継がれる</li>
+                <li>カレンダー説明欄の書き直しは直近20件まで。残りは編集時などに自動で更新</li>
+              </ul>
             </div>,
             <div key="p2">
               <p className="mb-3 text-sm font-semibold text-foreground">

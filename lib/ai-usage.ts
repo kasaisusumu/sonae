@@ -1,9 +1,19 @@
 import { prisma } from "@/lib/prisma";
 
 /**
- * OpenAI の公開料金表（$/100万トークン）。2026-10 時点の目安で、正確な請求額は
- * OpenAI 側の管理画面でしか分からない（このアプリの集計はあくまで概算）。
- * モデルを変えたら、ここにも追記すること。
+ * OpenAI の公開料金表（$/100万トークン、Standard tier）。
+ * 2026-10-14 に https://developers.openai.com/api/docs/pricing で確認済み
+ * （gpt-4o-mini: input $0.15 / output $0.60 / cached input $0.075 — いずれも
+ * 2026-10 時点の値と一致、変更なし）。正確な請求額は OpenAI 側の管理画面でしか
+ * 分からない（このアプリの集計はあくまで概算）。モデルを変えたら、ここにも追記すること。
+ *
+ * 既知の精度の限界: キャッシュされた入力トークン（prompt caching）は本来 input の
+ * 半額（$0.075/1M）だが、`recordAiUsage` が受け取る `usage` には
+ * `prompt_tokens_details.cached_tokens` が含まれておらず、現状すべての入力トークンを
+ * フルプライスで計算している（実際の請求額より概算が高くなりうる）。この影響は、
+ * OpenAI の実績CSVとの照合で `input_cached_tokens` が実質 0 であることを確認済みの
+ * 期間では無視できる（scripts/reconcile-ai-usage.mjs 参照）。プロンプトが長くなり
+ * キャッシュが効くようになったら、この関数の対応が必要になる。
  */
 const PRICING_USD_PER_1M: Record<string, { input: number; output: number }> = {
   "gpt-4o-mini": { input: 0.15, output: 0.6 },

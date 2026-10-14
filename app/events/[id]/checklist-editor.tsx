@@ -439,11 +439,14 @@ export function ChecklistEditor({
     persist(merged);
   }
 
-  const doneCount = items.filter((it) => it.isDone).length;
+  // 「＋ 追加」で足した直後の空欄（まだ何も書いていない行）は、まだ「項目」ではないので
+  // 件数に数えない（そうしないと追加した瞬間に分母だけ増え、表示が実際と食い違って見える）。
+  const realItems = items.filter((it) => it.title.trim());
+  const doneCount = realItems.filter((it) => it.isDone).length;
+  const realCount = realItems.length;
 
   // チュートリアル中で、その枠がまだ空のときだけ「例」を見せる。
   // 何か 1 つでも実際に入ったら、その枠の例は消える（realCount === 0 ゲート）。
-  const realCount = items.filter((it) => it.title.trim()).length;
   const showExamples =
     coachActive &&
     (kind === "task" || kind === "belonging") &&
@@ -533,7 +536,7 @@ export function ChecklistEditor({
       <div className="mb-1.5 flex items-baseline gap-2">
         <h3 className="text-sm font-semibold text-foreground">{kindLabel}</h3>
         <span className="text-xs text-muted tabular-nums">
-          {doneCount}/{items.length}
+          {doneCount}/{realCount}
         </span>
         {items.length > 0 && (
           <button

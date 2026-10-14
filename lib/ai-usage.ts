@@ -6,17 +6,14 @@ import { prisma } from "@/lib/prisma";
  * （gpt-4o-mini: input $0.15 / output $0.60 / cached input $0.075 — いずれも
  * 2026-10 時点の値と一致、変更なし）。正確な請求額は OpenAI 側の管理画面でしか
  * 分からない（このアプリの集計はあくまで概算）。モデルを変えたら、ここにも追記すること。
- *
- * 既知の精度の限界: キャッシュされた入力トークン（prompt caching）は本来 input の
- * 半額（$0.075/1M）だが、`recordAiUsage` が受け取る `usage` には
- * `prompt_tokens_details.cached_tokens` が含まれておらず、現状すべての入力トークンを
- * フルプライスで計算している（実際の請求額より概算が高くなりうる）。この影響は、
- * OpenAI の実績CSVとの照合で `input_cached_tokens` が実質 0 であることを確認済みの
- * 期間では無視できる（scripts/reconcile-ai-usage.mjs 参照）。プロンプトが長くなり
- * キャッシュが効くようになったら、この関数の対応が必要になる。
+ * `cachedInput` を省略したモデルは、キャッシュ割引価格が未確認という意味で
+ * `input`（通常価格）のまま計算する（過小に見積もらない安全側）。
  */
-const PRICING_USD_PER_1M: Record<string, { input: number; output: number }> = {
-  "gpt-4o-mini": { input: 0.15, output: 0.6 },
+const PRICING_USD_PER_1M: Record<
+  string,
+  { input: number; output: number; cachedInput?: number }
+> = {
+  "gpt-4o-mini": { input: 0.15, output: 0.6, cachedInput: 0.075 },
 };
 const FALLBACK_PRICING = PRICING_USD_PER_1M["gpt-4o-mini"];
 // 概算の固定レート（為替変動は追わない。管理画面の金額はあくまで目安）。
@@ -25,12 +22,25 @@ const USD_TO_JPY = 155;
 export interface TokenUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
+  /** プロンプトキャッシュで再利用された入力トークン数（OpenAI SDKのCompletionUsage.prompt_tokens_details）。 */
+  prompt_tokens_details?: { cached_tokens?: number } | null;
 }
 
+/**
+ * 入力トークンのうちキャッシュ分は半額（cachedInput）、残りは通常価格（input）で計算する。
+ * 2026-10-14 までの実績（scripts/reconcile-ai-usage.mjs での照合）ではキャッシュ利用は
+ * ほぼ0件だったため金額への影響は無いが、プロンプトが長くなりキャッシュが効くようになると
+ * 効いてくる。
+ */
 export function estimateCostYen(model: string, usage: TokenUsage | null | undefined): number {
   if (!usage) return 0;
   const price = PRICING_USD_PER_1M[model] ?? FALLBACK_PRICING;
-  const inputCostUsd = ((usage.prompt_tokens ?? 0) / 1_000_000) * price.input;
+  const promptTokens = usage.prompt_tokens ?? 0;
+  const cachedTokens = Math.min(usage.prompt_tokens_details?.cached_tokens ?? 0, promptTokens);
+  const uncachedTokens = promptTokens - cachedTokens;
+  const cachedPrice = price.cachedInput ?? price.input;
+  const inputCostUsd =
+    (uncachedTokens / 1_000_000) * price.input + (cachedTokens / 1_000_000) * cachedPrice;
   const outputCostUsd = ((usage.completion_tokens ?? 0) / 1_000_000) * price.output;
   return (inputCostUsd + outputCostUsd) * USD_TO_JPY;
 }

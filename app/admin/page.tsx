@@ -49,6 +49,11 @@ function jstMonthKey(d: Date): string {
   return jstDayKey(d).slice(0, 7);
 }
 
+/** UTC 日キー "YYYY-MM-DD"（OpenAI の実績CSVはUTC基準のため、照合用にこちらも出す）。 */
+function utcDayKey(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 /** 円の概算額を表示用に整形する。0.0001円単位まで（末尾の0は省略）、1円未満も省略せず出す。 */
 function formatYenApprox(n: number): string {
   const sign = n < 0 ? "-" : "";
@@ -264,10 +269,17 @@ export default async function AdminPage({
       by: ["userId", "eventKey"],
       _count: { _all: true },
     }),
-    // AI（OpenAI）利用金額の元データ。月別・人別はここから JS 側で集計する
-    // （件数が少ない検証版という前提。件数が増えたら DB 側の集計に切り替えること）。
+    // AI（OpenAI）利用金額の元データ。月別・人別・日別×モデル別はここから JS 側で
+    // 集計する（件数が少ない検証版という前提。件数が増えたら DB 側の集計に切り替えること）。
     prisma.aiUsageEvent.findMany({
-      select: { userId: true, createdAt: true, estimatedCostYen: true },
+      select: {
+        userId: true,
+        createdAt: true,
+        estimatedCostYen: true,
+        model: true,
+        inputTokens: true,
+        outputTokens: true,
+      },
     }),
   ]);
 
@@ -326,6 +338,36 @@ export default async function AdminPage({
   }
   const aiCostMonthRows = [...aiCostByMonth.entries()].sort((a, b) =>
     b[0].localeCompare(a[0]),
+  );
+
+  // AI利用金額: 日(UTC)×モデル別（OpenAI実績との照合用。OpenAIはUTC基準で出すため）。
+  // 円→USDは lib/ai-usage.ts の USD_TO_JPY（固定155円）と同じ値で逆算した概算。
+  const AI_USD_TO_JPY = 155;
+  const aiDailyByKey = new Map<
+    string,
+    { utcDay: string; jstDay: string; model: string; requests: number; inputTokens: number; outputTokens: number; costYen: number }
+  >();
+  for (const e of aiUsageEvents) {
+    const utcDay = utcDayKey(e.createdAt);
+    const jstDay = jstDayKey(e.createdAt);
+    const key = `${utcDay}\u0000${e.model}`;
+    const cur = aiDailyByKey.get(key) ?? {
+      utcDay,
+      jstDay,
+      model: e.model,
+      requests: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      costYen: 0,
+    };
+    cur.requests += 1;
+    cur.inputTokens += e.inputTokens;
+    cur.outputTokens += e.outputTokens;
+    cur.costYen += e.estimatedCostYen;
+    aiDailyByKey.set(key, cur);
+  }
+  const aiDailyRows = [...aiDailyByKey.values()].sort((a, b) =>
+    b.utcDay.localeCompare(a.utcDay) || a.model.localeCompare(b.model),
   );
 
   const rows = users.map((u) => {
@@ -722,6 +764,55 @@ export default async function AdminPage({
                     </td>
                     <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
                       {formatYenApprox(yen)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {/* ── AI利用: 日別（この環境の記録） ── */}
+      {aiDailyRows.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold">日別のAI利用（この環境の記録）</h2>
+          <p className="text-[11px] text-muted">
+            OpenAI実績との照合は scripts/reconcile-ai-usage.mjs で行う（この画面はこの環境のDB記録のみ。
+            本番・テスト・ローカルを横断した実績との比較はスクリプト側で実施）。
+          </p>
+          <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
+            <table className="w-full text-left text-xs">
+              <thead className="border-b border-border bg-surface-muted text-muted">
+                <tr>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">日(UTC)</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">日(JST)</th>
+                  <th className="whitespace-nowrap px-3 py-2 font-medium">モデル</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">件数</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">入力tok</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">出力tok</th>
+                  <th className="whitespace-nowrap px-3 py-2 text-right font-medium">推定USD</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {aiDailyRows.map((r) => (
+                  <tr key={`${r.utcDay}\u0000${r.model}`}>
+                    <td className="whitespace-nowrap px-3 py-2 font-medium text-foreground">
+                      {r.utcDay}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-muted">{r.jstDay}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-muted">{r.model}</td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                      {r.requests}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                      {r.inputTokens}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                      {r.outputTokens}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                      ${(r.costYen / AI_USD_TO_JPY).toFixed(6)}
                     </td>
                   </tr>
                 ))}

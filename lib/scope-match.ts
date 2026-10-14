@@ -88,6 +88,10 @@ export interface ScopeDecision {
   kind: string;
   title: string;
   reason: string;
+  /** 当てたルール自身の範囲（genre/keyword/similar）とID。次に出すときの「次回の出し方」
+   * の初期状態を、このルールの状態のまま引き継ぐために使う（lib/suggest.ts 参照）。 */
+  scope: string;
+  ruleId: string;
 }
 
 /** 当たったルールを「項目（枠＋正規化タイトル）」ごとに 1 つに絞る。キーは `kind:normTitle`。 */
@@ -111,6 +115,8 @@ export function resolveScopeRules(
         kind: r.kind,
         title: r.title,
         reason,
+        scope: r.scope,
+        ruleId: r.id,
       });
     }
   }

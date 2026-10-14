@@ -9,6 +9,7 @@ import { parseLead } from "@/lib/lead-time";
 import { stripSonaeBlock } from "@/lib/description";
 import { applyScopeDecisions, resolveScopeRules } from "@/lib/scope-match";
 import { loadActiveScopeRules } from "@/lib/item-scope";
+import { normTitle } from "@/lib/text-norm";
 import { matchEventToSlotType } from "@/lib/pattern-classify";
 import {
   getApplicableRules,
@@ -391,6 +392,43 @@ export async function buildChecklistForEvent(
       priority: 1,
     }),
   );
+
+  // 範囲ルールで当たった項目（include）は、この予定でも「次回の出し方」の初期状態を
+  // 当てたルールの範囲（キーワード／似た予定／ジャンル）のまま引き継ぐ（ユーザー指摘により
+  // 2026-10-14追加）。EventChecklistScope が無いと、画面では範囲未選択（自動）に見えてしまい、
+  // 前回決めた「次回の出し方」が見た目には引き継がれていないように見えていた。
+  const includeDecisions = [...decisions.values()].filter((d) => d.action === "include");
+  if (includeDecisions.length > 0) {
+    await Promise.all(
+      includeDecisions.map((d) =>
+        prisma.eventChecklistScope
+          .upsert({
+            where: {
+              eventId_kind_normTitle: {
+                eventId: event.id,
+                kind: d.kind,
+                normTitle: normTitle(d.title),
+              },
+            },
+            update: {},
+            create: {
+              userId: event.userId,
+              eventId: event.id,
+              kind: d.kind,
+              normTitle: normTitle(d.title),
+              title: d.title,
+              action: "include",
+              scope: d.scope,
+              ruleId: d.ruleId,
+              reason: d.reason,
+              source: "default",
+              status: "chosen",
+            },
+          })
+          .catch(() => {}),
+      ),
+    );
+  }
 
   return {
     items,

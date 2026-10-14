@@ -423,10 +423,25 @@ export async function proposeScopesForSave(input: {
       reason: DEFAULT_REASON,
       source: "default",
     };
+    // すでに同じ名前の項目で範囲を決めたこと（ルール）があれば、AIに聞き直さず
+    // その範囲のまま引き継ぐ（ユーザー指摘により2026-10-14追加。「次回の出し方」は
+    // 前回その名前で決めた状態を毎回引き継ぐ、という原則）。
+    const priorRule = await prisma.checklistScopeRule.findFirst({
+      where: { userId: scope.userId ?? undefined, kind, normTitle: nt, action: t.action, archivedAt: null },
+      orderBy: { updatedAt: "desc" },
+    });
     // 明らかに今回限定の項目は、AI 枠（aiLeft）を使わずに event_only へ即決める
     // （recommend 内にも同じ足切りがあるが、ここで止めれば AI 枠を消費しない分、
     // 他の本当に判断が要る項目に枠を残せる）。
-    if (looksTooSpecific(t.title)) {
+    if (priorRule && (priorRule.scope === "genre" || priorRule.scope === "keyword" || priorRule.scope === "similar")) {
+      rec = {
+        scope: priorRule.scope,
+        keyword: priorRule.scope === "keyword" ? firstRuleKeyword(priorRule.keywords) : null,
+        genre: priorRule.scope !== "keyword" ? (parseJsonArray(priorRule.genres)[0] ?? null) : null,
+        reason: "前回この名前で決めた範囲のまま",
+        source: "default",
+      };
+    } else if (looksTooSpecific(t.title)) {
       rec = {
         scope: "event_only",
         keyword: null,

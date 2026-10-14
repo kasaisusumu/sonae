@@ -17,7 +17,13 @@ import { trackFeatureUse } from "@/app/actions";
  * 表示済みかどうかはページごとに localStorage で覚える。
  */
 
-type Step = { sel: string; title: string; body: string };
+type Step = {
+  sel: string;
+  title: string;
+  body: string;
+  /** trueなら ver2（テスト版モード）のときだけ出す（該当要素はver1には存在しない）。 */
+  testOnly?: boolean;
+};
 type Tour = { key: string; match: (path: string) => boolean; steps: Step[] };
 
 const FLAG_PREFIX = "mm_coach_";
@@ -50,7 +56,8 @@ const TOURS: Tour[] = [
   {
     // 予定詳細を初めて開いたときの案内。1つずつ、他ポップアップと重ねない、
     // 導入チュートリアル完了後に出す（共通ルール）。key を上げると再表示される。
-    key: "event_v7",
+    // event_v8: 「次回の出し方」のステップを追加（ver2だけ。testOnly参照）。
+    key: "event_v8",
     match: (p) => /^\/events\/[^/]+$/.test(p),
     steps: [
       {
@@ -67,6 +74,12 @@ const TOURS: Tour[] = [
         sel: '[data-coach="item-expand"]',
         title: "∨ で項目の詳細",
         body: "その項目だけの通知タイミング・メモ・リンク・写真を設定できます。",
+      },
+      {
+        sel: '[data-coach="item-scope"]',
+        title: "📌🔁🏷 次回の出し方",
+        body: "この項目を次も出すかを選べます。📌今回だけ／🔁似た予定（用途が同じ予定にもAIが判断して出す）／🏷この名前（予定名からキーワードを決め、そのキーワードを含む予定にだけ出す）。タップで選び直せます。",
+        testOnly: true,
       },
       {
         sel: '[data-coach="add-item"]',
@@ -162,10 +175,19 @@ function writeFlag(key: string) {
   }
 }
 
+/** ver1（本番モード）では testOnly のステップ（対象要素がver1に無い）を除く。 */
+function filterTourForMode(t: Tour, isProductionMode: boolean): Tour {
+  if (!isProductionMode) return t;
+  return { ...t, steps: t.steps.filter((s) => !s.testOnly) };
+}
+
 export function PageCoach({
   tutorialDone = false,
+  isProductionMode = false,
 }: {
   tutorialDone?: boolean;
+  /** ver1（本番の機能モード）かどうか。testOnly なステップを出し分けるために使う。 */
+  isProductionMode?: boolean;
 }) {
   const pathname = usePathname();
   const [tour, setTour] = useState<Tour | null>(null);
@@ -194,7 +216,8 @@ export function PageCoach({
   // パスが変わったら、そのページのツアーを（未表示なら）仕込む
   useEffect(() => {
     let cancelled = false;
-    const t = TOURS.find((x) => x.match(pathname)) ?? null;
+    const found = TOURS.find((x) => x.match(pathname)) ?? null;
+    const t = found ? filterTourForMode(found, isProductionMode) : null;
 
     // まず今の表示をリセット（effect 内の同期 setState を避けてマイクロタスクで）
     queueMicrotask(() => {
@@ -255,13 +278,14 @@ export function PageCoach({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [pathname, tutorialDone]);
+  }, [pathname, tutorialDone, isProductionMode]);
 
   // メニューの「このページの使い方をみる」から手動で開始する。
   // このページにツアーが無ければ何もしない。
   useEffect(() => {
     const onOpen = () => {
-      const t = TOURS.find((x) => x.match(pathname)) ?? null;
+      const found = TOURS.find((x) => x.match(pathname)) ?? null;
+      const t = found ? filterTourForMode(found, isProductionMode) : null;
       if (!t) return;
       try {
         localStorage.removeItem(FLAG_PREFIX + t.key);
@@ -276,7 +300,7 @@ export function PageCoach({
     };
     window.addEventListener("mm:open-coach", onOpen);
     return () => window.removeEventListener("mm:open-coach", onOpen);
-  }, [pathname]);
+  }, [pathname, isProductionMode]);
 
   const finish = useCallback((skipped: boolean) => {
     setTour((cur) => {

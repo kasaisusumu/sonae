@@ -780,6 +780,7 @@ export function ChecklistEditor({
                       hintOpen={scopeHintOpen}
                       onHintOpenChange={setScopeHintOpen}
                       className="mt-0"
+                      dataCoach="item-scope"
                     />
                   )}
                 </span>

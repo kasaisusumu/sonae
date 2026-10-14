@@ -123,7 +123,9 @@ export default async function RootLayout({
             waitForPreventGoals={isProductionMode}
           />
         ) : null}
-        {isLoggedIn ? <PageCoach tutorialDone={tutorialDone} /> : null}
+        {isLoggedIn ? (
+          <PageCoach tutorialDone={tutorialDone} isProductionMode={isProductionMode} />
+        ) : null}
         {isLoggedIn ? (
           <NotifyNag
             publicKey={vapidPublicKey}

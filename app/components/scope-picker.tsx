@@ -139,6 +139,7 @@ export function ScopeEmojiToggle({
   hintOpen,
   onHintOpenChange,
   className = "mt-0.5",
+  dataCoach,
 }: {
   value: string;
   onChange: (next: QuickScope) => void;
@@ -149,12 +150,14 @@ export function ScopeEmojiToggle({
   onHintOpenChange?: (open: boolean) => void;
   /** 外側の余白調整用（既定 `mt-0.5`。他のボタンとまとめて並べる場合は呼び出し元で上書きする）。 */
   className?: string;
+  /** コーチマーク（app/components/page-coach.tsx）が指す対象にするときの `data-coach` 値。 */
+  dataCoach?: string;
 }) {
   const current = (QUICK_SCOPES as string[]).includes(value)
     ? SCOPE_CHIP[value as QuickScope]
     : SCOPE_CHIP.auto;
   return (
-    <span className={`relative inline-flex shrink-0 ${className}`}>
+    <span className={`relative inline-flex shrink-0 ${className}`} data-coach={dataCoach}>
       <button
         type="button"
         disabled={disabled}

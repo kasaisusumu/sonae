@@ -417,7 +417,7 @@ export default async function AdminPage({
       syncBroken: !!u.googleAccount?.syncError,
       syncErrorAt: u.googleAccount?.syncErrorAt ?? null,
       aiCostYen: aiCostByUser.get(u.id) ?? 0,
-      featureMode: u.featureMode === "production" ? "本番版" : "テスト版",
+      featureMode: u.featureMode === "production" ? "ver1" : "ver2",
     };
   });
 
@@ -574,7 +574,7 @@ export default async function AdminPage({
                   <td className="whitespace-nowrap px-3 py-2">
                     <span
                       className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                        r.featureMode === "本番版"
+                        r.featureMode === "ver1"
                           ? "border-foreground/30 text-foreground"
                           : "border-teal/40 text-teal-dark"
                       }`}

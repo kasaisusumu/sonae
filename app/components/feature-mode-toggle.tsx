@@ -6,10 +6,14 @@ import { InfoHint } from "@/app/components/info-hint";
 
 type Mode = "test" | "production";
 
+// 表示名は ver1（本番版の機能）／ver2（テスト版の機能）。内部の値（"production"/"test"）は
+// そのまま（lib/feature-mode.ts の FeatureMode と一致させる。表示名だけの変更）。
 const LABEL: Record<Mode, string> = {
-  test: "テスト版",
-  production: "本番版",
+  production: "ver1",
+  test: "ver2",
 };
+// 左から ver1, ver2 の順で並べる。
+const ORDER: Mode[] = ["production", "test"];
 
 /**
  * 設定ページの「機能モード」切替ボタン。確認ダイアログ→切替→結果（変換・休眠件数）
@@ -29,8 +33,8 @@ export function FeatureModeToggle({ current }: { current: string }) {
     if (pending || target === mode) return;
     const ok = window.confirm(
       target === "production"
-        ? "本番版モードに切り替えます。本番の機能（失敗ログ・節約額ダッシュボード）に切り替わります。予定・メモ・編集履歴などの元データは消えません。学習結果はルールに沿って引き継がれます（触っていないものだけ）。あとでテスト版に戻すこともできます。よろしいですか？"
-        : "テスト版モードに切り替えます。テストの機能（未来の自分へ・次回の出し方3択）に切り替わります。予定・メモ・編集履歴などの元データは消えません。学習結果はルールに沿って引き継がれます（触っていないものだけ）。あとで本番版に戻すこともできます。よろしいですか？",
+        ? "ver1に切り替えます。本番の機能（失敗ログ・節約額ダッシュボード）に切り替わります。予定・メモ・編集履歴などの元データは消えません。学習結果はルールに沿って引き継がれます（触っていないものだけ）。あとでver2に戻すこともできます。よろしいですか？"
+        : "ver2に切り替えます。テストの機能（未来の自分へ・次回の出し方3択）に切り替わります。予定・メモ・編集履歴などの元データは消えません。学習結果はルールに沿って引き継がれます（触っていないものだけ）。あとでver1に戻すこともできます。よろしいですか？",
     );
     if (!ok) return;
     setError(null);
@@ -49,7 +53,7 @@ export function FeatureModeToggle({ current }: { current: string }) {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-2">
-        {(["test", "production"] as Mode[]).map((m) => (
+        {ORDER.map((m) => (
           <button
             key={m}
             type="button"
@@ -69,9 +73,9 @@ export function FeatureModeToggle({ current }: { current: string }) {
         <InfoHint id="feature-mode-toggle">
           <p className="mb-2 text-sm font-semibold text-foreground">機能モードとは</p>
           <p className="mb-2 text-[13px]">
-            テスト版（未来の自分へ・次回の出し方3択）と本番版（失敗ログ・節約額ダッシュボード）を
-            切り替えられます。予定・準備リスト・メモ・編集履歴などの元データは、どちらのモードでも
-            共有され、切り替えても消えません。
+            ver1（本番の機能: 失敗ログ・節約額ダッシュボード）と ver2（テストの機能: 未来の
+            自分へ・次回の出し方3択）を切り替えられます。予定・準備リスト・メモ・編集履歴
+            などの元データは、どちらのモードでも共有され、切り替えても消えません。
           </p>
           <p className="text-[13px]">
             学習結果（自動で覚えた内容）は、あなたが直接選んだ・直したものはそのまま保たれ、
@@ -82,7 +86,7 @@ export function FeatureModeToggle({ current }: { current: string }) {
       {error && <p className="mt-2 text-xs text-warn">{error}</p>}
       {result && (
         <p className="mt-2 text-xs text-muted">
-          {LABEL[result.to]}モードに切り替えました。学習結果を{result.converted}
+          {LABEL[result.to]}に切り替えました。学習結果を{result.converted}
           件反映、{result.dormant}件は休眠にしました（データは消えていません。
           いつでも元のモードに戻せます）。
         </p>

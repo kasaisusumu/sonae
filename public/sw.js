@@ -1,4 +1,4 @@
-/* 私のマニュアル「そなえ」さん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v14 */
+/* 私のマニュアル「そなえ」さん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v15 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -54,7 +54,7 @@ function urlFromTag(tag) {
   let m = tag.match(/^futuremsg-(.+)$/);
   if (m) return "/events/" + m[1] + "#message-review";
   m = tag.match(/^msgreview-(.+)$/);
-  if (m) return "/failures#review";
+  if (m) return "/events/" + m[1] + "#message-review";
   m = tag.match(/^failcheck-(.+)$/);
   if (m) return "/events/" + m[1] + "#failure-check";
   m = tag.match(/^(?:event|prep|listreminder)-(.+)$/);

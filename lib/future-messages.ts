@@ -986,7 +986,10 @@ export async function notifyPendingMessageReviews(
     await sendPushToUser(userId, {
       title: `${e.title}のメッセージを更新しませんか？`,
       body: "次の似た予定に向けて、内容を見直しましょう。タップして確認できます。",
-      url: `/failures#review`,
+      // その予定自身のページの確定カード（id="message-review"）へ直接飛ばす
+      // （以前は一覧ページ /failures#review の汎用セクションへのリンクで、
+      // 複数の確定待ちがあると該当カードを探す必要があった）。
+      url: `/events/${e.id}#message-review`,
       tag: `msgreview-${e.id}`,
     });
     sent++;

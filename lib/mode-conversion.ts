@@ -38,6 +38,16 @@ export async function convertScopeRulesToLearnedRules(
     where: { userId, archivedAt: null },
   });
 
+  // categoryIds は実カテゴリへの外部キーではない JSON 文字列なので、カテゴリ削除で
+  // 自動的には掃除されない（ChecklistScopeRule 自体は残る）。変換先の LearnedRule は
+  // 本物の外部キーを持つため、存在しないカテゴリを参照する行はここで休眠にする
+  // （convertLearnedRulesToScopeRules 側と同じ防御。無いとここで例外になり切替全体が失敗する）。
+  const existingCategoryIds = new Set(
+    (await prisma.category.findMany({ where: { userId }, select: { id: true } })).map(
+      (c) => c.id,
+    ),
+  );
+
   let converted = 0;
   let dormant = 0;
 
@@ -49,7 +59,7 @@ export async function convertScopeRulesToLearnedRules(
     }
     const categoryIds = parseIds(rule.categoryIds);
     const categoryId = categoryIds[0];
-    if (!categoryId) {
+    if (!categoryId || !existingCategoryIds.has(categoryId)) {
       dormant++;
       continue;
     }

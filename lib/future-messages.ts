@@ -562,10 +562,13 @@ export async function ensureFutureMessageMatchesForEvent(
   }
 
   if (opts.allowAi && !event.futureMessageCheckedAt && stillNoMatch.length > 0) {
-    // AI 候補は「ジャンル指定あり」または「scope=similar」のものだけに絞る
-    // （事前フィルタ。それ以外は AI に聞くまでもない）。
+    // AI 候補は「scope=similar」、または「scope=keyword 以外でジャンル指定あり」のものだけに
+    // 絞る（事前フィルタ。それ以外は AI に聞くまでもない）。scope="keyword"（既定、
+    // スキーマ上「キーワード一致のみ」と明記）は、ジャンルを添えていても cheapMatch
+    // （キーワード・展開済みジャンル関連語・カテゴリ）で決着し、AI には回さない
+    // （以前は genres があるだけで scope を見ずに AI へ回っていた無駄打ちを修正）。
     const candidates = stillNoMatch.filter(
-      (m) => m.genres.length > 0 || m.scope === "similar",
+      (m) => m.scope === "similar" || (m.scope !== "keyword" && m.genres.length > 0),
     );
     if (candidates.length > 0) {
       const judged = await aiJudgeMessages(event, candidates);

@@ -70,6 +70,10 @@ const PAGES: Page[] = [
  * サーバー側（app/events/[id]/page.tsx）で判定し、show で渡す。
  * 内容が長いため、Tutorial（app/components/tutorial.tsx）と同じ
  * 戻る/次へ・ページ番号のページ送り UI で3ページに分けている。
+ * data-mm-desclink: 他のポップアップ（PageCoach 等）が開いている間はこれを待つ、
+ * という既存の仕組み（data-mm-tutorial 等）と同じ目印。これが無いと、このポップアップを
+ * 「今後表示しない」にチェックせず閉じたときに、裏で待っていた別の説明ポップアップが
+ * 続けて毎回出てしまっていた（ユーザー指摘により2026-10-19追加）。
  */
 export function DescLinkHint({ show }: { show: boolean }) {
   const [open, setOpen] = useState(show);
@@ -94,6 +98,7 @@ export function DescLinkHint({ show }: { show: boolean }) {
 
   return (
     <div
+      data-mm-desclink
       className="fixed inset-0 z-[58] flex items-center justify-center bg-black/45 p-4"
       onClick={close}
     >

@@ -90,7 +90,7 @@ export function MessageDictationInput({
       });
       if (res.ok) {
         const where = eventId
-          ? "この予定の「未来の自分へ」に追加しました。"
+          ? "この予定の「過去の自分よりメッセージ」に追加しました。"
           : "下の「▸ 登録したメッセージを見る」に追加しました。";
         setNote(`記録しました。${where}`);
         reset();

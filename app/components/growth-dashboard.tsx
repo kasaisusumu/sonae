@@ -1,14 +1,15 @@
 import { getGrowthStats } from "@/lib/growth-stats";
+import { GrowthTiles } from "@/app/components/growth-tiles";
 
-/** ホームに表示する「そなえさんの成長」カード（テスト版の主役）。 */
+/** ホームに表示する「そなえさんの成長」カード（テスト版の主役）。タイルはタップで内訳を見られる。 */
 export async function GrowthDashboard({ userId }: { userId: string }) {
   const s = await getGrowthStats(userId);
 
-  const tiles: { label: string; value: number; unit: string }[] = [
-    { label: "学習した項目数", value: s.learnedItemCount, unit: "個" },
-    { label: "学習した予定数", value: s.learnedEventCount, unit: "件" },
-    { label: "完了したタスク数", value: s.completedTaskCount, unit: "件" },
-    { label: "見つけた共通パターン", value: s.commonPatternCount, unit: "個" },
+  const tiles = [
+    { label: "学習した項目数", value: s.learnedItemCount, unit: "個", items: s.learnedItems },
+    { label: "学習した予定数", value: s.learnedEventCount, unit: "件", items: s.learnedEvents },
+    { label: "完了したタスク数", value: s.completedTaskCount, unit: "件", items: s.completedTasks },
+    { label: "見つけた共通パターン", value: s.commonPatternCount, unit: "個", items: s.commonPatterns },
   ];
 
   return (
@@ -25,19 +26,7 @@ export async function GrowthDashboard({ userId }: { userId: string }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {tiles.map((t) => (
-          <div key={t.label} className="rounded-xl bg-surface-muted p-4">
-            <p className="text-xs text-muted">{t.label}</p>
-            <p className="mt-1 text-2xl font-bold text-chart-count">
-              {t.value}
-              <span className="ml-0.5 text-xs font-normal text-muted">
-                {t.unit}
-              </span>
-            </p>
-          </div>
-        ))}
-      </div>
+      <GrowthTiles tiles={tiles} />
 
       {s.recentLearned && (
         <div className="flex items-start gap-2 border-t border-border pt-3">

@@ -15,6 +15,8 @@ export type TemplateDetail = {
   name: string;
   updatedAt: Date;
   items: TemplateItem[];
+  /** 「次回の出し方」の既定値（event_only/similar/keyword）。null = 自動（これまで通り）。 */
+  defaultScope: string | null;
 };
 
 export type PastEventWithList = {
@@ -44,6 +46,7 @@ export async function getUserTemplates(
       title: i.title,
       notifyLeadMinutes: i.notifyLeadMinutes ?? null,
     })),
+    defaultScope: t.defaultScope ?? null,
   }));
 }
 

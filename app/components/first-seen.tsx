@@ -31,7 +31,7 @@ export function FirstSeen({
       // 他のポップアップ／案内が出ている間は出さない（次の機会に）。
       const busy =
         !!document.querySelector(
-          "[data-mm-tutorial],[data-mm-coach],[data-mm-guided]",
+          "[data-mm-tutorial],[data-mm-coach],[data-mm-guided],[data-mm-desclink],[data-mm-scopehint]",
         ) || !localStorage.getItem("mm_tutorial_v3");
       ok = !busy;
     } catch {

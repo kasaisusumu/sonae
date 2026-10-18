@@ -10,6 +10,8 @@ import { ScopeChip } from "@/app/components/scope-chip";
  * 「今後表示しない」にチェックを入れて OK を押すまでは、開くたびに毎回表示する。
  * 表示するかどうか（＝ まだ「今後表示しない」していないか）は
  * サーバー側（app/events/[id]/page.tsx）で判定し、show で渡す。
+ * data-mm-scopehint: desc-link-hint.tsx と同じ理由で、他のポップアップ（PageCoach 等）に
+ * 「開いている間は待って」と伝える目印（ユーザー指摘により2026-10-19追加）。
  */
 export function ScopeHint({ show }: { show: boolean }) {
   const [open, setOpen] = useState(show);
@@ -30,6 +32,7 @@ export function ScopeHint({ show }: { show: boolean }) {
 
   return (
     <div
+      data-mm-scopehint
       className="fixed inset-0 z-[58] flex items-center justify-center bg-black/45 p-4"
       onClick={close}
     >

@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normTitle } from "@/lib/text-norm";
+import { normalizeMatchText } from "@/lib/future-messages";
 import { buildChecklistForEvent, type BuiltItem } from "@/lib/suggest";
 import { syncEventDescription } from "@/lib/description-sync";
 import { parseLeads, stringifyLeads } from "@/lib/lead-time";
@@ -272,8 +273,8 @@ async function copyChecklistItems(
 }
 
 /**
- * source と同名（完全一致）で listCustomized=false の予定すべてに、source の内容を配る。
- * source 自身が listCustomized（切り離し済み）なら何もしない。
+ * source と同名（多少の表記揺れは同一視）で listCustomized=false の予定すべてに、
+ * source の内容を配る。source 自身が listCustomized（切り離し済み）なら何もしない。
  */
 export async function propagateListToNameGroup(
   sourceEventId: string,
@@ -283,16 +284,14 @@ export async function propagateListToNameGroup(
     select: { userId: true, title: true, listCustomized: true },
   });
   if (!src || src.listCustomized) return [];
-  const twins = await prisma.event.findMany({
-    where: {
-      userId: src.userId,
-      id: { not: sourceEventId },
-      // 大文字小文字の違いは区別しない（ユーザー指摘により2026-10-19）
-      title: { equals: src.title, mode: "insensitive" },
-      listCustomized: false,
-    },
-    select: { id: true },
+  // 「同名」の判定は大文字小文字・全角半角・かな/カナ/ローマ字の表記揺れを区別しない
+  // normalizeMatchText で行う（ユーザー指摘により2026-10-19）。
+  const srcNorm = normalizeMatchText(src.title);
+  const candidates = await prisma.event.findMany({
+    where: { userId: src.userId, id: { not: sourceEventId }, listCustomized: false },
+    select: { id: true, title: true },
   });
+  const twins = candidates.filter((c) => normalizeMatchText(c.title) === srcNorm);
   for (const t of twins) {
     try {
       await copyChecklistItems(sourceEventId, t.id);
@@ -321,16 +320,19 @@ export async function resolveNameGroupOnEdit(
   });
   if (!me || me.listCustomized) return [];
 
-  const otherSource = await prisma.event.findFirst({
+  const meNorm = normalizeMatchText(me.title);
+  const editedCandidates = await prisma.event.findMany({
     where: {
       userId: me.userId,
       id: { not: eventId },
-      title: { equals: me.title, mode: "insensitive" },
       listCustomized: false,
       editRecords: { some: {} },
     },
-    select: { id: true },
+    select: { id: true, title: true },
   });
+  const otherSource = editedCandidates.find(
+    (c) => normalizeMatchText(c.title) === meNorm,
+  );
   if (otherSource) {
     await prisma.event.update({
       where: { id: eventId },
@@ -495,17 +497,18 @@ async function findNameGroupTwinWithList(
     select: { userId: true, title: true, listCustomized: true },
   });
   if (!me || me.listCustomized) return null;
-  const twin = await prisma.event.findFirst({
+  const meNorm = normalizeMatchText(me.title);
+  const candidates = await prisma.event.findMany({
     where: {
       userId: me.userId,
       id: { not: eventId },
-      title: { equals: me.title, mode: "insensitive" },
       listCustomized: false,
       checklistItems: { some: { isSuggested: false } },
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true },
+    select: { id: true, title: true },
   });
+  const twin = candidates.find((c) => normalizeMatchText(c.title) === meNorm);
   return twin?.id ?? null;
 }
 

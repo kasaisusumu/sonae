@@ -247,7 +247,7 @@ export function PageCoach({
     };
     const anotherPopup = () =>
       !!document.querySelector(
-        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen]",
+        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-desclink],[data-mm-scopehint]",
       );
 
     const start = () => {

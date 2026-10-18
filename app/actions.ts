@@ -2039,6 +2039,45 @@ export async function applyTemplateToEvent(formData: FormData): Promise<void> {
       sourceTemplateId: template.id,
     })),
   );
+
+  // テンプレートに「次回の出し方」の既定値が設定されていれば、追加した項目すべてに
+  // 自動で適用する（AI には聞かない。ユーザー指摘により2026-10-19追加）。
+  if (
+    template.defaultScope &&
+    template.items.length > 0 &&
+    isScopeRuleEnabled(await getFeatureMode(userId))
+  ) {
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, userId },
+      include: { category: { select: { name: true } } },
+    });
+    if (event) {
+      const scopeInput = {
+        userId,
+        eventId: event.id,
+        eventTitle: event.title,
+        eventMemo: event.memo,
+        categoryId: event.categoryId,
+        categoryName: event.category?.name ?? "その他",
+        feature: extractEventFeature({
+          title: event.title,
+          memo: event.memo,
+          eventDatetime: event.eventDatetime,
+          endDatetime: event.endDatetime,
+        }),
+      };
+      const chosen = template.defaultScope as "event_only" | "similar" | "keyword";
+      for (const it of template.items) {
+        await setItemScope({
+          scope: scopeInput,
+          kind: template.name,
+          title: it.title,
+          chosen,
+        });
+      }
+    }
+  }
+
   revalidateAppViews(eventId);
 }
 
@@ -2130,6 +2169,30 @@ export async function setListTemplateKind(formData: FormData): Promise<void> {
       data: { kind },
     }),
   ]);
+  revalidateAppViews();
+}
+
+/**
+ * 名前付きテンプレートの「次回の出し方」の既定値を設定する。
+ * 設定すると、このテンプレートを予定に追加したとき、各項目にこの範囲を自動で適用する
+ * （AI には聞かない。ユーザー指摘により2026-10-19追加）。空文字で「自動（これまで通り）」に戻す。
+ */
+export async function setListTemplateScope(formData: FormData): Promise<void> {
+  const userId = await requireUserId();
+  if (!isScopeRuleEnabled(await getFeatureMode(userId))) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  const raw = String(formData.get("scope") ?? "");
+  const scope = (["event_only", "similar", "keyword"] as const).includes(
+    raw as "event_only" | "similar" | "keyword",
+  )
+    ? raw
+    : null;
+
+  await prisma.listTemplate.updateMany({
+    where: { id, userId },
+    data: { defaultScope: scope },
+  });
   revalidateAppViews();
 }
 
@@ -2974,6 +3037,8 @@ export async function tidyCountermeasureDictation(text: string): Promise<string>
  * 成功扱いにする＝ after() から呼ぶ想定）。
  */
 async function resyncUpcomingDescriptions(userId: string): Promise<void> {
+  // 件数上限は設けない（Google カレンダーへの書き込みのみで AI 等の課金は発生しないため。
+  // ユーザー指摘により2026-10-19: 「そこにコストは不要よな」）。
   const events = await prisma.event.findMany({
     where: {
       userId,
@@ -2983,7 +3048,6 @@ async function resyncUpcomingDescriptions(userId: string): Promise<void> {
       eventDatetime: { gte: new Date() },
     },
     orderBy: { eventDatetime: "asc" },
-    take: 20,
     select: { id: true },
   });
   for (const e of events) {

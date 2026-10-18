@@ -40,6 +40,7 @@ import {
 } from "./failure-list-editor";
 import { WarningPanel } from "./warning-panel";
 import { FutureMessageEditor, type EMRow } from "./future-message-editor";
+import { RetroMessagePrompt } from "./retro-message-prompt";
 import { MessageReviewCard } from "@/app/components/message-review-card";
 import { ListReminderControl } from "./list-reminder-control";
 import { AddSectionButton } from "./section-manager";
@@ -447,17 +448,24 @@ export async function ChecklistSection({
             <WarningPanel warning={warning} />
           </div>
         )
+      ) : reviewCards.length > 0 ? (
+        <div id="message-review" className="scroll-mt-4 space-y-4">
+          {reviewCards.map(({ review, proposal }) => (
+            <MessageReviewCard
+              key={review.linkId}
+              linkId={review.linkId}
+              eventTitle={review.eventTitle}
+              proposal={proposal}
+            />
+          ))}
+        </div>
       ) : (
-        reviewCards.length > 0 && (
-          <div id="message-review" className="scroll-mt-4 space-y-4">
-            {reviewCards.map(({ review, proposal }) => (
-              <MessageReviewCard
-                key={review.linkId}
-                linkId={review.linkId}
-                eventTitle={review.eventTitle}
-                proposal={proposal}
-              />
-            ))}
+        // 一致する未来メッセージが無い、終わった予定。ここからでも新規に
+        // 「次回への一言」を書ける（一致があるときの振り返りカードと同じ仕組み）。
+        (event.endDatetime ?? new Date(event.eventDatetime.getTime() + 2 * 3_600_000)) <=
+          new Date() && (
+          <div id="message-review" className="scroll-mt-4">
+            <RetroMessagePrompt eventId={event.id} eventTitle={event.title} />
           </div>
         )
       )}
@@ -521,7 +529,7 @@ export async function ChecklistSection({
             if (key === specialKey) {
               return {
                 key,
-                label: isProd ? "考えられる失敗" : "未来の自分へ",
+                label: isProd ? "考えられる失敗" : "過去の自分よりメッセージ",
                 builtin: true, // 名前変更・削除はさせない
                 node: isProd ? failureLogNode : futureMessageNode,
               };

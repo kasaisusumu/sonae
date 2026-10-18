@@ -46,7 +46,7 @@ export function NotifyNag({
 
     const blocked = () =>
       !!document.querySelector(
-        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-coach]",
+        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-coach],[data-mm-desclink],[data-mm-scopehint]",
       );
 
     const decide = async () => {

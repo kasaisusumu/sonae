@@ -19,6 +19,7 @@ import {
   stringifyStrArray,
 } from "@/lib/future-messages";
 import { stripSonaeBlock } from "@/lib/description";
+import { classifyItemCategories } from "@/lib/item-categories";
 
 export const ITEM_SCOPES = ["auto", "event_only", "genre", "keyword", "similar"] as const;
 export type ItemScope = (typeof ITEM_SCOPES)[number];
@@ -49,66 +50,6 @@ const SYSTEM = `あなたは準備リストの項目の「次回の出し方」�
   （例: 「ホテル」という名前の予定でだけ出したい内容）
 出力は必ず次の JSON のみ:
 {"scope":"event_only|similar|keyword","reason":"1行の理由（ユーザーに見せる）"}`;
-
-// 「似た予定」の一致判定（2026-10〜）: 日時・長さ（featureSignature）ではなく、
-// AI が判断した「同じ種類」（例: バスと新幹線はどちらも「移動」）で当てる。ジャンルの
-// 関連語展開（lib/future-messages.ts の仕組み）と同じ形で、この予定と同じ種類とみなせる
-// 他の予定タイトルの言い換え語を一度だけ AI に聞き、genres/genreKeywords に保存する
-// （一致判定は lib/scope-match.ts が genre と同じ方法でこれを見る）。
-const SIMILAR_KIND_SYSTEM = `あなたは日本語アシスタントです。予定のタイトルと内容から、
-次回以降「同じ種類の予定」として扱うべき、他の予定タイトルに出てきそうな言い換え語を挙げます。
-日時・場所・長さなどの表面的な特徴ではなく、予定の「用途・性質」で考えてください。
-例: 「新幹線で大阪出張」→ 同じ種類とみなす言い換え語: バス, 飛行機, 電車, 移動, 出張の移動
-- kind には、この予定の種類を表す短いラベルを入れる（例: "移動手段の利用"）。
-- terms は 6〜12個程度、短い日本語の単語で。
-- 出力は必ず次の JSON のみ: {"kind":"短いラベル","terms":["...", "..."]}`;
-
-interface SimilarKind {
-  kind: string;
-  terms: string[];
-}
-
-async function classifySimilarKind(
-  eventTitle: string,
-  eventText: string,
-  userId?: string | null,
-): Promise<SimilarKind> {
-  const fallback: SimilarKind = { kind: eventTitle.slice(0, 40), terms: [] };
-  if (!process.env.OPENAI_API_KEY) return fallback;
-  try {
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      timeout: 12000,
-      maxRetries: 0,
-    });
-    const completion = await client.chat.completions.create({
-      model: MODEL,
-      temperature: 0.3,
-      max_tokens: 200,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SIMILAR_KIND_SYSTEM },
-        { role: "user", content: eventText.slice(0, 300) },
-      ],
-    });
-    recordAiUsage(userId, "item-scope-similar-kind", MODEL, completion.usage);
-    const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
-      kind?: unknown;
-      terms?: unknown;
-    };
-    const kind =
-      typeof raw.kind === "string" && raw.kind.trim()
-        ? raw.kind.trim().slice(0, 40)
-        : fallback.kind;
-    const terms = Array.isArray(raw.terms)
-      ? [...new Set(raw.terms.map((t) => String(t).trim()).filter(Boolean))].slice(0, 12)
-      : [];
-    return { kind, terms };
-  } catch (e) {
-    console.error("[item-scope] classifySimilarKind 失敗", e);
-    return fallback;
-  }
-}
 
 async function recommend(input: {
   action: "include" | "exclude";
@@ -210,9 +151,10 @@ async function buildRuleData(
   /**
    * 既に「似た予定」として同じ項目に当たっていたルール（選び直す前のもの）。
    * 同じ項目を「似た予定」のまま選び直しただけ（ボタンの二度押し等）なら、
-   * 言い換え語を AI に聞き直さずそのまま使い回す（無駄な待ち時間・API 呼び出しを避ける）。
+   * カテゴリ分類を AI に聞き直さずそのまま使い回す（一度決めたカテゴリは再利用し、
+   * 予定が追加されるたびに再生成しない。ユーザー指摘により2026-10-19）。
    */
-  previousSimilarRule?: { genres: string; genreKeywords: string; signature: string | null } | null,
+  previousSimilarRule?: { categories: string } | null,
 ) {
   const base = {
     userId: input.userId,
@@ -250,19 +192,23 @@ async function buildRuleData(
     };
   }
   if (scope === "similar") {
-    if (previousSimilarRule && previousSimilarRule.genreKeywords !== "[]") {
+    if (previousSimilarRule && previousSimilarRule.categories !== "[]") {
       return {
         ...base,
         scope,
         keywords: "[]",
-        genres: previousSimilarRule.genres,
-        genreKeywords: previousSimilarRule.genreKeywords,
+        genres: "[]",
+        genreKeywords: "[]",
         categoryIds: "[]",
-        signature: previousSimilarRule.signature,
+        categories: previousSimilarRule.categories,
+        signature: null,
       };
     }
-    const { kind, terms } = await classifySimilarKind(
-      input.eventTitle,
+    // 「似た予定」に設定したこの瞬間に、AI を1回だけ呼んでカテゴリ（事前定義語彙から
+    // 最大5個）を決める。以後、新しい予定との照合はこのカテゴリとのルールベース
+    // 照合のみで行い、AI は呼ばない（lib/item-categories.ts / lib/scope-match.ts）。
+    const categories = await classifyItemCategories(
+      title,
       eventTextOf(input),
       input.userId,
     );
@@ -270,12 +216,13 @@ async function buildRuleData(
       ...base,
       scope,
       keywords: "[]",
-      genres: stringifyStrArray([kind]),
-      genreKeywords: stringifyGenreKeywords([{ genre: kind, terms }]),
+      genres: "[]",
+      genreKeywords: "[]",
       categoryIds: "[]",
-      // AI 未設定・失敗時（terms が空）は、言い換え語で当てられないので、
-      // 旧来の日時・長さの一致にフォールバックする（lib/scope-match.ts 参照）。
-      signature: terms.length > 0 ? null : featureSignature(input.feature),
+      categories: stringifyStrArray(categories),
+      // カテゴリが1つも決まらなかった（AI未設定・失敗）ときだけ、旧来の日時・長さの
+      // 一致にフォールバックする（lib/scope-match.ts 参照）。
+      signature: categories.length > 0 ? null : featureSignature(input.feature),
     };
   }
   return null;
@@ -313,15 +260,12 @@ async function saveScopeForItem(
   });
   if (existing?.status === "chosen" && status === "proposed") return;
 
-  // 「似た予定」のまま選び直しただけなら、言い換え語を AI に聞き直さず前回の結果を使い回す
-  // （ボタンの二度押し等で毎回 AI を呼ぶ無駄・待ち時間を避ける）。
+  // 「似た予定」のまま選び直しただけなら、カテゴリを AI に聞き直さず前回の結果を使い回す
+  // （ボタンの二度押し等で毎回 AI を呼ぶ無駄・待ち時間を避ける。一度保存したカテゴリは
+  // 再利用し、予定が追加されるたびに再生成しない、というユーザー指摘どおり）。
   const previousSimilarRule =
     scope === "similar" && existing?.scope === "similar" && existing.rule
-      ? {
-          genres: existing.rule.genres,
-          genreKeywords: existing.rule.genreKeywords,
-          signature: existing.rule.signature,
-        }
+      ? { categories: existing.rule.categories }
       : null;
 
   await archiveRule(existing?.ruleId ?? null);
@@ -578,6 +522,7 @@ export function describeScopeRule(rule: {
   scope: string;
   keywords: string;
   genres: string;
+  categories?: string;
 }): string {
   const verb = rule.action === "exclude" ? "出さない" : "出す";
   let when = "";
@@ -588,8 +533,14 @@ export function describeScopeRule(rule: {
     const gs = parseJsonArray(rule.genres);
     when = gs.length > 0 ? `「${gs.join("」「")}」の予定のとき` : "同じカテゴリの予定のとき";
   } else if (rule.scope === "similar") {
+    const cats = parseJsonArray(rule.categories ?? "[]");
     const gs = parseJsonArray(rule.genres);
-    when = gs.length > 0 ? `「${gs[0]}」と同じ種類の予定のとき` : "似た予定のとき";
+    when =
+      cats.length > 0
+        ? `「${cats.join("」「")}」に関係する予定のとき`
+        : gs.length > 0
+          ? `「${gs[0]}」と同じ種類の予定のとき`
+          : "似た予定のとき";
   } else {
     when = "似た予定のとき";
   }

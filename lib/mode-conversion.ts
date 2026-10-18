@@ -10,12 +10,11 @@
  * - LearnedRule の ruleType="timing_override"/"notify_override"/"pattern_item" は、
  *   項目を出す/出さないの範囲の話ではないので、どちらの方向でも変換対象外 → 常に休眠。
  *
- * 「触られた」の判定:
- * - LearnedRule: `isUserLocked === true`（既存の「学習内容の確認」での固定フラグをそのまま使う）。
- * - ChecklistScopeRule: `autoConverted === false`（自動変換で作った行ではない＝ユーザーの
- *   選択やAI推奨から通常の経路でできた、テスト版自身の学習結果）。
- *
- * 変換は冪等（`autoConverted` 行は上書き、他は作り直さない）・非破壊（元データは消さない）。
+ * 変換は毎回「全部」を無条件に反映する（2026-10-19〜。以前は切替先に既存の
+ * 学習があると上書きしない「触られた分は除く」仕様だったが、ユーザー指摘
+ * 「触ってないだけってどういう意味? 普通に全部引き継いでくれ」によりこの
+ * 保護を撤廃した。切替元の内容が常に優先される）。
+ * 変換は冪等（同じ内容なら何度実行しても結果は同じ）・非破壊（元データは消さない）。
  * AI は呼ばない（ルールベースのみ）。
  */
 import { prisma } from "@/lib/prisma";
@@ -67,24 +66,6 @@ export async function convertScopeRulesToLearnedRules(
     const target = rule.title;
     const itemKind = rule.kind;
     const featureSignature = "{}";
-
-    const existing = await prisma.learnedRule.findUnique({
-      where: {
-        categoryId_itemKind_ruleType_target_featureSignature: {
-          categoryId,
-          itemKind,
-          ruleType,
-          target,
-          featureSignature,
-        },
-      },
-    });
-
-    if (existing && (existing.isUserLocked || !existing.autoConverted)) {
-      // ユーザーが固定した、または本番版で独自に育った行（触られたもの）は上書きしない。
-      dormant++;
-      continue;
-    }
 
     await prisma.learnedRule.upsert({
       where: {
@@ -148,16 +129,10 @@ export async function convertLearnedRulesToScopeRules(
     const nt = normTitle(rule.target);
     const genre = categoryName.get(rule.categoryId) ?? "カテゴリ";
 
-    // 「触られた」= autoConverted ではない（＝テスト版で独自に選んだ・AIが提案して
-    // 選んだ）既存の有効ルールが、同じ項目名・枠にあれば上書きしない。
     const existing = await prisma.checklistScopeRule.findFirst({
       where: { userId, kind, normTitle: nt, archivedAt: null },
       orderBy: { updatedAt: "desc" },
     });
-    if (existing && !existing.autoConverted) {
-      dormant++;
-      continue;
-    }
 
     const data = {
       userId,

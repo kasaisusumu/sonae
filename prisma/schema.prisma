@@ -464,6 +464,12 @@ model ListTemplate {
   name          String
   note          String?
   sourceEventId String? // どの予定のリストから作ったか（参照用）
+  // このテンプレートを予定に追加したとき、各項目の「次回の出し方」に自動で設定する範囲
+  // （null = 自動・これまで通り個別に決める）。値は ItemScope の event_only/similar/keyword
+  // のいずれか（lib/item-scope.ts の QuickScope と同じ3択）。
+  // ユーザー指摘により2026-10-19追加（「名前付きテンプレートの三択は、テンプレート自体に
+  // 設定できるようにしよう」）。
+  defaultScope  String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -606,6 +612,11 @@ model ChecklistScopeRule {
   genreKeywords    String   @default("[]")
   keywords         String   @default("[]")
   categoryIds      String   @default("[]")
+  // scope="similar" 専用（2026-10-19〜）: 事前定義語彙から選んだカテゴリ（最大5個、JSON配列）。
+  // 「似た予定」に設定したタイミングで AI が1回だけ分類して保存し、以後は再生成しない
+  // （lib/item-categories.ts）。新しい予定との一致判定はこれとのルールベース照合のみで、
+  // AI は呼ばない（lib/scope-match.ts）。
+  categories       String   @default("[]")
   signature        String?
   sourceEventId    String?
   sourceEventTitle String?

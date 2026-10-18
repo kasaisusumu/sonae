@@ -14,6 +14,7 @@ import {
   parseStrArray,
 } from "@/lib/future-messages";
 import { normTitle } from "@/lib/text-norm";
+import { inferCategoriesFromText } from "@/lib/item-categories";
 
 export interface ScopeRuleRow {
   id: string;
@@ -25,6 +26,8 @@ export interface ScopeRuleRow {
   genreKeywords: string;
   keywords: string;
   categoryIds: string;
+  /** scope="similar" 専用。事前定義語彙から選んだカテゴリ（JSON配列、最大5個）。 */
+  categories: string;
   signature: string | null;
   updatedAt: Date;
 }
@@ -64,8 +67,6 @@ export function matchScopeRule(rule: ScopeRuleRow, ctx: ScopeContext): string | 
     return null;
   }
   if (rule.scope === "similar") {
-    // 2026-10〜: 日時・長さ（featureSignature）ではなく、AI が判断した「同じ種類」
-    // （例: バスと新幹線はどちらも「移動」）で当てる。genre と同じ、言い換え語の一致判定。
     // 「似た予定」は「この名前」の拡張版という位置づけなので、項目名そのものが
     // 本文に出てくる（＝キーワード一致と同じ条件）ときも必ず当てる
     // （ユーザー指摘により2026-10-19追加。これが無いと、言い換え語が項目名の
@@ -73,6 +74,22 @@ export function matchScopeRule(rule: ScopeRuleRow, ctx: ScopeContext): string | 
     if (includesNorm(ctx.text, rule.title)) {
       return `似た予定（項目名「${rule.title}」に一致）`;
     }
+    // 2026-10-19〜: カテゴリ方式。「似た予定」に設定したタイミングで事前に決めた
+    // カテゴリ（最大5個）と、新しい予定からルールベースで推定したカテゴリを照合する
+    // （AI は呼ばない）。複数（2つ以上）重なったときだけ一致とみなす。単一の
+    // カテゴリしか重ならない場合は、たまたま広いカテゴリに触れただけの可能性が
+    // 高いため当てない。
+    const savedCategories = parseStrArray(rule.categories);
+    if (savedCategories.length > 0) {
+      const eventCategories = inferCategoriesFromText(ctx.text);
+      const overlap = savedCategories.filter((c) => eventCategories.includes(c));
+      if (overlap.length >= 2) {
+        return `似た予定（カテゴリ「${overlap.join("」「")}」が一致）`;
+      }
+      return null;
+    }
+    // カテゴリ未分類の旧データ（このカテゴリ方式の導入前に作られたルール）は、
+    // 以前の言い換え語・日時特徴の判定にフォールバックする。
     for (const g of parseGenreKeywords(rule.genreKeywords)) {
       for (const term of g.terms) {
         if (includesNorm(ctx.text, term)) {
@@ -80,8 +97,6 @@ export function matchScopeRule(rule: ScopeRuleRow, ctx: ScopeContext): string | 
         }
       }
     }
-    // 言い換え語が無い旧データ（AI 未設定時に作られたルールなど）は、
-    // 従来の日時・長さの一致にフォールバックする。
     if (rule.signature && signatureMatches(rule.signature, ctx.feature)) {
       return "似た予定（日時・長さなどの特徴が一致）";
     }

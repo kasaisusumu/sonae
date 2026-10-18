@@ -17,6 +17,7 @@ import { LeafBody, type LeafItem, type LeafSectionData } from "./leaf-body";
 import { TemplatesGroup } from "./templates-panel";
 import { DeleteCategoryButton } from "./tree-delete-button";
 import { trackEvent } from "@/lib/track";
+import { featureModeOf, isScopeRuleEnabled } from "@/lib/feature-mode";
 
 function Keywords({ words }: { words: string[] }) {
   if (words.length === 0) return null;
@@ -186,6 +187,7 @@ export default async function LearningTreePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/");
   trackEvent(user.id, "page:/savings");
+  const scopeRuleEnabled = isScopeRuleEnabled(featureModeOf(user));
 
   const [{ categories, searchIndex }, templates] = await Promise.all([
     getLearningNameTree(user.id),
@@ -262,7 +264,9 @@ export default async function LearningTreePage() {
         hasTree={categories.length > 0}
         templateCount={templates.length}
         tree={tree}
-        templates={<TemplatesGroup templates={templates} />}
+        templates={
+          <TemplatesGroup templates={templates} scopeRuleEnabled={scopeRuleEnabled} />
+        }
       />
     </div>
   );

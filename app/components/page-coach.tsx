@@ -232,7 +232,7 @@ export function PageCoach({
     };
     const anotherPopup = () =>
       !!document.querySelector(
-        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-prevent-goals]",
+        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-prevent-goals],[data-mm-desclink]",
       );
 
     const start = () => {

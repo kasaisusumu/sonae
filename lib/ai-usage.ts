@@ -46,6 +46,38 @@ export function estimateCostYen(model: string, usage: TokenUsage | null | undefi
 }
 
 /**
+ * AI利用の「操作」（recordAiUsage の feature 引数）ごとの表示名と、
+ * どちらの機能モード（lib/feature-mode.ts。本番版=ver1専用ビルド）に属するか。
+ * 管理画面の内訳表示用（ユーザー指摘により2026-10-19: 「全体でどの操作がどのくらいの
+ * 金額消費したか」「それがver1,2どっちなのかもわかるように」）。
+ * テスト版（ver2）専用の feature キーも、集計コードを共通化するためここに含めている
+ * （本番版では実際には記録されない）。新しく recordAiUsage を呼ぶ箇所を足したら、
+ * ここにも追記すること。
+ */
+export const AI_FEATURE_INFO: Record<string, { label: string; mode: "ver1" | "ver2" | "共通" }> = {
+  "checklist-generate": { label: "準備リスト生成", mode: "共通" },
+  categorize: { label: "カテゴリ分類", mode: "共通" },
+  "categorize-batch": { label: "カテゴリ分類（まとめて）", mode: "共通" },
+  "dictation-to-list": { label: "音声入力（準備リスト）", mode: "共通" },
+  "tidy-list": { label: "一括貼り付けの整形", mode: "共通" },
+  "pattern-classify-item": { label: "カテゴリ横断パターン分類（項目）", mode: "ver1" },
+  "pattern-classify-event": { label: "カテゴリ横断パターン分類（予定）", mode: "ver1" },
+  "dictation-to-failure": { label: "音声入力（失敗ログ）", mode: "ver1" },
+  "tidy-countermeasure": { label: "対策の整形", mode: "ver1" },
+  "item-scope-recommend": { label: "次回の出し方の推奨", mode: "ver2" },
+  "item-scope-categories": { label: "似た予定のカテゴリ分類", mode: "ver2" },
+  "dictation-to-message": { label: "音声入力（未来の自分へ）", mode: "ver2" },
+  "message-genre-expand": { label: "ジャンル関連語の展開", mode: "ver2" },
+  "message-proposal": { label: "振り返りメッセージ提案", mode: "ver2" },
+};
+export function aiFeatureLabel(feature: string): string {
+  return AI_FEATURE_INFO[feature]?.label ?? feature;
+}
+export function aiFeatureMode(feature: string): "ver1" | "ver2" | "共通" {
+  return AI_FEATURE_INFO[feature]?.mode ?? "共通";
+}
+
+/**
  * OpenAI 呼び出し1回ぶんの利用量を記録する（管理画面「AI利用金額」の元データ）。
  * 金額はトークン数からの概算で、実際の請求額と厳密には一致しない。
  * 集計用の副次記録のため、失敗しても本編の処理は止めない（await しない）。

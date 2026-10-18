@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { formatYen, formatDateOnly } from "@/lib/format";
 import { jstDayKey } from "@/lib/activity";
 import { requireAdminVerified } from "@/lib/require-admin";
+import { aiFeatureLabel, aiFeatureMode } from "@/lib/ai-usage";
+import { UsageTimeGrid, type UsageGridRow } from "./usage-time-grid";
 import {
   PAGE_KEYS,
   FEATURE_KEYS,
@@ -304,6 +306,7 @@ export default async function AdminPage({
         model: true,
         inputTokens: true,
         outputTokens: true,
+        feature: true,
       },
     }),
   ]);
@@ -395,6 +398,61 @@ export default async function AdminPage({
     b.utcDay.localeCompare(a.utcDay) || a.model.localeCompare(b.model),
   );
 
+  // AI利用金額: 利用者×日（JST）ごとの金額＋内訳（操作・時刻ごと）。
+  // 利用時間カレンダーのマスに金額も出し、タップで内訳を見られるようにする
+  // （ユーザー指摘により2026-10-19）。
+  type AiCostDetail = { at: string; label: string; model: string; costYen: number };
+  const aiCostByUserDay = new Map<string, Map<string, number>>();
+  const aiDetailByUserDay = new Map<string, Map<string, AiCostDetail[]>>();
+  for (const e of aiUsageEvents) {
+    const dk = jstDayKey(e.createdAt);
+    let costMap = aiCostByUserDay.get(e.userId);
+    if (!costMap) {
+      costMap = new Map();
+      aiCostByUserDay.set(e.userId, costMap);
+    }
+    costMap.set(dk, (costMap.get(dk) ?? 0) + e.estimatedCostYen);
+
+    let detailMap = aiDetailByUserDay.get(e.userId);
+    if (!detailMap) {
+      detailMap = new Map();
+      aiDetailByUserDay.set(e.userId, detailMap);
+    }
+    const arr = detailMap.get(dk) ?? [];
+    arr.push({
+      at: fmtDateTime(e.createdAt),
+      label: aiFeatureLabel(e.feature),
+      model: e.model,
+      costYen: e.estimatedCostYen,
+    });
+    detailMap.set(dk, arr);
+  }
+
+  // AI利用金額: 全体で「どの操作」がどのくらい消費したか（ver1/ver2の別つき）。
+  type AiFeatureCostRow = {
+    feature: string;
+    label: string;
+    mode: "ver1" | "ver2" | "共通";
+    requests: number;
+    costYen: number;
+  };
+  const aiCostByFeature = new Map<string, AiFeatureCostRow>();
+  for (const e of aiUsageEvents) {
+    const cur = aiCostByFeature.get(e.feature) ?? {
+      feature: e.feature,
+      label: aiFeatureLabel(e.feature),
+      mode: aiFeatureMode(e.feature),
+      requests: 0,
+      costYen: 0,
+    };
+    cur.requests += 1;
+    cur.costYen += e.estimatedCostYen;
+    aiCostByFeature.set(e.feature, cur);
+  }
+  const aiCostByFeatureRows = [...aiCostByFeature.values()].sort(
+    (a, b) => b.costYen - a.costYen,
+  );
+
   // AI利用金額: 「現在の推定合計」= OpenAI実績（data/ai-cost-snapshot.jsonのスナップショット、
   // 全環境・asOfUtc時点まで）＋ それ以降にこの環境で記録された分の概算。
   // スナップショットは scripts/reconcile-ai-usage.mjs --write-snapshot で、OpenAIのCost CSVを
@@ -444,6 +502,8 @@ export default async function AdminPage({
       wtpYen:
         feedbackByUser.get(u.id)?.find((f) => f.wtpYen !== null)?.wtpYen ?? null,
       byDay: days.map((d) => byDay?.get(d.key) ?? 0),
+      costByDay: days.map((d) => aiCostByUserDay.get(u.id)?.get(d.key) ?? 0),
+      detailByDay: days.map((d) => aiDetailByUserDay.get(u.id)?.get(d.key) ?? []),
       syncBroken: !!u.googleAccount?.syncError,
       syncErrorAt: u.googleAccount?.syncErrorAt ?? null,
       aiCostYen: aiCostByUser.get(u.id) ?? 0,
@@ -554,6 +614,7 @@ export default async function AdminPage({
     { href: "#summary", label: "全体サマリー" },
     { href: "#users", label: "利用者別アナリティクス" },
     { href: "#ai-cost", label: "AI利用金額" },
+    { href: "#ai-by-feature", label: "AI利用金額（操作別）" },
     { href: "#daily", label: "日別の利用時間" },
     { href: "#ranking", label: "利用状況ランキング" },
     { href: "#feedback", label: "フィードバック" },
@@ -877,56 +938,64 @@ export default async function AdminPage({
         </section>
       )}
 
-      {/* ── 利用者別・日付別の利用時間 ── */}
-      <section id="daily" className="space-y-3">
-        <h2 className="text-sm font-semibold">
-          利用者別・日付別の利用時間（直近{DAYS_SHOWN}日）
-        </h2>
+      {/* ── 利用者別・日付別の利用時間（AI利用金額つき・タップで内訳） ── */}
+      <UsageTimeGrid
+        id="daily"
+        days={days}
+        todayKey={todayKey}
+        rows={rows as UsageGridRow[]}
+      />
+
+      {/* ── AI利用金額: 全体でどの操作がどのくらい消費したか（ver1/ver2の別つき） ── */}
+      <section id="ai-by-feature" className="space-y-3">
+        <h2 className="text-sm font-semibold">AI利用金額（操作別・全利用者合計）</h2>
         <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
-          <table className="w-full text-left text-[11px]">
+          <table className="w-full text-left text-xs">
             <thead className="border-b border-border bg-surface-muted text-muted">
               <tr>
-                <th className="sticky left-0 whitespace-nowrap bg-surface-muted px-3 py-2 font-medium">
-                  利用者
+                <th className="whitespace-nowrap px-3 py-2 font-medium">操作</th>
+                <th className="whitespace-nowrap px-3 py-2 text-center font-medium">
+                  モード
                 </th>
-                {days.map((d) => (
-                  <th
-                    key={d.key}
-                    className={`whitespace-nowrap px-2 py-2 text-center font-medium ${
-                      d.key === todayKey ? "text-teal-dark" : ""
-                    }`}
-                  >
-                    {d.label}
-                  </th>
-                ))}
                 <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
-                  累計
+                  回数
+                </th>
+                <th className="whitespace-nowrap px-3 py-2 text-right font-medium">
+                  金額（概算）
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="sticky left-0 whitespace-nowrap bg-surface px-3 py-2 font-medium text-foreground">
-                    {r.name || r.email}
+              {aiCostByFeatureRows.map((f) => (
+                <tr key={f.feature}>
+                  <td className="whitespace-nowrap px-3 py-2 text-foreground">
+                    {f.label}
                   </td>
-                  {r.byDay.map((min, i) => (
-                    <td
-                      key={days[i].key}
-                      className="whitespace-nowrap px-2 py-2 text-center tabular-nums text-muted"
+                  <td className="whitespace-nowrap px-3 py-2 text-center">
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                        f.mode === "ver1"
+                          ? "bg-surface-muted text-foreground"
+                          : f.mode === "ver2"
+                            ? "border border-border text-muted"
+                            : "text-muted"
+                      }`}
                     >
-                      {min > 0 ? formatMinutes(min) : "・"}
-                    </td>
-                  ))}
+                      {f.mode}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                    {f.requests}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2 text-right font-medium tabular-nums">
-                    {formatMinutes(r.totalMinutes)}
+                    {formatYenApprox(f.costYen)}
                   </td>
                 </tr>
               ))}
-              {rows.length === 0 && (
+              {aiCostByFeatureRows.length === 0 && (
                 <tr>
-                  <td colSpan={DAYS_SHOWN + 2} className="px-3 py-6 text-center text-muted">
-                    まだユーザーがいません。
+                  <td colSpan={4} className="px-3 py-6 text-center text-muted">
+                    まだ記録がありません。
                   </td>
                 </tr>
               )}

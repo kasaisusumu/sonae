@@ -9,6 +9,10 @@ import { dismissDescLinkHint, trackFeatureUse } from "@/app/actions";
  * （他のポップアップのような「1回だけ」ではない。ユーザーからの明示指定）。
  * 表示するかどうか（＝ src=cal で来たか・既に「今後表示しない」済みか）は
  * サーバー側（app/events/[id]/page.tsx）で判定し、show で渡す。
+ * data-mm-desclink: 他のポップアップ（PageCoach 等）が開いている間はこれを待つ、
+ * という既存の仕組み（data-mm-tutorial 等）と同じ目印。これが無いと、このポップアップを
+ * 「今後表示しない」にチェックせず閉じたときに、裏で待っていた別の案内ポップアップが
+ * 続けて毎回出てしまっていた（ユーザー指摘により2026-10-19追加）。
  */
 export function DescLinkHint({ show }: { show: boolean }) {
   const [open, setOpen] = useState(show);
@@ -29,6 +33,7 @@ export function DescLinkHint({ show }: { show: boolean }) {
 
   return (
     <div
+      data-mm-desclink
       className="fixed inset-0 z-[58] flex items-center justify-center bg-black/45 p-4"
       onClick={close}
     >

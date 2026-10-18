@@ -12,6 +12,7 @@ import { GettingStarted } from "@/app/components/getting-started";
 import { Landing } from "@/app/components/landing";
 import { NotifyOffBanner } from "@/app/components/notify-off-banner";
 import { SavingsDashboard } from "@/app/components/savings-dashboard";
+import { GrowthDashboard } from "@/app/components/growth-dashboard";
 
 export const maxDuration = 60;
 
@@ -140,15 +141,22 @@ export default async function HomePage({
           )}
         </>
       ) : (
-        pendingReviews.length > 0 && (
-          <Link
-            href="/failures#review"
-            data-coach="message-review-nudge"
-            className="block rounded-2xl border border-teal/30 bg-teal-soft px-4 py-3 text-sm text-teal-dark no-underline hover:opacity-90"
-          >
-            💌 未来の自分へのメッセージ、{pendingReviews.length}件の確定待ちがあります
-          </Link>
-        )
+        <>
+          {/* ── このページの主役（テスト版）: そなえさんの成長 ── */}
+          <div data-coach="growth">
+            <GrowthDashboard userId={user.id} />
+          </div>
+
+          {pendingReviews.length > 0 && (
+            <Link
+              href="/failures#review"
+              data-coach="message-review-nudge"
+              className="block rounded-2xl border border-teal/30 bg-teal-soft px-4 py-3 text-sm text-teal-dark no-underline hover:opacity-90"
+            >
+              💌 未来の自分へのメッセージ、{pendingReviews.length}件の確定待ちがあります
+            </Link>
+          )}
+        </>
       )}
 
       {/* 使い方は一番下に、たたんで置く */}

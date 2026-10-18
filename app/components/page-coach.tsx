@@ -88,7 +88,7 @@ const TOURS: Tour[] = [
       },
       {
         sel: '[data-coach="future-message"]',
-        title: "💌 未来の自分へ",
+        title: "💌 過去の自分よりメッセージ",
         body: "いつか思い出したいことを書いておくと、次に似た予定が入ったときに知らせます。",
       },
     ],

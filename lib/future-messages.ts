@@ -442,84 +442,16 @@ async function notifyNewLinks(userId: string, links: NewLink[]): Promise<void> {
   );
 }
 
-/** AI（ジャンル／似た予定）の判定。安価な判定で当たらなかった候補だけに絞って1回で聞く。 */
-async function aiJudgeMessages(
-  event: EventForMatch,
-  candidates: FutureMessageRow[],
-): Promise<Map<string, { matchedBy: MatchedBy; matchReason: string }>> {
-  const out = new Map<string, { matchedBy: MatchedBy; matchReason: string }>();
-  if (candidates.length === 0 || !process.env.OPENAI_API_KEY) return out;
-
-  const list = candidates.slice(0, 8).map((m, i) => ({
-    idx: i,
-    genres: m.genres,
-    scope: m.scope,
-    contextSummary: m.contextSummary,
-    sourceEventTitle: m.sourceEventTitle,
-  }));
-  const system = `あなたは、予定のタイトルが「未来の自分へのメッセージ」の対象になるか
-判定するアシスタントです。各候補は次のどちらかの根拠を持ちます:
-- genres（ジャンル）: 予定がそのジャンルに当てはまるか
-- scope="similar" の場合、contextSummary/sourceEventTitle と同じ種類の予定か
-確信が持てるものだけ true にしてください（迷ったら false）。
-出力は必ず次の JSON のみ:
-{"matches":[{"idx":0,"match":true,"reason":"短い日本語の理由"}, ...]}
-（該当しない候補は matches に含めなくてよい）`;
-  try {
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      timeout: 12000,
-      maxRetries: 0,
-    });
-    const completion = await client.chat.completions.create({
-      model: MODEL,
-      temperature: 0,
-      max_tokens: 400,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        {
-          role: "user",
-          content: `予定タイトル: ${event.title}\n候補:\n${JSON.stringify(list)}`,
-        },
-      ],
-    });
-    recordAiUsage(event.userId, "message-ai-judge", MODEL, completion.usage);
-    const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
-      matches?: { idx?: unknown; match?: unknown; reason?: unknown }[];
-    };
-    for (const m of raw.matches ?? []) {
-      const idx = typeof m.idx === "number" ? m.idx : -1;
-      if (m.match !== true || idx < 0 || idx >= candidates.length) continue;
-      const cand = candidates[idx];
-      const byGenre = cand.genres.length > 0;
-      const reason =
-        typeof m.reason === "string" && m.reason.trim()
-          ? m.reason.trim().slice(0, 80)
-          : byGenre
-            ? `AIがジャンル「${cand.genres[0]}」に一致すると判断`
-            : "AIが似た予定と判断";
-      out.set(cand.id, {
-        matchedBy: byGenre ? "genre_ai" : "similar_ai",
-        matchReason: reason,
-      });
-    }
-  } catch (e) {
-    console.error("[future-messages] aiJudgeMessages 失敗", e);
-  }
-  return out;
-}
-
 /**
  * 予定 1 件に対して、未来の自分へのメッセージを一致判定して結びつける（冪等）。
- * - キーワード／ジャンル関連語／カテゴリは毎回試す（安価）。
- * - AI（ジャンル・似た予定）は `allowAi` かつ `futureMessageCheckedAt` が未設定の
- *   ときだけ、候補を絞って 1 回だけ試す（同じ予定で何度も呼び直さない）。
+ * キーワード／展開済みジャンル関連語／カテゴリの一致（cheapMatch）だけで決める
+ * （2026-10-19〜。以前はこれで当たらなかった候補をAIに再判定させていたが廃止した。
+ * 「完全にキーワード一致だけにする」というユーザー指摘による）。
  * 新しく結びついたメッセージ数を返す。
  */
 export async function ensureFutureMessageMatchesForEvent(
   eventId: string,
-  opts: { allowAi?: boolean; notify?: boolean } = {},
+  opts: { notify?: boolean } = {},
 ): Promise<number> {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
@@ -561,23 +493,10 @@ export async function ensureFutureMessageMatchesForEvent(
     }
   }
 
-  if (opts.allowAi && !event.futureMessageCheckedAt && stillNoMatch.length > 0) {
-    // AI 候補は「scope=similar」、または「scope=keyword 以外でジャンル指定あり」のものだけに
-    // 絞る（事前フィルタ。それ以外は AI に聞くまでもない）。scope="keyword"（既定、
-    // スキーマ上「キーワード一致のみ」と明記）は、ジャンルを添えていても cheapMatch
-    // （キーワード・展開済みジャンル関連語・カテゴリ）で決着し、AI には回さない
-    // （以前は genres があるだけで scope を見ずに AI へ回っていた無駄打ちを修正）。
-    const candidates = stillNoMatch.filter(
-      (m) => m.scope === "similar" || (m.scope !== "keyword" && m.genres.length > 0),
-    );
-    if (candidates.length > 0) {
-      const judged = await aiJudgeMessages(event, candidates);
-      for (const [messageId, hit] of judged) {
-        const m = candidates.find((c) => c.id === messageId);
-        const link = await upsertLink(event, messageId, hit.matchedBy, hit.matchReason, m?.genres ?? []);
-        if (link) newLinks.push(link);
-      }
-    }
+  // 未来の自分へのメッセージの一致判定は、完全にキーワード（cheapMatch:
+  // キーワード・展開済みジャンル関連語・カテゴリ）だけで決める（ユーザー指摘により
+  // 2026-10-19、AIでの再判定は廃止）。stillNoMatch はそのまま「一致しない」扱い。
+  if (!event.futureMessageCheckedAt) {
     await prisma.event.update({
       where: { id: event.id },
       data: { futureMessageCheckedAt: new Date() },

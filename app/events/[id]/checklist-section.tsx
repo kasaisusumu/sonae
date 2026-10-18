@@ -45,7 +45,6 @@ import { ListReminderControl } from "./list-reminder-control";
 import { AddSectionButton } from "./section-manager";
 import { SectionList, type SectionEntry } from "./section-list";
 import { DictationInput } from "./dictation-input";
-import { AiSortButton } from "./ai-sort-button";
 import { FailureDictationInput } from "@/app/failures/failure-dictation-input";
 import { SubmitButton } from "@/app/components/submit-button";
 
@@ -186,7 +185,7 @@ export async function ChecklistSection({
     if (isProd) {
       await ensureSuggestedFailures(event.id, event.userId);
     } else {
-      await ensureFutureMessageMatchesForEvent(event.id, { allowAi: true });
+      await ensureFutureMessageMatchesForEvent(event.id);
     }
   }
 
@@ -477,7 +476,6 @@ export async function ChecklistSection({
             )}
           />
           <DictationInput eventId={event.id} />
-          {!isProd && <AiSortButton eventId={event.id} />}
         </div>
 
         {needsManualGenerate && (

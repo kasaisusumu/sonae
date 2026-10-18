@@ -75,20 +75,27 @@ export async function syncEventDescription(eventId: string): Promise<void> {
 
   // src=cal: 説明欄のこのリンクから開いたときだけ、直接編集の説明ポップアップを出す。
   const url = `${appBaseUrl()}/events/${eventId}?src=cal`;
-  const description = composeDescription(
-    event.memo,
-    url,
-    event.checklistItems.map((c) => ({
-      kind: c.kind,
-      title: c.title,
-      notifyLeadMinutes: c.notifyLeadMinutes,
-      isDone: c.isDone,
-      comment: c.comment,
-    })),
-    { unreviewed, sections, futureMessages, failures },
-  );
+  const items = event.checklistItems.map((c) => ({
+    kind: c.kind,
+    title: c.title,
+    notifyLeadMinutes: c.notifyLeadMinutes,
+    isDone: c.isDone,
+    comment: c.comment,
+  }));
+  const blockOpts = { unreviewed, sections, futureMessages, failures };
+
+  // 実際の内容（最終更新時刻を除く）が前回と同じなら書き込まない。
+  // ※ 最終更新時刻を含めたまま比較すると、呼ぶたびに値が変わって
+  //   毎回「内容が変わった」と判定され、無限に書き込みが発生してしまう。
+  const contentOnly = composeDescription(event.memo, url, items, blockOpts);
+  const contentHash = hashDescription(contentOnly);
+  if (contentHash === event.lastWrittenContentHash) return;
+
+  const description = composeDescription(event.memo, url, items, {
+    ...blockOpts,
+    updatedAt: new Date(),
+  });
   const hash = hashDescription(description);
-  if (hash === event.lastWrittenHash) return;
 
   const ok = await writeEventDescription(
     event.userId,
@@ -101,6 +108,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
     where: { id: eventId },
     data: {
       lastWrittenHash: hash,
+      lastWrittenContentHash: contentHash,
       // 自分の書き込みは「取り込み済み」扱いにして、次のポーリングで拾い直さない
       lastInboundHash: hash,
       // ローカル memo は「そなえブロック」を除いた元メモに正規化しておく

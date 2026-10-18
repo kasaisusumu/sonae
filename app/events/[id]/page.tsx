@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
@@ -43,7 +43,9 @@ export default async function EventDetailPage({
       orderBy: { createdAt: "asc" },
     }),
   ]);
-  if (!event) notFound();
+  // 見つからない＝存在しない or 他人の予定。どちらも理由を区別せず、
+  // 自分の予定一覧へ送る（他人のリンクを踏んでも何も見えない・404でもない）。
+  if (!event) redirect("/events");
 
   // 説明欄のリンク（?src=cal）から来たときだけ、直接編集の案内を出す。
   // 「今後表示しない」が押されるまでは、毎回このリンクで来るたびに表示する。

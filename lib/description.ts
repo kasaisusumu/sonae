@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { formatLead, parseLead } from "@/lib/lead-time";
 import { sectionKeyFromLabel, sectionLabel } from "@/lib/sections";
 import { APP_NAME } from "@/lib/app-info";
+import { JST } from "@/lib/format";
 
 const START = `--- ${APP_NAME} ---`;
 // 旧マーカー（互換のため、除去・パース対象に含める）。
@@ -116,6 +117,25 @@ export interface BuildBlockOpts {
   futureMessages?: { body: string; isDone: boolean }[];
   /** 失敗の予想／結果（本番版）。中身のある枠だけ書き出す（無ければ見出しごと出さない）。 */
   failures?: DescFailureSections;
+  /**
+   * 最終更新時刻。指定すると START の直下に「最終更新: …」を書く。
+   * 省略時はその行自体を出さない（＝実際に書き込む内容が変わっていないかを
+   * ハッシュ比較するときは渡さない。渡すと比較のたびに値が変わって無限に
+   * 書き込みが発生してしまうため）。
+   */
+  updatedAt?: Date | null;
+}
+
+/** 「最終更新: …」行（JST）。 */
+function formatUpdatedAt(d: Date): string {
+  return d.toLocaleString("ja-JP", {
+    timeZone: JST,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 /**
@@ -125,6 +145,10 @@ export interface BuildBlockOpts {
  * その情報セクションを誤って準備リストの項目として読み込んでしまわないように）。
  */
 export const INFO_HEADINGS = new Set([
+  // 「過去の自分よりメッセージ」が現行の見出し（2026-10-19〜）。「未来の自分へ」は
+  // それ以前に書き込んだ説明欄に残っている旧見出し（後方互換のため、逆パースでは
+  // 両方を情報セクションとして認識し続ける）。
+  "過去の自分よりメッセージ",
   "未来の自分へ",
   "予想される失敗",
   "回避した失敗",
@@ -132,14 +156,14 @@ export const INFO_HEADINGS = new Set([
 ]);
 
 /**
- * 「未来の自分へ」セクションを行配列にする。中身が無ければ出さない。
+ * 「過去の自分よりメッセージ」セクションを行配列にする。中身が無ければ出さない。
  * 完了は準備リストの項目と同じ `CHECK_DONE`=☑、未完了は `CHECK_TODO`=・で示す。
  */
 function futureMessageLines(
   messages: { body: string; isDone: boolean }[] | undefined,
 ): string[] {
   if (!messages || messages.length === 0) return [];
-  const out = ["", "【未来の自分へ】"];
+  const out = ["", "【過去の自分よりメッセージ】"];
   for (const m of messages) {
     out.push(`${m.isDone ? CHECK_DONE : CHECK_TODO} ${oneLine(m.body)}`);
   }
@@ -192,7 +216,9 @@ export function buildSonaeBlock(
         ]
   ).filter((k) => !k.startsWith("@")); // "@faillog" 等の特別キーは説明欄に出さない
 
-  const lines = [START, `準備リスト: ${url}`];
+  const lines = [START];
+  if (opts.updatedAt) lines.push(`最終更新: ${formatUpdatedAt(opts.updatedAt)}`);
+  lines.push(`準備リスト: ${url}`);
   if (opts.unreviewed) lines.push("", UNREVIEWED_NOTE);
 
   // リンクの下・準備リストの前に「未来の自分へ」（テスト版）または失敗の予想／結果（本番版）。
@@ -297,7 +323,12 @@ export function parseSonaeBlock(desc: string | null | undefined): {
     if (skipInfo) continue;
     // 「未確認」注記行は取り込み対象外
     if (/^※/.test(line)) continue;
-    if (/^準備リスト\s*[:：]/.test(line) || /^https?:\/\//.test(line)) continue;
+    if (
+      /^準備リスト\s*[:：]/.test(line) ||
+      /^最終更新\s*[:：]/.test(line) ||
+      /^https?:\/\//.test(line)
+    )
+      continue;
 
     // 行頭が記号（チェックボックス・箇条書き・番号）、または末尾が「（…）」＝タイミング付き項目
     const startsAsItem =

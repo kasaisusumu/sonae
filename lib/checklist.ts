@@ -287,7 +287,8 @@ export async function propagateListToNameGroup(
     where: {
       userId: src.userId,
       id: { not: sourceEventId },
-      title: src.title,
+      // 大文字小文字の違いは区別しない（ユーザー指摘により2026-10-19）
+      title: { equals: src.title, mode: "insensitive" },
       listCustomized: false,
     },
     select: { id: true },
@@ -324,7 +325,7 @@ export async function resolveNameGroupOnEdit(
     where: {
       userId: me.userId,
       id: { not: eventId },
-      title: me.title,
+      title: { equals: me.title, mode: "insensitive" },
       listCustomized: false,
       editRecords: { some: {} },
     },
@@ -498,7 +499,7 @@ async function findNameGroupTwinWithList(
     where: {
       userId: me.userId,
       id: { not: eventId },
-      title: me.title,
+      title: { equals: me.title, mode: "insensitive" },
       listCustomized: false,
       checklistItems: { some: { isSuggested: false } },
     },

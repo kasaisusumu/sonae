@@ -221,13 +221,20 @@ export function Tutorial({
     return () => window.removeEventListener(EVENT, show);
   }, [tutorialDone, waitForPreventGoals]);
 
-  function finish(skipped: boolean) {
+  async function finish(skipped: boolean) {
     try {
       localStorage.setItem(KEY, "done");
     } catch {
       /* ignore */
     }
-    void markTutorialSeen();
+    // サーバー側の完了記録を待ってから閉じる（以前はfire-and-forgetで、閉じた直後に
+    // 画面遷移すると書き込みが間に合わず、サーバー側は未完了のまま＝次回また最初から
+    // 出てしまうことがあった。ユーザー指摘により2026-10-19修正）。
+    try {
+      await markTutorialSeen();
+    } catch {
+      /* ignore（次回また出るだけで、閉じる動作自体は止めない） */
+    }
     void trackFeatureUse(`popup:tutorial:${skipped ? "skip" : "complete"}`);
     setOpen(false);
   }

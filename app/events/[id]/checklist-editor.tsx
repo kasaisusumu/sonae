@@ -147,6 +147,22 @@ export function ChecklistEditor({
 
   const [items, setItems] = useState<Item[]>(initial);
 
+  // 改行で次の項目（次の枠ではない）に自動で移る（ユーザー指摘により2026-10-19追加）。
+  // 末尾で改行したときは新しい空欄行を足して、そちらにフォーカスする。
+  const titleRefs = useRef(new Map<string, HTMLTextAreaElement>());
+  const [focusKey, setFocusKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusKey) return;
+    const el = titleRefs.current.get(focusKey);
+    if (el) {
+      el.focus();
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    }
+    // エフェクト内の同期setStateを避ける（react-hooks/set-state-in-effect）。
+    queueMicrotask(() => setFocusKey(null));
+  }, [focusKey, items]);
+
   // 表示順は「このページを開いた時点の並び（未チェックが上・チェック済みが下）」で固定する。
   // ページ内でチェックを付け外ししても順番は動かさない（誤タップをすぐ戻せる）。
   // 次にこのページを開くと再ソートされる。カレンダー説明欄はトグルで即並べ替え。
@@ -414,12 +430,13 @@ export function ChecklistEditor({
     });
   }
 
-  function add() {
+  function add(): string {
     void trackFeatureUse("feature:add-item");
+    const key = nextKey();
     setItems((prev) => [
       ...prev,
       {
-        key: nextKey(),
+        key,
         id: null,
         title: "",
         comment: "",
@@ -432,6 +449,7 @@ export function ChecklistEditor({
       },
     ]);
     setSaved(false);
+    return key;
   }
 
   function bulkAdd() {
@@ -512,7 +530,10 @@ export function ChecklistEditor({
 
   /** 画面に出す範囲（選び直した直後の一時の値を優先）。範囲の指定が無い項目は「自動」。 */
   function shownScope(it: Item): ItemScope {
-    return scopeOverride[it.key] ?? ((it.scope?.scope as ItemScope) || "auto");
+    // まだ何も決まっていない項目の初期表示は「似た予定」にする（ユーザー指摘により
+    // 2026-10-19。変更すればその選択がそのまま保存される。実際にAIを呼ぶ判定自体の
+    // 既定値は変えていない＝無駄なAI呼び出しが増えないようにするため）。
+    return scopeOverride[it.key] ?? ((it.scope?.scope as ItemScope) || "similar");
   }
   function shownStatus(it: Item): "chosen" | "proposed" {
     if (scopeOverride[it.key]) return "chosen";
@@ -722,8 +743,23 @@ export function ChecklistEditor({
                 />
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <textarea
+                    ref={(el) => {
+                      if (el) titleRefs.current.set(it.key, el);
+                      else titleRefs.current.delete(it.key);
+                    }}
                     value={it.title}
                     onChange={(e) => update(it.key, { title: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" || e.shiftKey) return;
+                      e.preventDefault();
+                      const idx = items.findIndex((x) => x.key === it.key);
+                      const next = items[idx + 1];
+                      if (next) {
+                        setFocusKey(next.key);
+                      } else {
+                        setFocusKey(add());
+                      }
+                    }}
                     rows={1}
                     placeholder={`${kindLabel}を書く`}
                     className={`block w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg leading-snug [field-sizing:content] hover:border-border focus:border-border focus:bg-background ${

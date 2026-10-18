@@ -166,6 +166,10 @@ model Event {
   notifiedAt    DateTime?
   // そなえが最後に説明欄へ書き込んだ内容のハッシュ（無限ループ／再書き込み防止）
   lastWrittenHash String?
+  // 上と同じ内容だが「最終更新: …」行を除いたハッシュ。実質的な内容が変わった
+  // かどうかだけを見るための比較用（これが無いと、更新時刻を含めて比較してしまい、
+  // 毎回「変わった」と判定されて書き込みが無限に発生してしまう）。
+  lastWrittenContentHash String?
   // 直近に取り込んだ「受信テキスト」のハッシュ（webhook と cron の二重取り込み・二重学習を防ぐ）
   lastInboundHash String?
   // （旧）クールダウン用。現在は未使用

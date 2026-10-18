@@ -66,6 +66,13 @@ export function matchScopeRule(rule: ScopeRuleRow, ctx: ScopeContext): string | 
   if (rule.scope === "similar") {
     // 2026-10〜: 日時・長さ（featureSignature）ではなく、AI が判断した「同じ種類」
     // （例: バスと新幹線はどちらも「移動」）で当てる。genre と同じ、言い換え語の一致判定。
+    // 「似た予定」は「この名前」の拡張版という位置づけなので、項目名そのものが
+    // 本文に出てくる（＝キーワード一致と同じ条件）ときも必ず当てる
+    // （ユーザー指摘により2026-10-19追加。これが無いと、言い換え語が項目名の
+    // 直接一致より狭くなり、同じ名前がそのまま来たときに外れることがあった）。
+    if (includesNorm(ctx.text, rule.title)) {
+      return `似た予定（項目名「${rule.title}」に一致）`;
+    }
     for (const g of parseGenreKeywords(rule.genreKeywords)) {
       for (const term of g.terms) {
         if (includesNorm(ctx.text, term)) {

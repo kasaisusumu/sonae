@@ -66,7 +66,6 @@ import {
   proposeScopesForSave,
   setItemScope,
   setItemKeywordScope,
-  recommendScopesForAllItems,
   type ItemScope,
   ITEM_SCOPES,
 } from "@/lib/item-scope";
@@ -285,8 +284,8 @@ export async function updateEventCategory(formData: FormData): Promise<void> {
   const event = await prisma.event.findFirst({ where: { id: eventId, userId } });
   if (!event) return;
 
-  const existed = await prisma.category.findUnique({
-    where: { userId_name: { userId, name: categoryName } },
+  const existed = await prisma.category.findFirst({
+    where: { userId, name: { equals: categoryName, mode: "insensitive" } },
     select: { id: true },
   });
   const category = await getOrCreateCategory(userId, categoryName);
@@ -427,7 +426,7 @@ export async function generateChecklistForEvent(
   if (isFailureLogEnabled(mode)) {
     await ensureSuggestedFailures(eventId, userId).catch(() => {});
   } else {
-    await ensureFutureMessageMatchesForEvent(eventId, { allowAi: true }).catch(() => {});
+    await ensureFutureMessageMatchesForEvent(eventId).catch(() => {});
   }
   await markAutoManaged(eventId);
   revalidateAppViews(eventId);
@@ -600,12 +599,16 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   const prev = event.checklistItems.filter(
     (c) => !c.isSuggested && c.kind === kind,
   );
-  const prevByTitle = new Map(prev.map((c) => [c.title.trim(), c]));
-  const nextTitles = new Set(cleanItems.map((it) => it.title));
+  // タイトルの一致判定は大文字小文字を区別しない normTitle で行う（ユーザー指摘により
+  // 2026-10-19）。キーは normTitle、値には元の表示名（大文字小文字そのまま）を保つ。
+  const prevByNorm = new Map(prev.map((c) => [normTitle(c.title), c]));
+  const nextNormSet = new Set(cleanItems.map((it) => normTitle(it.title)));
 
-  const removed = [...prevByTitle.keys()].filter((t) => !nextTitles.has(t));
+  const removed = [...prevByNorm.entries()]
+    .filter(([norm]) => !nextNormSet.has(norm))
+    .map(([, c]) => c.title);
   const added: GeneratedItem[] = cleanItems
-    .filter((it) => it.isUserAdded || !prevByTitle.has(it.title))
+    .filter((it) => it.isUserAdded || !prevByNorm.has(normTitle(it.title)))
     .map((it) => ({
       title: it.title,
       timingLabel: null,
@@ -613,7 +616,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     }));
   const renotified: { title: string; leadMinutes: number | null }[] = [];
   for (const it of cleanItems) {
-    const p = prevByTitle.get(it.title);
+    const p = prevByNorm.get(normTitle(it.title));
     // 通知リード時間の変更、または通知付きで新規追加 → 内容とセットで学習
     const prevLead = p ? (p.notifyLeadMinutes ?? null) : null;
     if (
@@ -629,8 +632,8 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
   // 「元のリスト名（編集済み）」に変える（ユーザー指示）。組み込みの2枠は対象外。
   // `added` は isUserAdded な行を毎回含む（学習用）ので、ここではタイトル集合だけで
   // 厳密に「本当に新しいタイトルか」を見る。
-  const genuinelyNewTitleCount = [...nextTitles].filter(
-    (t) => !prevByTitle.has(t),
+  const genuinelyNewTitleCount = [...nextNormSet].filter(
+    (n) => !prevByNorm.has(n),
   ).length;
   const titleSetChanged = removed.length > 0 || genuinelyNewTitleCount > 0;
   let effectiveKind = kind;
@@ -678,7 +681,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     ops.push(
       prisma.checklistItem.createMany({
         data: cleanItems.map((it, i) => {
-          const p = prevByTitle.get(it.title);
+          const p = prevByNorm.get(normTitle(it.title));
           const leadUnchanged =
             p && (p.notifyLeadMinutes ?? null) === it.notifyLeadMinutes;
           return {
@@ -847,7 +850,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
       (c) => c.suggestionType === "pattern_analogy" && c.suggestionRuleId,
     );
     for (const c of patternPrev) {
-      const kept = nextTitles.has(c.title.trim());
+      const kept = nextNormSet.has(normTitle(c.title));
       await prisma.learnedRule
         .update({
           where: { id: c.suggestionRuleId! },
@@ -1480,50 +1483,6 @@ export async function setItemScopeAction(input: {
 }
 
 /**
- * 予定詳細の「🤖AIで分別」ボタン。その予定の準備リストの中身**全部**を一括で AI に
- * 分別してもらう（項目ひとつずつのボタンではない。押した予定単位で全項目を処理する）。
- */
-export async function recommendAllItemScopesAction(input: {
-  eventId: string;
-}): Promise<{ ok: boolean; count: number }> {
-  const userId = await requireUserId();
-  if (!isScopeRuleEnabled(await getFeatureMode(userId))) return { ok: false, count: 0 };
-
-  const event = await prisma.event.findFirst({
-    where: { id: input.eventId, userId },
-    include: { category: { select: { name: true } } },
-  });
-  if (!event) return { ok: false, count: 0 };
-
-  const items = await prisma.checklistItem.findMany({
-    where: { eventId: event.id, isSuggested: false },
-    select: { kind: true, title: true },
-  });
-  if (items.length === 0) return { ok: true, count: 0 };
-
-  trackEvent(userId, "feature:item-scope-ai-sort-all");
-  const count = await recommendScopesForAllItems({
-    scope: {
-      userId,
-      eventId: event.id,
-      eventTitle: event.title,
-      eventMemo: event.memo,
-      categoryId: event.categoryId,
-      categoryName: event.category?.name ?? "その他",
-      feature: extractEventFeature({
-        title: event.title,
-        memo: event.memo,
-        eventDatetime: event.eventDatetime,
-        endDatetime: event.endDatetime,
-      }),
-    },
-    items: items.map((i) => ({ kind: i.kind, title: i.title })),
-  });
-  revalidateAppViews(event.id);
-  return { ok: true, count };
-}
-
-/**
  * 準備リストの項目の範囲を「キーワード」にする（詳細を開いたときの、文章形式の任意オプション）。
  * 空文字で呼ぶと「今回のみ」に戻す（KeywordSentenceField の onClear）。
  */
@@ -1774,11 +1733,18 @@ export async function saveListAsTemplate(formData: FormData): Promise<void> {
     sortOrder: i,
   }));
 
-  const template = await prisma.listTemplate.upsert({
-    where: { userId_kind_name: { userId, kind, name } },
-    update: { sourceEventId: eventId, items: { deleteMany: {}, create } },
-    create: { userId, kind, name, sourceEventId: eventId, items: { create } },
+  // 名前の大文字小文字は区別しない（ユーザー指摘により2026-10-19）。
+  const existingTpl = await prisma.listTemplate.findFirst({
+    where: { userId, kind, name: { equals: name, mode: "insensitive" } },
   });
+  const template = existingTpl
+    ? await prisma.listTemplate.update({
+        where: { id: existingTpl.id },
+        data: { sourceEventId: eventId, items: { deleteMany: {}, create } },
+      })
+    : await prisma.listTemplate.create({
+        data: { userId, kind, name, sourceEventId: eventId, items: { create } },
+      });
 
   // この予定の枠自体を、名前を付けたリストの名前に合わせる（ユーザー指示）。組み込みの
   // 2枠（準備すること／持ち物）はそれ自体の意味を変えてしまうため改名の対象外にする。
@@ -1822,23 +1788,32 @@ export async function createListTemplate(formData: FormData): Promise<void> {
       ? await (await import("@/lib/tidy-list")).tidyListItems(bulk, userId)
       : parseBulkTitles(bulk);
 
-  await prisma.listTemplate.upsert({
-    where: { userId_kind_name: { userId, kind, name } },
-    update: {
-      items: {
-        deleteMany: {},
-        create: titles.map((title, i) => ({ kind, title, sortOrder: i })),
-      },
-    },
-    create: {
-      userId,
-      kind,
-      name,
-      items: {
-        create: titles.map((title, i) => ({ kind, title, sortOrder: i })),
-      },
-    },
+  // 名前の大文字小文字は区別しない（ユーザー指摘により2026-10-19）。
+  const existingTpl = await prisma.listTemplate.findFirst({
+    where: { userId, kind, name: { equals: name, mode: "insensitive" } },
   });
+  if (existingTpl) {
+    await prisma.listTemplate.update({
+      where: { id: existingTpl.id },
+      data: {
+        items: {
+          deleteMany: {},
+          create: titles.map((title, i) => ({ kind, title, sortOrder: i })),
+        },
+      },
+    });
+  } else {
+    await prisma.listTemplate.create({
+      data: {
+        userId,
+        kind,
+        name,
+        items: {
+          create: titles.map((title, i) => ({ kind, title, sortOrder: i })),
+        },
+      },
+    });
+  }
 
   revalidateAppViews();
 }
@@ -2139,8 +2114,8 @@ export async function setListTemplateKind(formData: FormData): Promise<void> {
   // 同じ枠に同名があると @@unique([userId, kind, name]) に触れる。そのときだけ
   // 名前に枠名を添えて重複を避ける。
   let name = tpl.name;
-  const clash = await prisma.listTemplate.findUnique({
-    where: { userId_kind_name: { userId, kind, name } },
+  const clash = await prisma.listTemplate.findFirst({
+    where: { userId, kind, name: { equals: name, mode: "insensitive" } },
     select: { id: true },
   });
   if (clash) {
@@ -2184,8 +2159,8 @@ export async function duplicateListTemplate(
   // 同じ種類で名前が重複しないように「〜 のコピー」「〜 のコピー2」…
   let name = `${src.name} のコピー`.slice(0, 60);
   for (let n = 2; n <= 30; n++) {
-    const dup = await prisma.listTemplate.findUnique({
-      where: { userId_kind_name: { userId, kind: src.kind, name } },
+    const dup = await prisma.listTemplate.findFirst({
+      where: { userId, kind: src.kind, name: { equals: name, mode: "insensitive" } },
       select: { id: true },
     });
     if (!dup) break;

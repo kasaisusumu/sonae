@@ -8,7 +8,7 @@ import { FutureMessageRows, type EMRow } from "@/app/components/future-message-r
 
 export type { EMRow };
 
-/** 予定詳細の「💌 未来の自分へ」枠。結びついたメッセージは確定後も含めて、いつでも編集できる。 */
+/** 予定詳細の「💌 過去の自分よりメッセージ」枠。結びついたメッセージは確定後も含めて、いつでも編集できる。 */
 export function FutureMessageEditor({
   eventId,
   initial,
@@ -24,7 +24,7 @@ export function FutureMessageEditor({
       className="rounded-2xl border border-teal/30 bg-teal-soft p-3"
     >
       <div className="mb-1.5 flex items-baseline gap-2">
-        <h3 className="text-sm font-semibold text-teal-dark">💌 未来の自分へ</h3>
+        <h3 className="text-sm font-semibold text-teal-dark">💌 過去の自分よりメッセージ</h3>
         <span className="text-xs text-teal-dark/70 tabular-nums">
           {initial.length}
         </span>

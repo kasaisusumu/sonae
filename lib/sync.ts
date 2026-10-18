@@ -523,14 +523,10 @@ export async function syncAndNotify(
     opts?.generateBudget ?? 3,
   );
 
-  // 未来の自分へのメッセージの一致判定（取り込み時）。AI 判定は件数を絞って
-  // 予算内で試す（1件ずつ await するので、多すぎるとタイムアウトの原因になる）。
-  const MESSAGE_MATCH_AI_BUDGET = 5;
-  let aiBudget = MESSAGE_MATCH_AI_BUDGET;
+  // 未来の自分へのメッセージの一致判定（取り込み時）。キーワード一致だけなので
+  // AIは呼ばない（予算で絞る必要も無くなった。2026-10-19〜）。
   for (const ev of result.newEvents) {
-    const allowAi = aiBudget > 0;
-    await ensureFutureMessageMatchesForEvent(ev.id, { allowAi }).catch(() => {});
-    if (allowAi) aiBudget--;
+    await ensureFutureMessageMatchesForEvent(ev.id).catch(() => {});
   }
 
   return { ...result, generated };

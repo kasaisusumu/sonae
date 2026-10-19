@@ -24,7 +24,18 @@ type Step = {
   /** trueなら ver2（テスト版モード）のときだけ出す（該当要素はver1には存在しない）。 */
   testOnly?: boolean;
 };
-type Tour = { key: string; match: (path: string) => boolean; steps: Step[] };
+type Tour = {
+  key: string;
+  match: (path: string) => boolean;
+  steps: Step[];
+  /**
+   * false の場合、ページを開いただけでは自動開始しない。"mm:coach-trigger"
+   * イベント（detail: { key }）で明示的に呼ばれたときだけ開始する
+   * （ユーザー指摘により2026-10-19: 予定詳細のチュートリアルが長すぎたため、
+   * 「ページを開いた時」と「初めて項目を追加した時」の2部に分割した）。
+   */
+  auto?: boolean;
+};
 
 const FLAG_PREFIX = "mm_coach_";
 
@@ -71,6 +82,21 @@ const TOURS: Tour[] = [
         body: "スマホのキーボードのマイクキーで、持ち物や準備を思いつくまま話すだけ。AI が枠に振り分けて追加します。ゼロから打つより速いです。",
       },
       {
+        sel: '[data-coach="future-message"]',
+        title: "💌 過去の自分よりメッセージ",
+        body: "いつか思い出したいことを書いておくと、次に似た予定が入ったときに知らせます。",
+      },
+    ],
+  },
+  {
+    // 予定詳細のチュートリアルの後半（長すぎたため2部に分割、2026-10-19〜）。
+    // ページを開いただけでは出さず、項目を初めて自分で追加したときに
+    // checklist-editor.tsx から "mm:coach-trigger" イベントで呼ばれる（auto: false）。
+    key: "event_item_v1",
+    match: (p) => /^\/events\/[^/]+$/.test(p),
+    auto: false,
+    steps: [
+      {
         sel: '[data-coach="item-expand"]',
         title: "∨ で項目の詳細",
         body: "その項目だけの通知タイミング・メモ・リンク・写真を設定できます。",
@@ -85,11 +111,6 @@ const TOURS: Tour[] = [
         sel: '[data-coach="add-item"]',
         title: "直すほど、あなた仕様に",
         body: "いる／いらないを直す・足すと学習して、次から似た予定で似たリストを最初から出します。増えすぎることはありません。",
-      },
-      {
-        sel: '[data-coach="future-message"]',
-        title: "💌 過去の自分よりメッセージ",
-        body: "いつか思い出したいことを書いておくと、次に似た予定が入ったときに知らせます。",
       },
     ],
   },
@@ -214,9 +235,10 @@ export function PageCoach({
   }, []);
 
   // パスが変わったら、そのページのツアーを（未表示なら）仕込む
+  // auto: false のツアーはここでは拾わない（明示的なトリガーでのみ開始）。
   useEffect(() => {
     let cancelled = false;
-    const found = TOURS.find((x) => x.match(pathname)) ?? null;
+    const found = TOURS.find((x) => x.auto !== false && x.match(pathname)) ?? null;
     const t = found ? filterTourForMode(found, isProductionMode) : null;
 
     // まず今の表示をリセット（effect 内の同期 setState を避けてマイクロタスクで）
@@ -284,7 +306,7 @@ export function PageCoach({
   // このページにツアーが無ければ何もしない。
   useEffect(() => {
     const onOpen = () => {
-      const found = TOURS.find((x) => x.match(pathname)) ?? null;
+      const found = TOURS.find((x) => x.auto !== false && x.match(pathname)) ?? null;
       const t = found ? filterTourForMode(found, isProductionMode) : null;
       if (!t) return;
       try {
@@ -301,6 +323,43 @@ export function PageCoach({
     window.addEventListener("mm:open-coach", onOpen);
     return () => window.removeEventListener("mm:open-coach", onOpen);
   }, [pathname, isProductionMode]);
+
+  // auto: false のツアーを、特定の操作（例: 項目を初めて追加した）から明示的に開始する。
+  // window.dispatchEvent(new CustomEvent("mm:coach-trigger", { detail: { key } })) で呼ぶ。
+  useEffect(() => {
+    let cancelled = false;
+    let timer = 0;
+    const onTrigger = (e: Event) => {
+      const key = (e as CustomEvent<{ key?: string }>).detail?.key;
+      const found = key ? TOURS.find((x) => x.key === key) : null;
+      const t = found ? filterTourForMode(found, isProductionMode) : null;
+      if (!t || t.steps.length === 0 || readFlag(t.key)) return;
+
+      const tryStart = () => {
+        if (cancelled) return;
+        if (
+          document.querySelector(
+            "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-desclink],[data-mm-scopehint],[data-mm-coach]",
+          )
+        ) {
+          timer = window.setTimeout(tryStart, 400);
+          return;
+        }
+        rectRef.current = null;
+        setRect(null);
+        setIdx(0);
+        setTour(t);
+        void trackFeatureUse(`popup:coach:${t.key}:shown`);
+      };
+      tryStart();
+    };
+    window.addEventListener("mm:coach-trigger", onTrigger);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.removeEventListener("mm:coach-trigger", onTrigger);
+    };
+  }, [isProductionMode]);
 
   const finish = useCallback((skipped: boolean) => {
     setTour((cur) => {

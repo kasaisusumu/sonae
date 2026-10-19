@@ -34,8 +34,8 @@ export function FeatureModeToggle({ current }: { current: string }) {
     if (pending || target === mode) return;
     const ok = window.confirm(
       target === "production"
-        ? "ver1に切り替えます。本番の機能（失敗ログ・節約額ダッシュボード）に切り替わります。予定・メモ・編集履歴などの元データは消えません。学習結果はルールに沿って引き継がれます（触っていないものだけ）。あとでver2に戻すこともできます。よろしいですか？"
-        : "ver2に切り替えます。テストの機能（未来の自分へ・次回の出し方3択）に切り替わります。予定・メモ・編集履歴などの元データは消えません。学習結果はルールに沿って引き継がれます（触っていないものだけ）。あとでver1に戻すこともできます。よろしいですか？",
+        ? "ver1に切り替えます。本番の機能（失敗ログ・節約額ダッシュボード）に切り替わります。予定・メモ・編集履歴などの元データは消えません。学習結果は全部ルールに沿って引き継がれます。あとでver2に戻すこともできます。よろしいですか？"
+        : "ver2に切り替えます。テストの機能（過去の自分よりメッセージ・次回の出し方3択）に切り替わります。予定・メモ・編集履歴などの元データは消えません。学習結果は全部ルールに沿って引き継がれます。あとでver1に戻すこともできます。よろしいですか？",
     );
     if (!ok) return;
     setError(null);
@@ -79,8 +79,8 @@ export function FeatureModeToggle({ current }: { current: string }) {
               <ul className="space-y-1.5 text-[13px]">
                 <li>ver1=本番の機能、ver2=テストの機能。いつでも切り替え可能（次のページに違い）</li>
                 <li>予定・準備リスト・メモなどの元データは共有。切り替えても消えない</li>
-                <li>学習結果は、まだ触っていない分だけ切替先の形に自動で引き継がれる</li>
-                <li>カレンダー説明欄の書き直しは直近20件まで。残りは編集時などに自動で更新</li>
+                <li>学習結果は全部、切替先の形に自動で引き継がれる</li>
+                <li>カレンダー説明欄の書き直しは、今後の予定すべてをバックグラウンドで行う</li>
               </ul>
             </div>,
             <div key="p2">
@@ -111,13 +111,17 @@ export function FeatureModeToggle({ current }: { current: string }) {
                   <p className="text-[12px]">
                     ver1: 節約額ダッシュボード＋気をつけたい予定の警告
                   </p>
-                  <p className="text-[12px]">ver2: 確定待ちメッセージの案内</p>
+                  <p className="text-[12px]">
+                    ver2: 🌱 そなえさんの成長（学習の積み上がり）＋確定待ちメッセージの案内
+                  </p>
                 </div>
 
                 <div>
                   <p className="mb-1 text-[11px] font-semibold text-muted">予定詳細ページ</p>
                   <p className="text-[12px]">ver1: ⚠ 警告パネル＋考えられる失敗</p>
-                  <p className="text-[12px]">ver2: 💌 確定カード＋未来の自分へ枠</p>
+                  <p className="text-[12px]">
+                    ver2: 💌 確定カード＋過去の自分よりメッセージ枠
+                  </p>
                 </div>
 
                 <div>
@@ -143,7 +147,7 @@ export function FeatureModeToggle({ current }: { current: string }) {
                     【予想される失敗】 ← ver1
                   </p>
                   <p className="mt-1 rounded-lg bg-surface-muted px-2 py-1 font-mono text-[11px]">
-                    【未来の自分へ】 ← ver2
+                    【過去の自分よりメッセージ】 ← ver2
                   </p>
                 </div>
               </div>

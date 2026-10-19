@@ -101,6 +101,7 @@ export default async function EventsPage({
               <span className="mt-2 block rounded-lg border border-border bg-surface-muted p-2 text-[11px] leading-relaxed text-muted">
                 <span className="block">（予定のメモ）</span>
                 <span className="mt-1.5 block">--- {APP_NAME} ---</span>
+                <span className="block">最終更新: 10/19 14:30</span>
                 <span className="block text-teal-dark underline">
                   準備リスト: https://…/events/xxxx ← ここをタップ
                 </span>

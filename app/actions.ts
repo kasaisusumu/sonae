@@ -1333,9 +1333,12 @@ export async function toggleFutureMessageDoneAction(
 ): Promise<void> {
   const userId = await requireUserId();
   if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
-  await toggleEventFutureMessageDone(userId, linkId, isDone);
+  const eventId = await toggleEventFutureMessageDone(userId, linkId, isDone);
   trackEvent(userId, "feature:future-message-check");
-  revalidateAppViews();
+  // 完了状態をカレンダー説明欄にも反映する（ユーザー指摘により2026-10-19:
+  // 他の準備リスト項目と同じく、チェックが説明欄にも伝わっていなかった）。
+  if (eventId) after(() => syncEventDescription(eventId));
+  revalidateAppViews(eventId ?? undefined);
 }
 
 /**

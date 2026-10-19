@@ -621,15 +621,22 @@ export function toEventMessageRow(
  * ✓ チェック（準備リストの項目と同じ「完了」印）。この予定での見た目だけの状態で、
  * 一致判定・提案には関わらない（チェックしても次回また一致すれば変わらず提案される）。
  */
+/** 完了チェックを更新する。説明欄への反映（呼び出し側の syncEventDescription）のため eventId を返す。 */
 export async function toggleEventFutureMessageDone(
   userId: string,
   linkId: string,
   isDone: boolean,
-): Promise<void> {
-  await prisma.eventFutureMessage.updateMany({
+): Promise<string | null> {
+  const res = await prisma.eventFutureMessage.updateMany({
     where: { id: linkId, userId },
     data: { isDone: Boolean(isDone) },
   });
+  if (res.count === 0) return null;
+  const link = await prisma.eventFutureMessage.findUnique({
+    where: { id: linkId },
+    select: { eventId: true },
+  });
+  return link?.eventId ?? null;
 }
 
 export async function getMessagesForEvent(

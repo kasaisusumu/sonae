@@ -47,7 +47,7 @@ export function FutureMessageEditor({
           <p className="mb-3 text-[13px]">
             この予定での完了の印だけ。チェックしても、次に「田中さん」が関わる
             別の予定が入れば、<strong className="text-foreground">そちらにもまた提案されます</strong>
-            （もう提案しない、にはなりません）。
+            （もう提案しない、にはなりません）。カレンダーの説明欄のチェックにも反映されます。
           </p>
 
           <div className="mb-1">

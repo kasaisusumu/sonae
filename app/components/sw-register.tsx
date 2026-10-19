@@ -109,11 +109,20 @@ export function SwRegister() {
     const onVisible = () => {
       if (document.visibilityState === "visible") applyPendingNav();
     };
+    // visibilitychange だけでは足りない（ユーザー指摘により2026-10-19再調査:
+    // 通知タップでそのページへ飛ばない事例があった）。iOS の PWA は、ホーム画面・
+    // アプリスイッチャーから前面に戻ったときに visibilitychange が発火しない
+    // ことがあるため、pageshow（bfcache からの復帰含む）・focus も合わせて
+    // 「見えるようになった」の検知に使う。
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("pageshow", applyPendingNav);
+    window.addEventListener("focus", applyPendingNav);
 
     return () => {
       navigator.serviceWorker.removeEventListener("message", onMsg);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pageshow", applyPendingNav);
+      window.removeEventListener("focus", applyPendingNav);
     };
   }, []);
   return null;

@@ -1,15 +1,15 @@
 /**
  * 準備リストの項目ごとの「次回いつ出すか」（範囲）の提案・保存・切り替え。
  *
- * - 項目を追加・削除したとき、AI（OpenAI）が範囲を推奨する（OpenAI 未設定なら「自動」＝従来どおり）。
+ * - 項目を追加・削除したとき、範囲を推奨する。新規項目の既定値は「似た予定」
+ *   （ユーザー指摘により2026-10-19: 画面の初期表示と保存時の実際の決定が
+ *   食い違い、保存すると「今回だけ」に勝手に変わってしまうバグがあったため、
+ *   AIには判定させず画面の既定値と同じ「似た予定」に揃えた）。日付・番号・時刻
+ *   などを含む明らかに一度きりの内容だけは「今回だけ」に決める（looksTooSpecific）。
  * - 推奨は「提案のまま適用中」（status=proposed）。ユーザーが選び直すと「選んだ」（status=chosen）。
- * - 同じ予定で AI に聞く回数は上限つき（AI_JUDGE_CAP_PER_EVENT）。打ち直しで増えないよう、
- *   打ち直して消えた提案は削除せず status=dropped にして、回数の計算に残す。
  * - 範囲の一致判定は lib/scope-match.ts に任せる（ここは保存と提案だけ）。
  */
-import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
-import { recordAiUsage } from "@/lib/ai-usage";
 import { looksTooSpecific, normTitle, pickKeyword } from "@/lib/text-norm";
 import type { EventFeatureData } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
@@ -24,105 +24,16 @@ import { classifyItemCategories } from "@/lib/item-categories";
 export const ITEM_SCOPES = ["auto", "event_only", "genre", "keyword", "similar"] as const;
 export type ItemScope = (typeof ITEM_SCOPES)[number];
 
-export const AI_JUDGE_CAP_PER_EVENT = 8;
-const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
-
 interface Recommendation {
   scope: ItemScope;
   keyword: string | null;
   genre: string | null;
   reason: string;
-  source: "ai" | "default";
+  source: "default";
 }
 
 const DEFAULT_REASON = "自動で覚えます（従来どおり）";
-
-// AI の推奨は3択すべて（event_only / similar / keyword、2026-10〜）。
-// keyword を選んだときのキーワード自体は AI には決めさせず、クイック選択の3番目と同じ
-// pickKeyword(予定名) で自動的に決める（buildRuleData の keyword 分岐が rec.keyword が
-// null のときのフォールバックとして既にこれをやっている）。
-const SYSTEM = `あなたは準備リストの項目の「次回の出し方」を決めます。
-ユーザーが項目を追加または削除した理由を推測し、次の3つから1つを選びます。
-- event_only: 今回の予定だけの内容（特定の場所・人・案件に依存する／一度きりの内容）
-- similar: 日時や長さではなく、予定の「用途・性質」が同じ種類の予定でも出したい、汎用的な内容
-  （例: 「新幹線のチケットを確認」はバス移動・飛行機移動など、同じ「移動」という種類の予定でも出したい）
-- keyword: 予定の名前（固有名）に強く結びつく内容で、同じ名前の予定が来たときだけ出したい
-  （例: 「ホテル」という名前の予定でだけ出したい内容）
-出力は必ず次の JSON のみ:
-{"scope":"event_only|similar|keyword","reason":"1行の理由（ユーザーに見せる）"}`;
-
-async function recommend(input: {
-  action: "include" | "exclude";
-  title: string;
-  eventTitle: string;
-  eventText: string;
-  categoryName: string;
-  userId?: string | null;
-}): Promise<Recommendation> {
-  const fallback: Recommendation = {
-    scope: "auto",
-    keyword: null,
-    genre: null,
-    reason: DEFAULT_REASON,
-    source: "default",
-  };
-  // 日付・番号・時刻などを含む項目は、ほぼ確実に「今回だけ」の内容（一度きり）。
-  // AI を呼ぶまでもなく event_only に決める（呼び出し回数を減らすための足切り。
-  // lib/pattern-classify.ts の looksTooSpecific と同じ判断基準）。
-  if (looksTooSpecific(input.title)) {
-    return {
-      scope: "event_only",
-      keyword: null,
-      genre: null,
-      reason: DEFAULT_REASON,
-      source: "default",
-    };
-  }
-  if (!process.env.OPENAI_API_KEY) return fallback;
-  try {
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      timeout: 8000,
-      maxRetries: 0,
-    });
-    const completion = await client.chat.completions.create({
-      model: MODEL,
-      temperature: 0.2,
-      max_tokens: 200,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM },
-        {
-          role: "user",
-          content: JSON.stringify({
-            操作: input.action === "include" ? "追加" : "削除",
-            項目: input.title,
-            予定名: input.eventTitle,
-            予定の説明: input.eventText.slice(0, 300),
-            カテゴリ: input.categoryName,
-          }),
-        },
-      ],
-    });
-    recordAiUsage(input.userId, "item-scope-recommend", MODEL, completion.usage);
-    const raw = JSON.parse(completion.choices[0]?.message?.content ?? "{}") as {
-      scope?: unknown;
-      reason?: unknown;
-    };
-    const rawScope = String(raw.scope);
-    const scope: ItemScope =
-      rawScope === "similar"
-        ? "similar"
-        : rawScope === "keyword"
-          ? "keyword"
-          : "event_only";
-    const reason = String(raw.reason ?? "").trim().slice(0, 120) || DEFAULT_REASON;
-    return { scope, keyword: null, genre: null, reason, source: "ai" };
-  } catch (e) {
-    console.error("[recommendItemScope] AI 失敗（自動に戻す）", e);
-    return fallback;
-  }
-}
+const SIMILAR_DEFAULT_REASON = "似た予定でも出せるよう、まず「似た予定」にしています";
 
 export { pickKeyword };
 
@@ -335,13 +246,7 @@ export async function proposeScopesForSave(input: {
     });
   }
 
-  // 2) 新しく現れた項目・消えた項目に、範囲を推奨する（AI の上限つき）
-  const aiUsed = await prisma.eventChecklistScope.count({
-    where: { eventId: scope.eventId, source: "ai" },
-  });
-  let aiLeft = Math.max(0, AI_JUDGE_CAP_PER_EVENT - aiUsed);
-  const text = eventTextOf(scope);
-
+  // 2) 新しく現れた項目・消えた項目に、範囲を推奨する
   const targets: { action: "include" | "exclude"; title: string }[] = [
     ...input.added.map((t) => ({ action: "include" as const, title: t })),
     ...input.removed.map((t) => ({ action: "exclude" as const, title: t })),
@@ -393,16 +298,18 @@ export async function proposeScopesForSave(input: {
         reason: DEFAULT_REASON,
         source: "default",
       };
-    } else if (aiLeft > 0 && process.env.OPENAI_API_KEY) {
-      aiLeft -= 1;
-      rec = await recommend({
-        action: t.action,
-        title: t.title,
-        eventTitle: scope.eventTitle,
-        eventText: text,
-        categoryName: scope.categoryName,
-        userId: scope.userId,
-      });
+    } else {
+      // 既定値は「似た予定」（ユーザー指摘により2026-10-19）。画面の初期表示
+      // （checklist-editor.tsx の shownScope）と必ず揃える。AIには判定させない
+      // （以前はAIに判定させていたが、画面の既定値と食い違い、保存すると
+      // 勝手に「今回だけ」に変わってしまうことがあった）。
+      rec = {
+        scope: "similar",
+        keyword: null,
+        genre: null,
+        reason: SIMILAR_DEFAULT_REASON,
+        source: "default",
+      };
     }
     await saveScopeForItem(
       scope,

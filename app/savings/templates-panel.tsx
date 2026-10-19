@@ -98,6 +98,11 @@ function TemplateCard({
             >
               設定
             </button>
+            <InfoHint id="template-default-scope">
+              このテンプレートを予定に追加したとき、中の項目すべてに自動で設定する
+              「次回の出し方」。「自動」のままだと、項目ごとに既定（似た予定）が
+              個別に適用されます。
+            </InfoHint>
           </form>
         )}
         <CopyTemplateButton text={t.items.map((i) => i.title).join("\n")} />

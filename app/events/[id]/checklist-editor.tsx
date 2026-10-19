@@ -449,6 +449,17 @@ export function ChecklistEditor({
       },
     ]);
     setSaved(false);
+    // 項目を追加したら、予定詳細チュートリアルの後半（項目の詳細・次回の出し方・学習の
+    // 仕組み）を案内する。一度見せたら二度と出ない（lib の mm_coach_ フラグで判定）
+    // ので、追加のたびに呼んでも実害はない（ユーザー指摘により2026-10-19:
+    // ページを開いた時のチュートリアルと分割した）。
+    try {
+      window.dispatchEvent(
+        new CustomEvent("mm:coach-trigger", { detail: { key: "event_item_v1" } }),
+      );
+    } catch {
+      /* ignore */
+    }
     return key;
   }
 
@@ -528,11 +539,12 @@ export function ChecklistEditor({
   // 範囲を選び直した直後に、保存の反映を待たず表示を変えるための一時の値（項目の key ごと）
   const [scopeOverride, setScopeOverride] = useState<Record<string, ItemScope>>({});
 
-  /** 画面に出す範囲（選び直した直後の一時の値を優先）。範囲の指定が無い項目は「自動」。 */
+  /** 画面に出す範囲（選び直した直後の一時の値を優先）。範囲の指定が無い項目は「似た予定」。 */
   function shownScope(it: Item): ItemScope {
-    // まだ何も決まっていない項目の初期表示は「似た予定」にする（ユーザー指摘により
-    // 2026-10-19。変更すればその選択がそのまま保存される。実際にAIを呼ぶ判定自体の
-    // 既定値は変えていない＝無駄なAI呼び出しが増えないようにするため）。
+    // まだ何も決まっていない項目の既定表示は「似た予定」（ユーザー指摘により2026-10-19）。
+    // 保存時の実際の決定（lib/item-scope.ts の proposeScopesForSave）もこれと同じ既定値に
+    // 揃えてある。以前はここだけ「似た予定」を見せつつ保存側はAIに判定させていたため、
+    // 保存すると勝手に「今回だけ」に変わってしまうことがあった（この食い違いが原因のバグ）。
     return scopeOverride[it.key] ?? ((it.scope?.scope as ItemScope) || "similar");
   }
   function shownStatus(it: Item): "chosen" | "proposed" {

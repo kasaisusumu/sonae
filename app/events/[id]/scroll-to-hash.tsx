@@ -25,6 +25,19 @@ export function ScrollToHash() {
           el.closest("details")?.setAttribute("open", "");
           el.scrollIntoView({ behavior: "smooth", block: "center" });
           window.clearInterval(timer);
+          // スクロールしたら URL からハッシュを消す（履歴は増やさない）。
+          // 残したままだと、枠の並び替えなど別の操作で router.refresh() が
+          // 走ったときにこの古いハッシュへまた飛ばされてしまう不具合があった
+          // （ユーザー指摘により2026-10-19）。
+          try {
+            history.replaceState(
+              null,
+              "",
+              window.location.pathname + window.location.search,
+            );
+          } catch {
+            /* ignore */
+          }
         } else if (++tries > 40) {
           window.clearInterval(timer);
         }

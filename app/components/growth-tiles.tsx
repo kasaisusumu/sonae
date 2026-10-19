@@ -64,16 +64,24 @@ export function GrowthTiles({ tiles }: { tiles: Tile[] }) {
               {open.items.length === 0 ? (
                 <p className="p-2 text-sm text-muted">まだありません。</p>
               ) : (
-                <ul className="divide-y divide-border">
-                  {open.items.map((it, i) => (
-                    <li key={`${it.title}-${i}`} className="px-1 py-2">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {it.title}
-                      </p>
-                      <p className="truncate text-xs text-muted">{it.detail}</p>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className="divide-y divide-border">
+                    {open.items.map((it, i) => (
+                      <li key={`${it.title}-${i}`} className="px-1 py-2">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {it.title}
+                        </p>
+                        <p className="truncate text-xs text-muted">{it.detail}</p>
+                      </li>
+                    ))}
+                  </ul>
+                  {open.items.length < open.value && (
+                    <p className="px-1 pt-2 text-xs text-muted">
+                      最新{open.items.length}件を表示（全{open.value}
+                      {open.unit}）
+                    </p>
+                  )}
+                </>
               )}
             </div>
           </div>

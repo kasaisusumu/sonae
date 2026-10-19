@@ -18,13 +18,17 @@ export function RetroMessagePrompt({
   eventTitle: string;
 }) {
   const [body, setBody] = useState("");
+  const [keywords, setKeywords] = useState("");
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState(false);
 
   if (done) {
     return (
       <div className="rounded-2xl border border-border bg-surface p-4 text-sm text-muted">
-        「{eventTitle}」に次回への一言を残しました。似た予定が入ったときに知らせます。
+        「{eventTitle}」に次回への一言を残しました
+        {keywords.trim()
+          ? "。似た予定が入ったときに知らせます。"
+          : "（キーワード未設定のため、自動では思い出せません。「過去の自分よりメッセージ」の枠からいつでも追加できます）。"}
       </div>
     );
   }
@@ -32,10 +36,19 @@ export function RetroMessagePrompt({
   function submit() {
     const text = body.trim();
     if (!text || pending) return;
+    if (
+      !keywords.trim() &&
+      !window.confirm(
+        "キーワードが未設定です。このままだと、似た予定が来ても自動では思い出せません。このまま保存しますか？",
+      )
+    ) {
+      return;
+    }
     startTransition(async () => {
       const fd = new FormData();
       fd.set("eventId", eventId);
       fd.set("body", text);
+      fd.set("keywords", keywords);
       await createMessageForEventAction(fd);
       setDone(true);
     });
@@ -55,6 +68,12 @@ export function RetroMessagePrompt({
         rows={2}
         placeholder="例: 受付の場所がわかりにくいので早めに着く"
         className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm text-foreground"
+      />
+      <input
+        value={keywords}
+        onChange={(e) => setKeywords(e.target.value)}
+        placeholder="キーワード（任意・読点区切り。例: 田中、A社）"
+        className="w-full rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground"
       />
       <button
         type="button"

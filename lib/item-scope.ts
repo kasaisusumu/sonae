@@ -171,15 +171,41 @@ async function saveScopeForItem(
   });
   if (existing?.status === "chosen" && status === "proposed") return;
 
-  // 「似た予定」のまま選び直しただけなら、カテゴリを AI に聞き直さず前回の結果を使い回す
-  // （ボタンの二度押し等で毎回 AI を呼ぶ無駄・待ち時間を避ける。一度保存したカテゴリは
-  // 再利用し、予定が追加されるたびに再生成しない、というユーザー指摘どおり）。
-  const previousSimilarRule =
-    scope === "similar" && existing?.scope === "similar" && existing.rule
-      ? { categories: existing.rule.categories }
-      : null;
+  // 「似た予定」にするときは、カテゴリを AI に聞き直さず、同じ項目名で過去に決めた
+  // 結果を使い回す。この予定で選び直しただけ（ボタンの二度押し等）のときは existing から、
+  // 「次回の出し方」が別の予定からこの名前のまま引き継がれたとき（priorRule 経由）は
+  // ChecklistScopeRule を直接探す。一度保存したカテゴリは再利用し、予定が追加されるたびに
+  // 再生成しない（ユーザー指摘により2026-10-19: 引き継ぎのたびにAI再分類が走っていたバグ）。
+  let previousSimilarRule: { categories: string } | null = null;
+  // 別の予定から引き継いでカテゴリを使い回すときに、使い回し元のルールも
+  // 一緒に archive する（そうしないと、同じ項目名のアクティブなルールが予定の数だけ
+  // 増え続けてしまう＝学習件数の集計が水増しされるバグがあった。ユーザー指摘により
+  // 2026-10-19に発見・修正）。
+  let reusedFromRuleId: string | null = null;
+  if (scope === "similar") {
+    if (existing?.scope === "similar" && existing.rule) {
+      previousSimilarRule = { categories: existing.rule.categories };
+    } else {
+      const latestSimilarRule = await prisma.checklistScopeRule.findFirst({
+        where: {
+          userId: input.userId,
+          kind,
+          normTitle: nt,
+          action,
+          scope: "similar",
+          archivedAt: null,
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (latestSimilarRule) {
+        previousSimilarRule = { categories: latestSimilarRule.categories };
+        reusedFromRuleId = latestSimilarRule.id;
+      }
+    }
+  }
 
   await archiveRule(existing?.ruleId ?? null);
+  await archiveRule(reusedFromRuleId);
   const ruleData = await buildRuleData(
     input,
     action,

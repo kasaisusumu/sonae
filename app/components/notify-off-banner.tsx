@@ -19,7 +19,7 @@ export function NotifyOffBanner({ publicKey }: { publicKey: string | null }) {
     >
       <p className="text-sm font-medium text-warn">🔕 通知がオフになっています</p>
       <p className="mt-1 text-xs text-warn/80">
-        新しい予定の通知や、準備・失敗の先回りリマインドが届きません。
+        新しい予定の通知や、準備・未来の自分へのメッセージの先回りリマインドが届きません。
       </p>
       <div className="mt-3">
         <NotifyEnableButton publicKey={publicKey} onEnabled={() => setEnabled(true)} />

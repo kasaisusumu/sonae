@@ -9,6 +9,7 @@ import { formatLead } from "@/lib/lead-time";
 import { getUserTemplates } from "@/lib/templates";
 import { sectionLabel } from "@/lib/sections";
 import { InfoHint } from "@/app/components/info-hint";
+import { ScopeSummaryBadge, type EMRow } from "@/app/components/future-message-rows";
 import { type SearchEntry } from "./learning-search";
 import { LearningExplorer } from "./learning-explorer";
 import { LazyLeaf } from "./lazy-leaf";
@@ -16,10 +17,7 @@ import { LeafBody, type LeafItem, type LeafSectionData } from "./leaf-body";
 import { TemplatesGroup } from "./templates-panel";
 import { DeleteCategoryButton } from "./tree-delete-button";
 import { trackEvent } from "@/lib/track";
-import {
-  FailureListEditor,
-  type FLRow,
-} from "@/app/events/[id]/failure-list-editor";
+import { featureModeOf, isScopeRuleEnabled } from "@/lib/feature-mode";
 
 function Keywords({ words }: { words: string[] }) {
   if (words.length === 0) return null;
@@ -51,11 +49,46 @@ function CompactLine({ it }: { it: LeafItem }) {
   );
 }
 
-function CompactList({ sections }: { sections: LeafSectionData[] }) {
+/** 「未来の自分へ」も他の枠（準備すること・持ち物）と同じコンパクト表示にする
+ * （ラベル＋件数、本文を1行ずつ、空なら「（なし）」）。特別な見た目のカードにはしない
+ * （ユーザー指摘により2026-10-19）。「編集」を押したときだけ、他の枠と同じように
+ * ChecklistEditor 相当の編集UI（FutureMessageRows）になる（LeafBody 側）。 */
+function CompactMessageLine({ r }: { r: EMRow }) {
+  return (
+    <li className={`text-[11px] ${r.isDone ? "text-muted line-through" : ""}`}>
+      {r.body}
+      <span className="text-muted">（<ScopeSummaryBadge r={r} />）</span>
+    </li>
+  );
+}
+
+function CompactList({
+  sections,
+  messages,
+}: {
+  sections: LeafSectionData[];
+  messages: EMRow[];
+}) {
   const prog = (arr: LeafItem[]) =>
     arr.length ? ` ${arr.filter((i) => i.isDone).length}/${arr.length}` : "";
+  const msgProg = messages.length
+    ? ` ${messages.filter((m) => m.isDone).length}/${messages.length}`
+    : "";
   return (
     <div className="grid gap-2 sm:grid-cols-2">
+      {messages.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold text-teal-dark">
+            未来の自分へ
+            <span className="text-muted">{msgProg}</span>
+          </p>
+          <ul className="mt-0.5 space-y-0.5">
+            {messages.map((r) => (
+              <CompactMessageLine key={r.id} r={r} />
+            ))}
+          </ul>
+        </div>
+      )}
       {sections.map((s) => (
         <div key={s.key}>
           <p className="text-[11px] font-semibold text-teal-dark">
@@ -93,6 +126,7 @@ function EventLeaf({
         isDone: it.isDone,
         isUserAdded: it.isUserAdded,
         notifyLeadMinutes: it.notifyLeadMinutes,
+        scope: it.scope,
       }))
       // 未チェックを上・チェック済みを下（安定ソート）
       .sort((a, b) => (a.isDone ? 1 : 0) - (b.isDone ? 1 : 0)),
@@ -108,20 +142,10 @@ function EventLeaf({
           <span className="ml-1 font-normal text-muted">
             {leaf.situationLabel}
           </span>
-          {leaf.failures.length > 0 && (
-            <span className="ml-1 text-warn">⚠{leaf.failures.length}</span>
-          )}
           <Keywords words={leaf.keywords} />
         </>
       }
     >
-      {/* 失敗ログは一番上に。予定詳細と同じ形式でその場編集・追加できる。 */}
-      <FailureListEditor
-        eventId={leaf.eventId}
-        label="失敗ログ"
-        variant="warn"
-        initial={leaf.failures satisfies FLRow[]}
-      />
       {leaf.mergedCount > 1 && !leaf.cleared && (
         <p className="mb-2 mt-3 flex items-center gap-1 text-[11px] text-muted">
           同じ名前の未編集 {leaf.mergedCount} 件をまとめて編集
@@ -131,23 +155,28 @@ function EventLeaf({
           </InfoHint>
         </p>
       )}
-      {leaf.cleared ? (
+      {leaf.cleared && (
         <p className="mt-3 flex items-center gap-1 rounded-lg bg-surface-muted p-3 text-xs text-muted">
           準備リストは空（内容なしとして学習）
           <InfoHint id="savings-cleared">
             似た予定でも何も出しません。同じ名前でも、中身のある予定とは分けて覚えています。
           </InfoHint>
         </p>
-      ) : (
-        <div className="mt-3">
-          <LeafBody
-            eventId={leaf.eventId}
-            eventIds={[leaf.eventId, ...leaf.siblingEventIds]}
-            compact={<CompactList sections={sections} />}
-            sections={sections}
-          />
-        </div>
       )}
+      <div className="mt-3">
+        <LeafBody
+          eventId={leaf.eventId}
+          eventIds={[leaf.eventId, ...leaf.siblingEventIds]}
+          compact={
+            <CompactList
+              sections={leaf.cleared ? [] : sections}
+              messages={leaf.messages}
+            />
+          }
+          sections={leaf.cleared ? [] : sections}
+          messages={leaf.messages}
+        />
+      </div>
     </LazyLeaf>
   );
 }
@@ -192,6 +221,7 @@ export default async function LearningTreePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/");
   trackEvent(user.id, "page:/savings");
+  const scopeRuleEnabled = isScopeRuleEnabled(featureModeOf(user));
 
   const [{ categories, searchIndex }, templates] = await Promise.all([
     getLearningNameTree(user.id),
@@ -268,7 +298,9 @@ export default async function LearningTreePage() {
         hasTree={categories.length > 0}
         templateCount={templates.length}
         tree={tree}
-        templates={<TemplatesGroup templates={templates} />}
+        templates={
+          <TemplatesGroup templates={templates} scopeRuleEnabled={scopeRuleEnabled} />
+        }
       />
     </div>
   );

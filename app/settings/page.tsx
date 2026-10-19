@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { TriangleAlert } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -14,7 +15,9 @@ import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmLink } from "@/app/components/confirm-link";
 import { PushControls } from "@/app/components/push-controls";
 import { InfoHint } from "@/app/components/info-hint";
+import { FeatureModeToggle } from "@/app/components/feature-mode-toggle";
 import { trackEvent } from "@/lib/track";
+import { featureModeOf } from "@/lib/feature-mode";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -54,6 +57,13 @@ export default async function SettingsPage() {
         </p>
       </section>
 
+      <section data-coach="settings-mode" className="rounded-2xl bg-surface p-5">
+        <h2 className="text-sm font-semibold text-muted">機能モード</h2>
+        <div className="mt-3">
+          <FeatureModeToggle current={featureModeOf(user)} />
+        </div>
+      </section>
+
       <section data-coach="settings-google" className="rounded-2xl bg-surface p-5">
         <h2 className="text-sm font-semibold text-muted">Google カレンダー連携</h2>
         {account ? (
@@ -68,11 +78,14 @@ export default async function SettingsPage() {
                 : "未取り込み"}
             </p>
             {account.syncError && (
-              <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
-                ⚠ Google との連携が切れていて、新しい予定を取り込めていません。
-                下の「再接続」を押してください。
-                {account.syncErrorAt &&
-                  `（${formatDateTime(account.syncErrorAt)}ごろから）`}
+              <p className="flex items-start gap-1 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
+                <TriangleAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Google との連携が切れていて、新しい予定を取り込めていません。
+                  下の「再接続」を押してください。
+                  {account.syncErrorAt &&
+                    `（${formatDateTime(account.syncErrorAt)}ごろから）`}
+                </span>
               </p>
             )}
             {calendars.length > 0 && (

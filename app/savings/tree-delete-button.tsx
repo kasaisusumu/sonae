@@ -40,7 +40,7 @@ function DeleteButton({
   );
 }
 
-/** カテゴリ削除。予定・失敗ログはカテゴリ無し（その他扱い）になるだけで消えない。 */
+/** カテゴリ削除。予定はカテゴリ無し（その他扱い）になるだけで消えない。 */
 export function DeleteCategoryButton({
   categoryId,
   categoryName,
@@ -50,7 +50,7 @@ export function DeleteCategoryButton({
 }) {
   return (
     <DeleteButton
-      message={`カテゴリ「${categoryName}」を削除しますか？\nこのカテゴリの予定・失敗ログは消えず「その他」扱いになります。学習した内容（このカテゴリだけのルール）は削除されます。`}
+      message={`カテゴリ「${categoryName}」を削除しますか？\nこのカテゴリの予定は消えず「その他」扱いになります。学習した内容（このカテゴリだけのルール）は削除されます。`}
       onConfirm={() => deleteCategory(categoryId)}
     />
   );

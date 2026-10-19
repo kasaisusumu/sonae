@@ -1,5 +1,7 @@
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { normTitle } from "@/lib/text-norm";
+import { normalizeMatchText } from "@/lib/future-messages";
 import { buildChecklistForEvent, type BuiltItem } from "@/lib/suggest";
 import { syncEventDescription } from "@/lib/description-sync";
 import { parseLeads, stringifyLeads } from "@/lib/lead-time";
@@ -66,10 +68,13 @@ function persistData(
  * ベース生成＋学習ルール適用で準備リストを（再）生成し、丸ごと保存する。既存コメントは引き継ぐ。
  * force=false（既定）: 同名・未編集の予定が既にリストを持っていれば、生成せずコピーする
  *   （AI 節約＋同名グループの内容を揃える）。force=true: 必ず生成する（作り直す用）。
+ * allowAiGeneration=true（既定）: 学習元（再利用・確定ルール・範囲ルール・パターン）が無ければ
+ *   AI でたたき台を新規生成する。false にすると、学習元が無ければ何も生成しない
+ *   （`buildChecklistForEvent` 参照。カレンダー連携による自動生成だけ false を渡す）。
  */
 export async function generateAndSaveChecklist(
   eventId: string,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; allowAiGeneration?: boolean } = {},
 ): Promise<void> {
   await applyLearnedListReminder(eventId);
 
@@ -103,7 +108,9 @@ export async function generateAndSaveChecklist(
     }
   }
 
-  const { items, customSectionSeeds } = await buildChecklistForEvent(eventId);
+  const { items, customSectionSeeds } = await buildChecklistForEvent(eventId, {
+    allowAiGeneration: opts.allowAiGeneration,
+  });
   const rows = persistData(eventId, items, comments);
   await prisma.$transaction([
     // 作り直すのは組み込みの2枠（準備すること・持ち物）だけ。
@@ -149,8 +156,14 @@ export async function generateAndSaveChecklist(
   }
 }
 
-/** チェックリストが未生成なら生成する（予定詳細を開いたときの遅延生成）。 */
-export async function ensureChecklistForEvent(eventId: string): Promise<void> {
+/**
+ * チェックリストが未生成なら生成する（予定詳細を開いたときの遅延生成・「🪄 準備リストを作る」）。
+ * allowAiGeneration は generateAndSaveChecklist に渡すだけ（既定 true）。
+ */
+export async function ensureChecklistForEvent(
+  eventId: string,
+  opts: { allowAiGeneration?: boolean } = {},
+): Promise<void> {
   const ev = await prisma.event.findUnique({
     where: { id: eventId },
     select: { listCleared: true },
@@ -161,8 +174,11 @@ export async function ensureChecklistForEvent(eventId: string): Promise<void> {
     return;
   }
   const count = await prisma.checklistItem.count({ where: { eventId } });
-  if (count === 0) await generateAndSaveChecklist(eventId);
-  else await applyLearnedListReminder(eventId);
+  if (count === 0) {
+    await generateAndSaveChecklist(eventId, { allowAiGeneration: opts.allowAiGeneration });
+  } else {
+    await applyLearnedListReminder(eventId);
+  }
 }
 
 /**
@@ -205,8 +221,7 @@ export async function applyLearnedListReminder(eventId: string): Promise<void> {
   });
 }
 
-export const normTitle = (s: string) =>
-  s.toLowerCase().replace(/\s+/g, "").trim();
+export { normTitle } from "@/lib/text-norm";
 
 /** ある予定のチェックリスト（提案含む全部）を、別の予定にそのままコピーする（AI 不要）。 */
 async function copyChecklistItems(
@@ -258,8 +273,8 @@ async function copyChecklistItems(
 }
 
 /**
- * source と同名（完全一致）で listCustomized=false の予定すべてに、source の内容を配る。
- * source 自身が listCustomized（切り離し済み）なら何もしない。
+ * source と同名（多少の表記揺れは同一視）で listCustomized=false の予定すべてに、
+ * source の内容を配る。source 自身が listCustomized（切り離し済み）なら何もしない。
  */
 export async function propagateListToNameGroup(
   sourceEventId: string,
@@ -269,16 +284,14 @@ export async function propagateListToNameGroup(
     select: { userId: true, title: true, listCustomized: true },
   });
   if (!src || src.listCustomized) return [];
-  const twins = await prisma.event.findMany({
-    where: {
-      userId: src.userId,
-      id: { not: sourceEventId },
-      // 大文字小文字の違いは区別しない（ユーザー指摘により2026-10-19）
-      title: { equals: src.title, mode: "insensitive" },
-      listCustomized: false,
-    },
-    select: { id: true },
+  // 「同名」の判定は大文字小文字・全角半角・かな/カナ/ローマ字の表記揺れを区別しない
+  // normalizeMatchText で行う（ユーザー指摘により2026-10-19）。
+  const srcNorm = normalizeMatchText(src.title);
+  const candidates = await prisma.event.findMany({
+    where: { userId: src.userId, id: { not: sourceEventId }, listCustomized: false },
+    select: { id: true, title: true },
   });
+  const twins = candidates.filter((c) => normalizeMatchText(c.title) === srcNorm);
   for (const t of twins) {
     try {
       await copyChecklistItems(sourceEventId, t.id);
@@ -307,16 +320,19 @@ export async function resolveNameGroupOnEdit(
   });
   if (!me || me.listCustomized) return [];
 
-  const otherSource = await prisma.event.findFirst({
+  const meNorm = normalizeMatchText(me.title);
+  const editedCandidates = await prisma.event.findMany({
     where: {
       userId: me.userId,
       id: { not: eventId },
-      title: { equals: me.title, mode: "insensitive" },
       listCustomized: false,
       editRecords: { some: {} },
     },
-    select: { id: true },
+    select: { id: true, title: true },
   });
+  const otherSource = editedCandidates.find(
+    (c) => normalizeMatchText(c.title) === meNorm,
+  );
   if (otherSource) {
     await prisma.event.update({
       where: { id: eventId },
@@ -481,17 +497,18 @@ async function findNameGroupTwinWithList(
     select: { userId: true, title: true, listCustomized: true },
   });
   if (!me || me.listCustomized) return null;
-  const twin = await prisma.event.findFirst({
+  const meNorm = normalizeMatchText(me.title);
+  const candidates = await prisma.event.findMany({
     where: {
       userId: me.userId,
       id: { not: eventId },
-      title: { equals: me.title, mode: "insensitive" },
       listCustomized: false,
       checklistItems: { some: { isSuggested: false } },
     },
     orderBy: { createdAt: "desc" },
-    select: { id: true },
+    select: { id: true, title: true },
   });
+  const twin = candidates.find((c) => normalizeMatchText(c.title) === meNorm);
   return twin?.id ?? null;
 }
 
@@ -542,7 +559,9 @@ export async function primeNotifiedChecklists(
       const [first, ...rest] = g;
       let n = 0;
       try {
-        await generateAndSaveChecklist(first.id); // まとまりにつき最大 1 回の生成
+        // 学習元（再利用・確定ルール・範囲ルール・パターン）が無ければ何も生成しない
+        // （カレンダー連携による自動生成はAIでのたたき台生成をしない・ユーザー指定）。
+        await generateAndSaveChecklist(first.id, { allowAiGeneration: false }); // まとまりにつき最大 1 回の生成
         await syncEventDescription(first.id);
         n++;
         for (const r of rest) {

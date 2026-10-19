@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import Link from "next/link";
+import { Check, TriangleAlert } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { formatYen, formatDateOnly } from "@/lib/format";
 import { jstDayKey } from "@/lib/activity";
@@ -21,7 +22,7 @@ import {
  * 無ければ /api/auth/google?dest=admin に飛ばす。lib/admin-auth.ts 参照）。
  * フィードバック（WTP アンケート）に加え、利用者ごとのアナリティクス
  * （オンボーディング進捗・利用時間・使用量）と全体サマリーを見られる。
- * 個々の失敗ログ・準備リストの中身は載せない（件数・金額などの集計のみ）。
+ * 個々のメッセージ・準備リストの中身は載せない（件数などの集計のみ）。
  */
 export const dynamic = "force-dynamic";
 
@@ -234,9 +235,9 @@ export default async function AdminPage({
     users,
     feedback,
     eventCount,
-    failureLogCount,
+    messageCount,
     checklistEvents,
-    savingsByUser,
+    confirmedByUser,
     activityByUser,
     activityByUserDay,
     usageByKeyUser,
@@ -256,7 +257,7 @@ export default async function AdminPage({
         _count: {
           select: {
             events: true,
-            failureLogs: true,
+            futureMessages: true,
             pushSubscriptions: true,
             feedback: true,
           },
@@ -268,17 +269,18 @@ export default async function AdminPage({
       include: { user: { select: { id: true, email: true, name: true } } },
     }),
     prisma.event.count(),
-    prisma.failureLog.count(),
+    prisma.futureMessage.count(),
     // 準備リストの項目が1件でもある予定を持つユーザー（=はじめかたの「リスト確認」済み）。
     prisma.event.findMany({
       where: { checklistItems: { some: {} } },
       select: { userId: true },
       distinct: ["userId"],
     }),
-    prisma.savingsEntry.groupBy({
+    // 提案をそのまま／修正して確定した回数（メッセージの「育て」具合の参考値）。
+    prisma.eventFutureMessage.groupBy({
       by: ["userId"],
-      where: { confirmedByUser: true },
-      _sum: { amountYen: true },
+      where: { status: "confirmed" },
+      _count: { _all: true },
     }),
     // 利用時間（累計＝行数）＋最終アクセス。
     prisma.activityMinute.groupBy({
@@ -312,8 +314,8 @@ export default async function AdminPage({
   ]);
 
   const hasChecklistSet = new Set(checklistEvents.map((e) => e.userId));
-  const savingsMap = new Map(
-    savingsByUser.map((s) => [s.userId, s._sum.amountYen ?? 0]),
+  const confirmedMap = new Map(
+    confirmedByUser.map((s) => [s.userId, s._count._all]),
   );
   const activityMap = new Map(
     activityByUser.map((a) => [
@@ -491,8 +493,8 @@ export default async function AdminPage({
       steps,
       onboardingDone,
       eventCount: u._count.events,
-      failureLogCount: u._count.failureLogs,
-      savingsYen: savingsMap.get(u.id) ?? 0,
+      messageCount: u._count.futureMessages,
+      confirmedCount: confirmedMap.get(u.id) ?? 0,
       todayMinutes: byDay?.get(todayKey) ?? 0,
       totalMinutes: activity?.totalMinutes ?? 0,
       activeDays,
@@ -507,6 +509,7 @@ export default async function AdminPage({
       syncBroken: !!u.googleAccount?.syncError,
       syncErrorAt: u.googleAccount?.syncErrorAt ?? null,
       aiCostYen: aiCostByUser.get(u.id) ?? 0,
+      featureMode: u.featureMode === "production" ? "ver1" : "ver2",
     };
   });
 
@@ -587,7 +590,7 @@ export default async function AdminPage({
       title: "データ量",
       tiles: [
         { label: "取り込んだ予定数", value: String(eventCount) },
-        { label: "失敗ログ数", value: String(failureLogCount) },
+        { label: "未来の自分へのメッセージ数", value: String(messageCount) },
       ],
     },
     {
@@ -626,7 +629,7 @@ export default async function AdminPage({
         <h1 className="text-xl font-semibold tracking-tight">管理（運営者のみ）</h1>
         <p className="mt-1 text-sm text-muted">
           このページは ADMIN_EMAIL に一致するアカウントだけが開けます。
-          個々の失敗ログ・準備リストの中身は表示せず、件数や利用時間などの集計のみ扱います。
+          個々のメッセージ・準備リストの中身は表示せず、件数や利用時間などの集計のみ扱います。
         </p>
         <nav className="mt-3 flex flex-wrap gap-2 text-[11px]">
           {navSections.map((s) => (
@@ -724,14 +727,15 @@ export default async function AdminPage({
             <thead className="border-b border-border bg-surface-muted text-muted">
               <tr>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">利用者</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">機能モード</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">登録日</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">連携</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">
                   はじめかた
                 </th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">予定</th>
-                <th className="whitespace-nowrap px-3 py-2 font-medium">失敗ログ</th>
-                <th className="whitespace-nowrap px-3 py-2 font-medium">節約額</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">メッセージ</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">確定回数</th>
                 <th className="whitespace-nowrap px-3 py-2 font-medium">
                   今日の利用
                 </th>
@@ -759,6 +763,17 @@ export default async function AdminPage({
                       {r.name || "（名前未設定）"}
                     </p>
                     <p className="text-[11px] text-muted">{r.email}</p>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                        r.featureMode === "ver1"
+                          ? "border-foreground/30 text-foreground"
+                          : "border-teal/40 text-teal-dark"
+                      }`}
+                    >
+                      {r.featureMode}
+                    </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-muted">
                     {formatDateOnly(r.createdAt)}
@@ -793,15 +808,25 @@ export default async function AdminPage({
                       <StepBadge ok={r.steps.step5Notify} label="通知" />
                       <StepBadge ok={r.steps.tutorial} label="導入" />
                     </div>
+                    {r.syncBroken && (
+                      <p className="mt-0.5 flex items-center gap-0.5 rounded bg-warn-soft px-1 py-0.5 text-[10px] text-warn">
+                        <TriangleAlert aria-hidden className="h-2.5 w-2.5" />
+                        連携切れ
+                        {r.syncErrorAt && `（${fmtDateTime(r.syncErrorAt)}ごろから）`}
+                      </p>
+                    )}
+                    <p className="mt-0.5 text-[10px] text-muted">
+                      ホーム画面追加は端末側の自己申告のみで管理画面では不明
+                    </p>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                     {r.eventCount}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums">
-                    {r.failureLogCount}
+                    {r.messageCount}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums">
-                    {formatYen(r.savingsYen)}
+                    {r.confirmedCount}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                     {formatMinutes(r.todayMinutes)}
@@ -848,16 +873,14 @@ export default async function AdminPage({
         <p className="text-[11px] text-muted">
           「アクティブ日数」の（%）は登録からの経過日数のうち実際に開いた日の割合です。
           「今日の利用」「累計利用時間」はログイン中のアクセスを1分単位で数えた近似値で、
-          ページの中身や操作内容は記録していません。ホーム画面への追加は端末側の自己申告のみで、
-          管理画面からは分かりません。「詳細」から利用者ごとの全期間の利用履歴カレンダーを見られます。
-          「AI利用金額」はOpenAI呼び出し時のトークン数からの概算で、実際の請求額とは
-          一致しない場合があります。
+          ページの中身や操作内容は記録していません。「AI利用金額」はOpenAI呼び出し時の
+          トークン数からの概算で、実際の請求額とは一致しない場合があります。
         </p>
       </section>
 
       {/* ── AI利用金額の月別推移 ── */}
       {aiCostMonthRows.length > 0 && (
-        <section id="ai-cost" className="space-y-3">
+        <section className="space-y-3">
           <h2 className="text-sm font-semibold">AI利用金額: 月別推移（全員合計・概算）</h2>
           <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
             <table className="w-full max-w-sm text-left text-xs">
@@ -940,14 +963,13 @@ export default async function AdminPage({
 
       {/* ── 利用者別・日付別の利用時間（AI利用金額つき・タップで内訳） ── */}
       <UsageTimeGrid
-        id="daily"
         days={days}
         todayKey={todayKey}
         rows={rows as UsageGridRow[]}
       />
 
       {/* ── AI利用金額: 全体でどの操作がどのくらい消費したか（ver1/ver2の別つき） ── */}
-      <section id="ai-by-feature" className="space-y-3">
+      <section className="space-y-3">
         <h2 className="text-sm font-semibold">AI利用金額（操作別・全利用者合計）</h2>
         <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
           <table className="w-full text-left text-xs">
@@ -1083,13 +1105,13 @@ export default async function AdminPage({
 function StepBadge({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
-      className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
         ok
           ? "bg-teal-soft text-teal-dark"
           : "border border-border text-muted"
       }`}
     >
-      {ok ? "✓" : "・"} {label}
+      {ok ? <Check aria-hidden className="h-2.5 w-2.5" /> : "・"} {label}
     </span>
   );
 }

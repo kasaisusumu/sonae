@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { Menu, X } from "lucide-react";
 import { markTutorialSeen, trackFeatureUse } from "@/app/actions";
 import { APP_NAME } from "@/lib/app-info";
 
@@ -28,7 +29,7 @@ const SLIDES: Slide[] = [
   {
     id: "setup",
     title: "④ 仕上げに、この2つ",
-    body: "①この画面を「ホーム画面に追加」 ②通知をオン。困ったときは左上の ☰ からいつでも。",
+    body: "①この画面を「ホーム画面に追加」 ②通知をオン。困ったときは左上のメニューからいつでも。",
   },
 ];
 
@@ -68,13 +69,15 @@ function Visual({ id }: { id: string }): ReactNode {
 --- ${APP_NAME} ---
 準備リスト: https://…
 
-【予想される失敗】
-⚠ 集合時間に遅刻した
+【過去の自分よりメッセージ】
+💌 前回のギブアンドテイクを忘れない
 
 【持ち物】 1/3
 ☑ 充電器（1日前）
 ・モバイルバッテリー
 ・常備薬
+
+最終更新: 10/19 14:30
 ---`}
         </pre>
       );
@@ -145,7 +148,10 @@ function Visual({ id }: { id: string }): ReactNode {
     case "menu":
       return (
         <div className={`${box} text-xs`}>
-          <p className="font-semibold">☰ メニュー</p>
+          <p className="flex items-center gap-1 font-semibold">
+            <Menu aria-hidden className="h-3.5 w-3.5" />
+            メニュー
+          </p>
           <ul className="mt-1 space-y-0.5 text-[11px] text-muted">
             <li>・このページの使い方をみる</li>
             <li>・アプリのチュートリアル</li>
@@ -161,7 +167,7 @@ function Visual({ id }: { id: string }): ReactNode {
             🔔3時間前
           </span>
           <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted">
-            ✕
+            <X aria-hidden className="h-3 w-3" />
           </span>
         </div>
       );
@@ -179,26 +185,24 @@ function Visual({ id }: { id: string }): ReactNode {
           </span>
         </div>
       );
-    case "failure":
-      return (
-        <div className="space-y-1 rounded-lg border border-warn/30 bg-warn-soft p-3 text-xs">
-          <p className="font-medium text-warn">こんな失敗もあり得ます</p>
-          <p className="text-muted">集合時間に遅刻した</p>
-          <div className="flex flex-wrap gap-2 text-[10px] text-muted">
-            <span>◯まだ</span>
-            <span>◯防げた</span>
-            <span>◯防げなかった</span>
-            <span>◯今回は関係ない</span>
-          </div>
-        </div>
-      );
     case "done":
       return <div className="py-2 text-center text-5xl">🎉</div>;
   }
   return null;
 }
 
-export function Tutorial({ tutorialDone = false }: { tutorialDone?: boolean }) {
+export function Tutorial({
+  tutorialDone = false,
+  waitForPreventGoals = false,
+}: {
+  tutorialDone?: boolean;
+  /**
+   * 本番版モードだけ true にする。「防ぎたい失敗」(PreventGoals) の初回プロンプトを
+   * 先に出し、それが終わってから自動表示する（終了時に mm:open-tutorial を投げる）。
+   * テスト版モードは PreventGoals 自体が無いので、待たずに自動表示する。
+   */
+  waitForPreventGoals?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [i, setI] = useState(0);
 
@@ -210,21 +214,18 @@ export function Tutorial({ tutorialDone = false }: { tutorialDone?: boolean }) {
     };
     window.addEventListener(EVENT, show);
     try {
-      // 「防ぎたい失敗」の初回プロンプトが先。それが終わってから自動表示する
-      //（終了時に mm:open-tutorial を投げてくれる）。手動再生は EVENT で常に可能。
-      // 完了状態はサーバー側でも持つ（PWA でも再表示しないため）。
-      if (
-        !tutorialDone &&
-        !localStorage.getItem(KEY) &&
-        localStorage.getItem("mm_prevent_goals_v1")
-      ) {
+      // ログイン直後、最初に出す案内。完了状態はサーバー側でも持つ
+      //（PWA でも再表示しないため）。手動再生は EVENT で常に可能。
+      const preventGoalsDone =
+        !waitForPreventGoals || !!localStorage.getItem("mm_prevent_goals_v1");
+      if (!tutorialDone && !localStorage.getItem(KEY) && preventGoalsDone) {
         queueMicrotask(show);
       }
     } catch {
       /* localStorage 不可の環境では出さない */
     }
     return () => window.removeEventListener(EVENT, show);
-  }, [tutorialDone]);
+  }, [tutorialDone, waitForPreventGoals]);
 
   async function finish(skipped: boolean) {
     try {

@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Menu, X } from "lucide-react";
 import { logout } from "@/app/actions";
 
 const NAV: [string, string][] = [
   ["/", "ホーム"],
   ["/events", "予定"],
-  ["/failures", "失敗ログ"],
+  ["/failures", "未来の自分へ"],
   ["/savings", "マニュアル"],
   ["/settings", "設定"],
 ];
@@ -61,9 +62,7 @@ export function MenuButton() {
         onClick={() => setOpen(true)}
         className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-surface-muted"
       >
-        <span aria-hidden className="text-lg leading-none">
-          ☰
-        </span>
+        <Menu aria-hidden className="h-5 w-5" />
       </button>
 
       {open && (
@@ -83,7 +82,7 @@ export function MenuButton() {
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-2 py-1 text-muted hover:bg-surface-muted"
               >
-                ✕
+                <X aria-hidden className="h-4 w-4" />
               </button>
             </div>
 
@@ -128,8 +127,8 @@ export function MenuButton() {
                     予定の説明欄のリンクから、その予定の準備リストを直接ひらけます。
                   </li>
                   <li>
-                    節約額などの金額はすべて<strong>推定値</strong>です
-                    （あなたが記録した失敗のうち「防げた」と選んだ額の合計。自動判定はしていません）。
+                    「未来の自分へ」に書いたメッセージは、キーワード・ジャンル・カテゴリの
+                    どれかが一致する予定が入ったときに自動で知らせます。
                   </li>
                   <li>これは検証版です。ログアウトしてもデータは残ります。</li>
                 </ul>

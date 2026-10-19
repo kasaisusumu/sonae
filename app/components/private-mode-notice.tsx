@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { TriangleAlert } from "lucide-react";
 
 /**
  * シークレット / プライベートモードの注意書き。
@@ -44,10 +45,13 @@ export function PrivateModeNotice() {
   return (
     <div className="mx-auto mt-4 max-w-md space-y-2 text-left">
       {likelyPrivate && (
-        <p className="rounded-xl border border-foreground bg-surface px-4 py-3 text-xs font-medium text-foreground">
-          ⚠ シークレット／プライベートモードで開いている可能性があります。
-          このモードだと、ログイン状態や学習した内容が保存されず毎回リセットされます。
-          ふだんの（通常の）ウィンドウで開き直してください。
+        <p className="flex items-start gap-1 rounded-xl border border-foreground bg-surface px-4 py-3 text-xs font-medium text-foreground">
+          <TriangleAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            シークレット／プライベートモードで開いている可能性があります。
+            このモードだと、ログイン状態や学習した内容が保存されず毎回リセットされます。
+            ふだんの（通常の）ウィンドウで開き直してください。
+          </span>
         </p>
       )}
       <p className="text-[11px] leading-relaxed text-muted">

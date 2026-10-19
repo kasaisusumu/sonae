@@ -87,7 +87,9 @@ export function GuidedSetup({
     key: string;
     title: string;
     lead: string;
-    how?: string[];
+    // 文字列はそのまま1ステップ。配列は「同じ番号の中の分岐」（例: 端末ごとの手順違い）として
+    // まとめて表示する（連番を振らない）。
+    how?: (string | string[])[];
     done: boolean;
     action: React.ReactNode;
   }[] = [
@@ -107,8 +109,10 @@ export function GuidedSetup({
       title: "② ホーム画面に追加する",
       lead: "アプリのように1タップで開けて、通知も届きやすくなります。次の通知オンの前に、まずこれ。",
       how: [
-        "iPhone（Safari）: 画面下の共有ボタン（□に↑）→「ホーム画面に追加」→「追加」",
-        "Android（Chrome）: 右上のメニュー（︙）→「アプリをインストール」または「ホーム画面に追加」",
+        [
+          "iPhone（Safari）: 画面下の共有ボタン（□に↑）→「ホーム画面に追加」→「追加」",
+          "Android（Chrome）: 右上のメニュー（︙）→「アプリをインストール」または「ホーム画面に追加」",
+        ],
         "追加されたアイコンから開き直す（以降はそのアイコンで使う）",
       ],
       done: homeDone,
@@ -220,7 +224,15 @@ export function GuidedSetup({
                 <span className="shrink-0 font-semibold text-muted">
                   {i + 1}.
                 </span>
-                <span>{h}</span>
+                {Array.isArray(h) ? (
+                  <div className="space-y-1">
+                    {h.map((sub, j) => (
+                      <p key={j}>{sub}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <span>{h}</span>
+                )}
               </li>
             ))}
           </ol>

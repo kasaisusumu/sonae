@@ -3,10 +3,16 @@ import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ensureChecklistForEvent, normTitle } from "@/lib/checklist";
+import { loadEventScopeMap, type EventScopeEntry } from "@/lib/item-scope";
 import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
+import { getFeatureMode, isFailureLogEnabled } from "@/lib/feature-mode";
 import { getWarningForEvent, ensureSuggestedFailures } from "@/lib/failures";
+import {
+  ensureFutureMessageMatchesForEvent,
+  getMessagesForEvent,
+} from "@/lib/future-messages";
 import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
@@ -18,6 +24,7 @@ import {
 } from "@/app/actions";
 import {
   FAILURE_LOG_KEY,
+  FUTURE_MESSAGE_KEY,
   isBuiltinSection,
   resolveSections,
   sectionLabel,
@@ -30,6 +37,7 @@ import {
   type FLRow,
 } from "./failure-list-editor";
 import { WarningPanel } from "./warning-panel";
+import { FutureMessageEditor, type EMRow } from "./future-message-editor";
 import { ListReminderControl } from "./list-reminder-control";
 import { AddSectionButton } from "./section-manager";
 import { SectionList, type SectionEntry } from "./section-list";
@@ -54,6 +62,8 @@ type Row = {
   suggestionValue: string | null;
 };
 
+type ScopeEntry = EventScopeEntry;
+
 function KindBlock({
   eventId,
   kind,
@@ -62,6 +72,8 @@ function KindBlock({
   templates,
   pastEvents,
   imagesBySlot,
+  scopes,
+  showScopeUi,
 }: {
   eventId: string;
   kind: string;
@@ -70,6 +82,9 @@ function KindBlock({
   templates: TplOpt[];
   pastEvents: PastOpt[];
   imagesBySlot: Map<string, ItemImg[]>;
+  scopes: Map<string, ScopeEntry>;
+  /** 「次回の出し方」UI を出すか（テスト版モードだけ）。 */
+  showScopeUi: boolean;
 }) {
   const mine = rows.filter((r) => r.kind === kind);
   const normal = mine.filter((r) => !r.isSuggested);
@@ -82,6 +97,7 @@ function KindBlock({
         label={label}
         templates={templates}
         pastEvents={pastEvents}
+        showScopeUi={showScopeUi}
         initialItems={normal.map((c) => ({
           id: c.id,
           title: c.title,
@@ -90,6 +106,7 @@ function KindBlock({
           isUserAdded: c.isUserAdded,
           notifyLeadMinutes: c.notifyLeadMinutes,
           images: imagesBySlot.get(normTitle(c.title)) ?? [],
+          scope: scopes.get(`${kind}:${normTitle(c.title)}`) ?? null,
         }))}
       />
     </div>
@@ -108,7 +125,6 @@ export async function ChecklistSection({
     endDatetime: Date | null;
     categoryId: string | null;
     recurringEventId: string | null;
-    failureWarningAckAt: Date | null;
     listReminderLeads: string;
     // 連携時に取り込んだ既存の予定は false。この間は開いても自動生成しない
     // （下の「準備リストを作る」ボタンを押したときだけ生成する）。
@@ -123,6 +139,10 @@ export async function ChecklistSection({
     const changed = await refreshEventFromGoogle(event.id);
     if (changed) revalidatePath(`/events/${event.id}`);
   });
+
+  // 機能モード（§ lib/feature-mode.ts）。本番版=失敗ログ／テスト版=未来の自分へ・範囲ルール。
+  const mode = await getFeatureMode(event.userId);
+  const isProd = isFailureLogEnabled(mode);
 
   const itemsAndFlag = await Promise.all([
     prisma.checklistItem.findMany({
@@ -142,8 +162,11 @@ export async function ChecklistSection({
   // 通り、開いた瞬間に生成する。
   const needsManualGenerate = needsGeneration && !event.autoManaged;
   // ユーザーが意図的に全部消した予定は、二度と自動生成・自動提案しない。
+  // ここは「連携時に取り込んだ予定を開いたときの自動生成」なので、学習元
+  // （再利用・確定ルール・範囲ルール・パターン）が無ければAIでのたたき台生成はしない
+  // （ユーザー指定。手動の「🪄 準備リストを作る」「作り直す」はAI生成を残す）。
   if (needsGeneration && event.autoManaged) {
-    await ensureChecklistForEvent(event.id);
+    await ensureChecklistForEvent(event.id, { allowAiGeneration: false });
     items = await prisma.checklistItem.findMany({
       where: { eventId: event.id },
       orderBy: { sortOrder: "asc" },
@@ -151,42 +174,55 @@ export async function ChecklistSection({
     after(() => syncEventDescription(event.id));
   }
 
-  // 失敗ログ（考えられる失敗）。以前は <Suspense> で別コンポーネントに切り出して
-  // いたが、自動保存のたびの再検証でその Suspense 境界だけ再サスペンドし、
-  // 中の FailureListEditor がまるごと作り直されて開閉状態が消える不具合が
-  // あったため、ChecklistSection 本体の非同期処理に統合した（ChecklistEditor と
-  // 同じ扱いにして、他の枠と同じく再検証をまたいで状態が保たれるようにする）。
+  // 失敗ログ（考えられる失敗）／未来の自分へのメッセージ。以前は <Suspense> で
+  // 別コンポーネントに切り出していたが、自動保存のたびの再検証でその Suspense
+  // 境界だけ再サスペンドし、中のエディタがまるごと作り直されて開閉状態が消える
+  // 不具合があったため、ChecklistSection 本体の非同期処理に統合している。
   if (!needsManualGenerate) {
-    await ensureSuggestedFailures(event.id, event.userId);
+    if (isProd) {
+      await ensureSuggestedFailures(event.id, event.userId);
+    } else {
+      await ensureFutureMessageMatchesForEvent(event.id);
+    }
   }
-  const [linkedFailures, otherFailures, failureEv] = await Promise.all([
-    prisma.failureLog.findMany({
-      where: { userId: event.userId, eventId: event.id },
-      orderBy: { occurredAt: "desc" },
-      select: {
-        id: true,
-        description: true,
-        outcome: true,
-        countermeasure: true,
-        occurredAt: true,
-      },
-    }),
-    prisma.failureLog.findMany({
-      where: { userId: event.userId, eventId: { not: event.id } },
-      orderBy: { occurredAt: "desc" },
-      take: 80,
-      select: {
-        id: true,
-        description: true,
-        occurredAt: true,
-        event: { select: { title: true } },
-      },
-    }),
-    prisma.event.findFirst({
-      where: { id: event.id, userId: event.userId },
-      select: { eventDatetime: true, endDatetime: true, noFailureAt: true },
-    }),
-  ]);
+
+  const [linkedFailures, otherFailures, failureEv, linkedMessages] =
+    await Promise.all([
+      isProd
+        ? prisma.failureLog.findMany({
+            where: { userId: event.userId, eventId: event.id },
+            orderBy: { occurredAt: "desc" },
+            select: {
+              id: true,
+              description: true,
+              outcome: true,
+              countermeasure: true,
+              occurredAt: true,
+            },
+          })
+        : Promise.resolve([]),
+      isProd
+        ? prisma.failureLog.findMany({
+            where: { userId: event.userId, eventId: { not: event.id } },
+            orderBy: { occurredAt: "desc" },
+            take: 80,
+            select: {
+              id: true,
+              description: true,
+              occurredAt: true,
+              event: { select: { title: true } },
+            },
+          })
+        : Promise.resolve([]),
+      isProd
+        ? prisma.event.findFirst({
+            where: { id: event.id, userId: event.userId },
+            select: { eventDatetime: true, endDatetime: true, noFailureAt: true },
+          })
+        : Promise.resolve(null),
+      isProd ? Promise.resolve([]) : getMessagesForEvent(event.id, event.userId),
+    ]);
+
   const linkedFailureDesc = new Set(
     linkedFailures.map((l) => l.description.trim()),
   );
@@ -249,6 +285,11 @@ export async function ChecklistSection({
     eventDatetime: event.eventDatetime,
     endDatetime: event.endDatetime,
   });
+  // 予定が終わっているか（振り返り＝「未来の自分へのメッセージ」枠を他の枠と同じ
+  // 見た目で編集できるようにする文言を出すかの判定に使う。テスト版モードだけ）。
+  const eventIsPast =
+    (event.endDatetime ?? new Date(event.eventDatetime.getTime() + 2 * 3_600_000)) <=
+    new Date();
   const [
     warning,
     taskRules,
@@ -258,7 +299,7 @@ export async function ChecklistSection({
     pastEventsRaw,
     itemImages,
   ] = await Promise.all([
-    getWarningForEvent(event),
+    isProd ? getWarningForEvent(event.id) : Promise.resolve(null),
     getApplicableRules(event.categoryId, feature, "task"),
     getApplicableRules(event.categoryId, feature, "belonging"),
     prisma.event.findUnique({
@@ -279,6 +320,33 @@ export async function ChecklistSection({
       select: { id: true, kind: true, slot: true, data: true, width: true, height: true },
     }),
   ]);
+  // 結びついたメッセージ（確定後・スキップ後も含む）は、予定詳細からいつでも編集できる。
+  // retro: 予定が終わっている間、見出しを「未来の自分へのメッセージ」にする（その場だけ）。
+  const futureMessageNode = (
+    <FutureMessageEditor
+      eventId={event.id}
+      retro={!isProd && eventIsPast}
+      initial={linkedMessages.map(
+        (m): EMRow => ({
+          id: m.id,
+          eventId: m.eventId,
+          messageId: m.messageId,
+          body: m.body,
+          keywords: m.keywords,
+          genres: m.genres,
+          categoryIds: m.categoryIds,
+          scope: m.scope,
+          status: m.status,
+          matchReason: m.matchReason,
+          eventTitle: m.eventTitle,
+          sourceEventTitle: m.sourceEventTitle,
+          confirmedCount: m.confirmedCount,
+          eventEnded: m.eventEnded,
+          isDone: m.isDone,
+        }),
+      )}
+    />
+  );
   const forced = [...taskRules, ...belongingRules].filter((r) => r.forced);
   const rows = items as unknown as Row[];
 
@@ -304,11 +372,27 @@ export async function ChecklistSection({
     reviewState?.sectionOrder ?? null,
     items.map((i) => i.kind),
   );
-  // 「この予定の失敗ログ」もリスト枠として並べ替え対象にする。
-  // まだ並べ替えたことがなければ、話して作るのすぐ下（先頭）に置く。
-  const orderedKeys = sections.includes(FAILURE_LOG_KEY)
-    ? sections
-    : [FAILURE_LOG_KEY, ...sections];
+  // 「考えられる失敗」（本番版）／「未来の自分へ」（テスト版）もリスト枠として
+  // 並べ替え対象にする。まだ並べ替えたことがなければ、話して作るのすぐ下（先頭）に置く。
+  // テスト版は、この予定に結びついたメッセージが1件も無ければ枠自体を出さない
+  // （空の「＋追加」だけの枠が毎回出るのを避ける。追加は /failures からできる）。
+  // 予定が終わっている（振り返り）ときは、メッセージが1件もなくてもここから
+  // 新しく書けるよう、枠自体は出す。
+  const hasFutureMessages = linkedMessages.length > 0 || (!isProd && eventIsPast);
+  const specialKey = isProd ? FAILURE_LOG_KEY : FUTURE_MESSAGE_KEY;
+  // 今のモードで使わない方の特別キーは、以前のモードで保存された sectionOrder に
+  // 残っていても表示上は除く（データとしては保ったまま。モードを戻せば復帰する）。
+  const otherSpecialKey = isProd ? FUTURE_MESSAGE_KEY : FAILURE_LOG_KEY;
+  const sectionsOwn = sections.filter((k) => k !== otherSpecialKey);
+  const orderedKeys = isProd
+    ? sectionsOwn.includes(FAILURE_LOG_KEY)
+      ? sectionsOwn
+      : [FAILURE_LOG_KEY, ...sectionsOwn]
+    : hasFutureMessages
+      ? sectionsOwn.includes(FUTURE_MESSAGE_KEY)
+        ? sectionsOwn
+        : [FUTURE_MESSAGE_KEY, ...sectionsOwn]
+      : sectionsOwn.filter((k) => k !== FUTURE_MESSAGE_KEY);
 
   // ユーザーが足した枠（買うもの等）の名前付きリストも、その枠名が一致すれば拾う
   // （組み込みの2枠に限らない。「引き出す」も別枠として独立させるため）。
@@ -324,6 +408,11 @@ export async function ChecklistSection({
         count: k === "belonging" ? e.belongingCount : e.taskCount,
       }))
       .filter((e) => e.count > 0);
+  // 項目ごとの「次回の出し方」（範囲）。テスト版モードだけ（本番版は空のまま）。
+  // 項目の保存のたびに作り直されても、タイトルで引けるように。
+  const scopeMap = isProd
+    ? new Map<string, ScopeEntry>()
+    : await loadEventScopeMap(event.userId, event.id);
   const unreviewed =
     !!reviewState &&
     !reviewState.listReviewedAt &&
@@ -333,19 +422,30 @@ export async function ChecklistSection({
 
   return (
     <>
-      {/* 「過去に失敗の記録があります」の警告はやめて、ページ上部の失敗ログ提案に一本化。
-          終わった予定の振り返り（今回はどうでしたか？）だけ残す。 */}
-      {warning && warning.isPast && (
-        <div id="failure-review" className="scroll-mt-4">
-          <WarningPanel warning={warning} />
-        </div>
+      {/* 本番版: 「過去に失敗の記録があります」の警告（終わった予定の振り返りだけ）。
+          テスト版: 振り返りの一言案内（専用カードは持たず、下のリストをそのまま
+          直せばよい。ユーザー指摘により2026-10-19: 確定カード形式を廃止）。 */}
+      {isProd ? (
+        warning &&
+        warning.isPast && (
+          <div id="failure-review" className="scroll-mt-4">
+            <WarningPanel warning={warning} />
+          </div>
+        )
+      ) : (
+        eventIsPast && (
+          <p id="message-review" className="scroll-mt-4 text-sm text-foreground">
+            今回の予定を振り返って、次回の自分のために準備リストを修正しましょう。
+          </p>
+        )
       )}
 
       <section className="space-y-4" data-coach="checklist">
-        {/* 小さめのボタン2つを横並び。押すとポップアップで開く。 */}
+        {/* 小さめのボタンを横一列に。どれかの表示文言が伸びても折り返して縦に
+            崩れないよう、折り返し（flex-wrap）ではなく横スクロールにする。 */}
         <div
           data-coach="list-reminder"
-          className="flex flex-wrap items-center gap-2"
+          className="flex items-center gap-2 overflow-x-auto"
         >
           <ListReminderControl
             eventId={event.id}
@@ -365,7 +465,10 @@ export async function ChecklistSection({
               連携時に取り込んだ予定です。準備リストはまだ作っていません
               <InfoHint id="checklist-generate-existing">
                 自分で予定に入れる前からあった予定は、開いても自動では作りません。
-                このボタンを押すと、今この場で準備リスト・考えられる失敗を作ります。
+                このボタンを押すと、今この場で準備リストを作り、
+                {isProd
+                  ? "考えられる失敗を作ります。"
+                  : "未来の自分へのメッセージとの一致も確認します。"}
               </InfoHint>
             </p>
             <form action={generateChecklistForEvent}>
@@ -393,12 +496,12 @@ export async function ChecklistSection({
         <SectionList
           eventId={event.id}
           entries={orderedKeys.map((key): SectionEntry => {
-            if (key === FAILURE_LOG_KEY) {
+            if (key === specialKey) {
               return {
                 key,
-                label: "考えられる失敗",
+                label: isProd ? "考えられる失敗" : "過去の自分よりメッセージ",
                 builtin: true, // 名前変更・削除はさせない
-                node: failureLogNode,
+                node: isProd ? failureLogNode : futureMessageNode,
               };
             }
             const builtin = isBuiltinSection(key);
@@ -417,6 +520,8 @@ export async function ChecklistSection({
                     builtin ? pastByKind(key as "task" | "belonging") : []
                   }
                   imagesBySlot={imagesByKind.get(key) ?? EMPTY_IMG_MAP}
+                  scopes={scopeMap}
+                  showScopeUi={!isProd}
                 />
               ),
             };

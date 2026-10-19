@@ -106,7 +106,6 @@ export async function resolveCategoryForEvent(
   return getOrCreateCategory(userId, aiName || FALLBACK_CATEGORY);
 }
 
-/** 名前でカテゴリを取得。なければ作成して返す。 */
 /** 名前でカテゴリを取得。なければ作成して返す。大文字小文字は区別しない（2026-10-19〜）。 */
 export async function getOrCreateCategory(userId: string, name: string) {
   const trimmed = name.trim() || FALLBACK_CATEGORY;

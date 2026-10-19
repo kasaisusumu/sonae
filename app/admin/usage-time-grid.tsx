@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { X } from "lucide-react";
 
 export interface UsageGridRow {
   id: string;
@@ -36,12 +37,10 @@ function formatYenApprox(n: number): string {
  * 金額を出して、それをタップしたら詳細が見られるようにして」）。
  */
 export function UsageTimeGrid({
-  id,
   days,
   todayKey,
   rows,
 }: {
-  id?: string;
   days: { key: string; label: string }[];
   todayKey: string;
   rows: UsageGridRow[];
@@ -51,7 +50,7 @@ export function UsageTimeGrid({
   );
 
   return (
-    <section id={id} className="space-y-3">
+    <section className="space-y-3">
       <h2 className="text-sm font-semibold">
         利用者別・日付別の利用時間（直近{days.length}日・AI利用金額つき）
       </h2>
@@ -153,7 +152,7 @@ export function UsageTimeGrid({
                 onClick={() => setOpen(null)}
                 className="rounded-lg px-2 py-1 text-muted hover:bg-surface-muted"
               >
-                ✕
+                <X aria-hidden className="h-4 w-4" />
               </button>
             </div>
             <div className="overflow-y-auto p-3">

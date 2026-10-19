@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { X } from "lucide-react";
 import { setListReminders } from "@/app/actions";
 import {
   LEAD_PRESETS,
@@ -15,7 +16,8 @@ const TIME_PRESETS = LEAD_PRESETS.filter(
 
 /**
  * 予定単位の「準備リストのリマインド」。最大5回まで。小さなボタン → ポップアップで編集。
- * ボタン表記: 1回=「🔔 リマインド：1日前」、2回以上=「🔔 リマインド（2）：1日前+」。
+ * ボタン表記: 1回=「🔔 リマインド：1日前」、2回以上=「🔔 リマインド(2)：1日前+」
+ * （件数の丸括弧は半角。数字だけを囲む丸括弧は全角ではなく半角で統一する、ユーザー指定の表記ルール）。
  */
 export function ListReminderControl({
   eventId,
@@ -40,14 +42,14 @@ export function ListReminderControl({
       : leads.length === 1
         ? formatLead(leads[0])
         : `${formatLead(leads[0])}+`;
-  const countBadge = leads.length >= 2 ? `（${leads.length}）` : "";
+  const countBadge = leads.length >= 2 ? `(${leads.length})` : "";
 
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground hover:bg-surface-muted"
+        className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground hover:bg-surface-muted"
       >
         🔔 リマインド{countBadge}：{label}
       </button>
@@ -106,7 +108,7 @@ export function ListReminderControl({
                       aria-label="このリマインドを削除"
                       className="shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn"
                     >
-                      ✕
+                      <X aria-hidden className="h-3.5 w-3.5" />
                     </button>
                   </li>
                 ))}

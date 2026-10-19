@@ -5,16 +5,17 @@ import "./globals.css";
 import { getSessionUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { reviewPendingFailureWhere } from "@/lib/failures";
+import { featureModeOf, isFailureLogEnabled } from "@/lib/feature-mode";
 import { APP_NAME, APP_TAGLINE, APP_DESCRIPTION } from "@/lib/app-info";
 import { FeedbackWidget } from "@/app/components/feedback-widget";
 import { LogoutButton } from "@/app/components/logout-button";
 import { SwRegister } from "@/app/components/sw-register";
 import { BottomNav } from "@/app/components/bottom-nav";
 import { LiveSync } from "@/app/components/live-sync";
-import { PreventGoals } from "@/app/components/prevent-goals";
 import { Tutorial } from "@/app/components/tutorial";
 import { PageCoach } from "@/app/components/page-coach";
 import { NotifyNag } from "@/app/components/notify-nag";
+import { PreventGoals } from "@/app/components/prevent-goals";
 import { MenuButton } from "@/app/components/menu-button";
 
 const geistSans = Geist({
@@ -80,21 +81,28 @@ export default async function RootLayout({
   const uid = await getSessionUserId();
   const isLoggedIn = uid !== null;
 
-  // 「結果記録待ち」の失敗ログ数（ナビにドットを出す）。1 件の軽い count。
+  // 「結果記録待ち」の件数（ナビにドットを出す）。本番版の失敗ログだけの概念
+  // （テスト版の未来の自分へのメッセージは、他の準備リストの枠と同じ扱いにしたため
+  // 「確定待ち」というバッジ自体を持たない。ユーザー指摘により2026-10-19）。
   let pendingReview = 0;
   let tutorialDone = false;
   let hasPushSubscription = false;
+  let isProductionMode = false;
   if (uid) {
-    const [count, me, pushCount] = await Promise.all([
+    const me = await prisma.user.findUnique({
+      where: { id: uid },
+      select: { tutorialSeenAt: true, featureMode: true },
+    });
+    const mode = featureModeOf({ featureMode: me?.featureMode ?? "test" });
+    isProductionMode = isFailureLogEnabled(mode);
+    const [count, pushCount] = await Promise.all([
       // 「結果を記録しよう」(確認コーナー) に実際に出るものと同じ条件を共有する。
       // 予定が「終わっている」= (endDatetime ?? eventDatetime) <= now。
       // 以前は eventDatetime だけで判定していたため、開始済みだが未終了の予定
       // （長い予定・終日予定など）で「ドットは出るのに操作対象が無い」状態になっていた。
-      prisma.failureLog.count({ where: reviewPendingFailureWhere(uid) }),
-      prisma.user.findUnique({
-        where: { id: uid },
-        select: { tutorialSeenAt: true },
-      }),
+      isProductionMode
+        ? prisma.failureLog.count({ where: reviewPendingFailureWhere(uid) })
+        : Promise.resolve(0),
       prisma.pushSubscription.count({ where: { userId: uid } }),
     ]);
     pendingReview = count;
@@ -102,15 +110,23 @@ export default async function RootLayout({
     hasPushSubscription = pushCount > 0;
   }
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
+  const failuresLabel = isProductionMode ? "失敗ログ" : "未来の自分へ";
 
   return (
     <html lang="ja" className={`${geistSans.variable} h-full`}>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <SwRegister />
         {isLoggedIn ? <LiveSync /> : null}
-        {isLoggedIn ? <PreventGoals /> : null}
-        {isLoggedIn ? <Tutorial tutorialDone={tutorialDone} /> : null}
-        {isLoggedIn ? <PageCoach tutorialDone={tutorialDone} /> : null}
+        {isLoggedIn && isProductionMode ? <PreventGoals /> : null}
+        {isLoggedIn ? (
+          <Tutorial
+            tutorialDone={tutorialDone}
+            waitForPreventGoals={isProductionMode}
+          />
+        ) : null}
+        {isLoggedIn ? (
+          <PageCoach tutorialDone={tutorialDone} isProductionMode={isProductionMode} />
+        ) : null}
         {isLoggedIn ? (
           <NotifyNag
             publicKey={vapidPublicKey}
@@ -122,12 +138,9 @@ export default async function RootLayout({
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5 sm:px-5 sm:py-3">
             <div className="flex min-w-0 items-center gap-2">
               {isLoggedIn ? <MenuButton /> : null}
-              <Link href="/" className="flex items-baseline gap-2 no-underline">
+              <Link href="/" className="flex items-center no-underline">
                 <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">
                   {APP_NAME}
-                </span>
-                <span className="hidden text-xs text-muted sm:inline">
-                  予定の準備、わすれない
                 </span>
               </Link>
             </div>
@@ -135,7 +148,7 @@ export default async function RootLayout({
               <nav className="hidden items-center gap-1 text-sm sm:flex">
                 {[
                   ["/events", "予定"],
-                  ["/failures", "失敗ログ"],
+                  ["/failures", failuresLabel],
                   ["/savings", "マニュアル"],
                   ["/settings", "設定"],
                 ].map(([href, label]) => (
@@ -183,7 +196,9 @@ export default async function RootLayout({
           </div>
         </footer>
 
-        {isLoggedIn ? <BottomNav pendingReview={pendingReview} /> : null}
+        {isLoggedIn ? (
+          <BottomNav pendingReview={pendingReview} failuresLabel={failuresLabel} />
+        ) : null}
       </body>
     </html>
   );

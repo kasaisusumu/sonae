@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { X } from "lucide-react";
 import {
   addChecklistItemImage,
   deleteChecklistItemImage,
@@ -200,9 +201,9 @@ export function ItemImages({
                 type="button"
                 onClick={() => remove(img.id)}
                 aria-label="写真を削除"
-                className="absolute right-0.5 top-0.5 rounded-full bg-black/60 px-1 text-[10px] leading-4 text-white"
+                className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 leading-none text-white"
               >
-                ✕
+                <X aria-hidden className="h-2.5 w-2.5" />
               </button>
             </li>
           ))}

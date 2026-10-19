@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { X } from "lucide-react";
 import { type FRRow } from "@/app/components/failure-review-row";
 import { StickyReviewRows } from "@/app/components/sticky-review-rows";
 
@@ -66,7 +67,7 @@ export function MonthlyPreventedPopup({ rows }: { rows: FRRow[] }) {
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-2 py-1 text-muted hover:bg-surface-muted"
               >
-                ✕
+                <X aria-hidden className="h-4 w-4" />
               </button>
             </div>
             <StickyReviewRows

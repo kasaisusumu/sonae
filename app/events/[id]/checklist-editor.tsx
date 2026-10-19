@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { X } from "lucide-react";
 import {
   applyTemplateToEvent,
   clearChecklistSection,
@@ -9,6 +10,8 @@ import {
   saveChecklist,
   saveListAsTemplate,
   setItemNotifyLead,
+  setItemScopeAction,
+  setItemKeywordScopeAction,
   toggleChecklistItemDone,
   trackFeatureUse,
 } from "@/app/actions";
@@ -17,6 +20,22 @@ import { InfoHint } from "@/app/components/info-hint";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import { useFlushOnHide } from "@/app/components/use-flush-on-hide";
 import { ItemImages, Linkify, type ItemImage } from "./item-media";
+import {
+  ScopeQuickToggle,
+  ScopeEmojiToggle,
+  KeywordSentenceField,
+  type QuickScope,
+} from "@/app/components/scope-picker";
+import type { ItemScope } from "@/lib/item-scope";
+
+/** 項目の「次回の出し方」（範囲）。予定ごとの指定（EventChecklistScope）から来る。 */
+interface ScopeInfo {
+  scope: string;
+  status: string; // proposed | chosen
+  reason: string | null;
+  /** scope が "keyword" のときの、現在のキーワード。 */
+  keyword: string | null;
+}
 
 interface Item {
   key: string;
@@ -28,6 +47,7 @@ interface Item {
   notifyLeadMinutes: number | null; // 予定開始の何分前に通知するか。null = 通知なし
   notifyCustom: boolean; // カスタム入力（日・時・分）を出しているか（UIのみ）
   images: ItemImage[];
+  scope: ScopeInfo | null;
 }
 
 interface InitialItem {
@@ -38,6 +58,7 @@ interface InitialItem {
   isUserAdded: boolean;
   notifyLeadMinutes: number | null;
   images?: ItemImage[];
+  scope?: ScopeInfo | null;
 }
 
 const DEFAULT_LEAD = 180; // 3時間前
@@ -90,6 +111,7 @@ export function ChecklistEditor({
   templates = [],
   pastEvents = [],
   allowImages = true,
+  showScopeUi = true,
 }: {
   eventId: string;
   kind?: string;
@@ -100,6 +122,8 @@ export function ChecklistEditor({
   pastEvents?: { id: string; label: string; count: number }[];
   /** 項目メモへの写真添付を出すか（予定ページでは true、学習ページでは false）。 */
   allowImages?: boolean;
+  /** 「次回の出し方」の絵文字ボタンを出すか（テスト版モードだけ。本番版は false）。 */
+  showScopeUi?: boolean;
 }) {
   const isBelonging = kind === "belonging";
   const kindLabel = label ?? (isBelonging ? "持ち物" : "準備すること");
@@ -117,6 +141,7 @@ export function ChecklistEditor({
         notifyCustom:
           it.notifyLeadMinutes != null && !isLeadPreset(it.notifyLeadMinutes),
         images: it.images ?? [],
+        scope: it.scope ?? null,
       })),
     [initialItems],
   );
@@ -183,6 +208,15 @@ export function ChecklistEditor({
 
   // 行ごとの詳細（通知タイミング・メモ・削除）を開いているか
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
+  // 「次回の出し方」ⓘ の開閉。行（<li key={it.key}>）の中では持たせない: it.key は
+  // 自動保存が完了するたびに振り直され、行ごと再マウントされる（下の useEffect のコメント参照）。
+  // 行の中の useState だとその瞬間に開いたポップアップが即閉じてしまうため、再マウントされない
+  // この階層で共有して持つ（内容は全項目共通なので、1つの boolean で足りる）。
+  const [scopeHintOpen, setScopeHintOpen] = useState(false);
+  // 「次回の出し方」絵文字ボタンのポップアップ（3択＋ⓘ）がどの項目向けに開いているか。
+  // it.key ではなく正規化タイトルで持つ: it.key は自動保存の再マウントのたびに変わるが、
+  // タイトル文字列はその間変わらないため、開いている最中に別項目の自動保存が走っても閉じない。
+  const [scopePopupFor, setScopePopupFor] = useState<string | null>(null);
   const toggleOpen = (key: string) =>
     setOpenKeys((prev) => {
       const next = new Set(prev);
@@ -360,10 +394,12 @@ export function ChecklistEditor({
       prev.map((x) => (x.key === it.key ? { ...x, isDone: next } : x)),
     );
     if (it.id) void toggleChecklistItemDone(it.id, next);
+    void trackFeatureUse("feature:checklist-item-check");
   }
 
   function remove(key: string) {
     if (!window.confirm("削除しますか？")) return;
+    void trackFeatureUse("feature:checklist-item-delete");
     setItems((prev) => {
       const target = prev.find((it) => it.key === key);
       // 保存済みの項目を消したときだけ、保存が必要（空の未保存行はそのまま消すだけ）
@@ -410,9 +446,21 @@ export function ChecklistEditor({
         notifyLeadMinutes: null,
         notifyCustom: false,
         images: [],
+        scope: null,
       },
     ]);
     setSaved(false);
+    // 項目を追加したら、予定詳細チュートリアルの後半（項目の詳細・次回の出し方・学習の
+    // 仕組み）を案内する。一度見せたら二度と出ない（lib の mm_coach_ フラグで判定）
+    // ので、追加のたびに呼んでも実害はない（ユーザー指摘により2026-10-19:
+    // ページを開いた時のチュートリアルと分割した）。
+    try {
+      window.dispatchEvent(
+        new CustomEvent("mm:coach-trigger", { detail: { key: "event_item_v1" } }),
+      );
+    } catch {
+      /* ignore */
+    }
     return key;
   }
 
@@ -442,6 +490,7 @@ export function ChecklistEditor({
         notifyLeadMinutes: null,
         notifyCustom: false,
         images: [],
+        scope: null,
       })),
     ];
     setItems(merged);
@@ -488,6 +537,54 @@ export function ChecklistEditor({
   const [tplName, setTplName] = useState("");
   const [applyId, setApplyId] = useState("");
   const [copyId, setCopyId] = useState("");
+  // 範囲を選び直した直後に、保存の反映を待たず表示を変えるための一時の値（項目の key ごと）
+  const [scopeOverride, setScopeOverride] = useState<Record<string, ItemScope>>({});
+
+  /** 画面に出す範囲（選び直した直後の一時の値を優先）。範囲の指定が無い項目は「この名前」。 */
+  function shownScope(it: Item): ItemScope {
+    // まだ何も決まっていない項目の既定表示は「この名前」（ユーザー指摘により2026-10-19:
+    // 「似た予定」は選ぶたびにAIでカテゴリ分類が走りコストがかかるため、既定は
+    // コスト無しの「この名前」にする）。保存時の実際の決定
+    // （lib/item-scope.ts の proposeScopesForSave）もこれと同じ既定値に揃えてある
+    // （画面の初期表示と保存側の決定がずれると、保存した瞬間に表示が変わってしまうため）。
+    const persisted = (it.scope?.scope as ItemScope) || "keyword";
+    // 「genre」はAIがカテゴリで一致判定した「似た予定」の内部表現（ユーザーが選べる3択には
+    // 無い）。クイックの3択UIでは「似た予定」として表示する（◯のような無地アイコンに
+    // 落とさない。ユーザー指摘により2026-10-19）。同様に旧仕様の「auto」も同じ扱いにする。
+    const quick: ItemScope =
+      persisted === "genre" || persisted === "auto" ? "similar" : persisted;
+    return scopeOverride[it.key] ?? quick;
+  }
+
+  /** 項目の範囲を選び直す（今回だけ／似た予定のとき／この名前の予定だけ、の3択）。未保存の編集を先に保存してから保存する。 */
+  function chooseScope(it: Item, scope: QuickScope) {
+    setScopeOverride((prev) => ({ ...prev, [it.key]: scope }));
+    startTransition(async () => {
+      await flushPending();
+      await setItemScopeAction({
+        eventId,
+        kind,
+        title: it.title.trim(),
+        scope,
+      });
+      router.refresh();
+    });
+  }
+
+  /** 項目の範囲を、詳細の文章欄で指定したキーワードに差し替える。空文字なら「今回だけ」に戻す。 */
+  function chooseKeyword(it: Item, keyword: string) {
+    setScopeOverride((prev) => ({ ...prev, [it.key]: keyword ? "keyword" : "event_only" }));
+    startTransition(async () => {
+      await flushPending();
+      await setItemKeywordScopeAction({
+        eventId,
+        kind,
+        title: it.title.trim(),
+        keyword,
+      });
+      router.refresh();
+    });
+  }
 
   async function flushPending() {
     if (dirty) {
@@ -619,7 +716,7 @@ export function ChecklistEditor({
                       {open ? "∧" : "∨"}
                     </button>
                     <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[11px] text-muted">
-                      ✕
+                      <X aria-hidden className="h-3 w-3" />
                     </span>
                   </div>
                   {open && (
@@ -660,36 +757,38 @@ export function ChecklistEditor({
                   className="mt-1 h-5 w-5 shrink-0 accent-[var(--teal)]"
                   aria-label="完了"
                 />
-                <textarea
-                  ref={(el) => {
-                    if (el) titleRefs.current.set(it.key, el);
-                    else titleRefs.current.delete(it.key);
-                  }}
-                  value={it.title}
-                  onChange={(e) => update(it.key, { title: e.target.value })}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter" || e.shiftKey) return;
-                    e.preventDefault();
-                    // 次の項目＝画面に表示されている順（displayItems）での次の行。
-                    // items（生の state 配列）の順と frozenOrder による表示順は
-                    // ずれることがあるため、表示順の配列で探す必要がある
-                    // （これが無いと、既存のチェック済み項目が state 配列の末尾側に
-                    // いる場合などに、見た目の次の行と違う行へ飛んだり、無関係に
-                    // 新しい行を作ってしまったりするバグがあった）。
-                    const idx = displayItems.findIndex((x) => x.key === it.key);
-                    const next = displayItems[idx + 1];
-                    if (next) {
-                      setFocusKey(next.key);
-                    } else {
-                      setFocusKey(add());
-                    }
-                  }}
-                  rows={1}
-                  placeholder={`${kindLabel}を書く`}
-                  className={`min-w-0 flex-1 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg leading-snug [field-sizing:content] hover:border-border focus:border-border focus:bg-background ${
-                    it.isDone ? "text-muted line-through" : ""
-                  }`}
-                />
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <textarea
+                    ref={(el) => {
+                      if (el) titleRefs.current.set(it.key, el);
+                      else titleRefs.current.delete(it.key);
+                    }}
+                    value={it.title}
+                    onChange={(e) => update(it.key, { title: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" || e.shiftKey) return;
+                      e.preventDefault();
+                      // 次の項目＝画面に表示されている順（displayItems）での次の行。
+                      // items（生の state 配列）の順と frozenOrder による表示順は
+                      // ずれることがあるため、表示順の配列で探す必要がある
+                      // （これが無いと、既存のチェック済み項目が state 配列の末尾側に
+                      // いる場合などに、見た目の次の行と違う行へ飛んだり、無関係に
+                      // 新しい行を作ってしまったりするバグがあった）。
+                      const idx = displayItems.findIndex((x) => x.key === it.key);
+                      const next = displayItems[idx + 1];
+                      if (next) {
+                        setFocusKey(next.key);
+                      } else {
+                        setFocusKey(add());
+                      }
+                    }}
+                    rows={1}
+                    placeholder={`${kindLabel}を書く`}
+                    className={`block w-full resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg leading-snug [field-sizing:content] hover:border-border focus:border-border focus:bg-background ${
+                      it.isDone ? "text-muted line-through" : ""
+                    }`}
+                  />
+                </div>
                 {it.isUserAdded && (
                   <span className="mt-1.5 hidden shrink-0 rounded bg-accent-soft px-1 text-[10px] text-teal-dark sm:inline">
                     追加
@@ -705,33 +804,76 @@ export function ChecklistEditor({
                     🖼️{it.images.length}
                   </span>
                 )}
-                <button
-                  type="button"
-                  data-coach="item-expand"
-                  onClick={() => toggleOpen(it.key)}
-                  aria-expanded={open}
-                  aria-label={open ? "詳細を閉じる" : "詳細を開く"}
-                  className={`mt-0.5 shrink-0 rounded-md border px-2 py-1 text-sm leading-none transition-colors ${
-                    open
-                      ? "border-teal bg-teal-soft text-teal-dark"
-                      : "border-border text-muted hover:border-teal hover:text-teal-dark"
-                  }`}
-                >
-                  {open ? "∧" : "∨"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => remove(it.key)}
-                  aria-label="削除"
-                  className="mt-0.5 shrink-0 rounded-full border border-border px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn"
-                >
-                  ✕
-                </button>
+                {/* 3つは横幅をできるだけ詰めて1かたまりに。入りきらなければ
+                    「∨✕」の行＋「🏷」の行の2段に折り返してよい（DOM順は✕→∨→🏷、
+                    flex-row-reverse+flex-wrap で、1行なら🏷∨✕、2段なら上∨✕・下🏷になる）。 */}
+                <span className="mt-0.5 flex shrink-0 flex-row-reverse flex-wrap items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => remove(it.key)}
+                    aria-label="削除"
+                    className="shrink-0 rounded-full border border-border px-1.5 py-1 text-xs text-muted hover:border-warn hover:text-warn"
+                  >
+                    <X aria-hidden className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    data-coach="item-expand"
+                    onClick={() => toggleOpen(it.key)}
+                    aria-expanded={open}
+                    aria-label={open ? "詳細を閉じる" : "詳細を開く"}
+                    className={`shrink-0 rounded-md border px-1.5 py-1 text-sm leading-none transition-colors ${
+                      open
+                        ? "border-teal bg-teal-soft text-teal-dark"
+                        : "border-border text-muted hover:border-teal hover:text-teal-dark"
+                    }`}
+                  >
+                    {open ? "∧" : "∨"}
+                  </button>
+                  {showScopeUi && it.title.trim() && (
+                    <ScopeEmojiToggle
+                      value={shownScope(it)}
+                      onChange={(sc) => chooseScope(it, sc)}
+                      open={scopePopupFor === normTitle(it.title)}
+                      onOpenChange={(v) =>
+                        setScopePopupFor(v ? normTitle(it.title) : null)
+                      }
+                      hintOpen={scopeHintOpen}
+                      onHintOpenChange={setScopeHintOpen}
+                      className="mt-0"
+                      dataCoach="item-scope"
+                    />
+                  )}
+                </span>
               </div>
 
               {/* 詳細（チップを押したときだけ）：通知タイミング・メモ・削除 */}
               {open && (
                 <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
+                  {/* 次回の出し方（範囲）。絵文字ボタンは行に常時表示済み（タップでポップアップ）。
+                      ここでは大きい3択を出す。「この名前」を選んでいるときだけ、その下に
+                      キーワードを直す欄も出す（他の2択ではキーワードを持たないため無意味）。
+                      テスト版モードだけ。「提案」「選んだ」の違いやキーワードの説明は、
+                      3択の隣のⓘ（ScopeHintBody）にまとめている（ユーザー指摘により
+                      2026-10-19: 行ごとの説明文を減らしⓘに集約）。 */}
+                  {showScopeUi && (
+                    <>
+                      <ScopeQuickToggle
+                        value={shownScope(it)}
+                        onChange={(sc) => chooseScope(it, sc)}
+                        hintOpen={scopeHintOpen}
+                        onHintOpenChange={setScopeHintOpen}
+                      />
+                      {shownScope(it) === "keyword" && (
+                        <KeywordSentenceField
+                          compact
+                          initialKeyword={it.scope?.keyword ?? ""}
+                          onCommit={(kw) => chooseKeyword(it, kw)}
+                          onClear={() => chooseKeyword(it, "")}
+                        />
+                      )}
+                    </>
+                  )}
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
                     <span className="shrink-0">通知</span>
                     <select
@@ -952,7 +1094,7 @@ export function ChecklistEditor({
         文言・メモ・追加・削除は自動保存
         <InfoHint id="checklist-autosave">
           ∨ で通知タイミング・メモ・リンク・写真。文言もメモも、手を止めたら
-          自動で保存されます。✕ で削除。
+          自動で保存されます。<X aria-hidden className="inline h-3 w-3 align-[-1px]" /> で削除。
         </InfoHint>
       </p>
 
@@ -973,7 +1115,7 @@ export function ChecklistEditor({
                   ⭐ この{kindLabel}リストを保存
                 </h3>
                 <p className="text-[11px] text-muted">
-                  名前を付けて保存すると、どの予定でも「📋 マニュアルから」で追加できます。同じ名前は上書きします。
+                  名前を付けて保存すると、どの予定でも「マニュアルから」で追加できます。同じ名前は上書きします。
                 </p>
                 <input
                   value={tplName}
@@ -1011,7 +1153,7 @@ export function ChecklistEditor({
                 </h3>
                 {templates.length === 0 ? (
                   <p className="text-xs text-muted">
-                    まだ{kindLabel}から選べるマニュアルはありません。「⭐ 名前をつけて保存」か、マニュアルページで作成できます。
+                    まだ{kindLabel}から選べるマニュアルはありません。「名前をつけて保存」か、マニュアルページで作成できます。
                   </p>
                 ) : (
                   <>
@@ -1072,7 +1214,7 @@ export function ChecklistEditor({
                       <option value="">予定を選ぶ</option>
                       {pastEvents.map((e) => (
                         <option key={e.id} value={e.id}>
-                          {e.label}（{e.count}）
+                          {e.label}({e.count})
                         </option>
                       ))}
                     </select>

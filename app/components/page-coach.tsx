@@ -6,8 +6,10 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import { usePathname } from "next/navigation";
+import { Menu } from "lucide-react";
 import { trackFeatureUse } from "@/app/actions";
 
 /**
@@ -17,30 +19,54 @@ import { trackFeatureUse } from "@/app/actions";
  * 表示済みかどうかはページごとに localStorage で覚える。
  */
 
-type Step = { sel: string; title: string; body: string };
-type Tour = { key: string; match: (path: string) => boolean; steps: Step[] };
+type Step = {
+  sel: string;
+  title: ReactNode;
+  body: string;
+  /** trueなら ver2（テスト版モード）のときだけ出す（該当要素はver1には存在しない）。 */
+  testOnly?: boolean;
+};
+type Tour = {
+  key: string;
+  match: (path: string) => boolean;
+  steps: Step[];
+  /**
+   * false の場合、ページを開いただけでは自動開始しない。"mm:coach-trigger"
+   * イベント（detail: { key }）で明示的に呼ばれたときだけ開始する
+   * （ユーザー指摘により2026-10-19: 予定詳細のチュートリアルが長すぎたため、
+   * 「ページを開いた時」と「初めて項目を追加した時」の2部に分割した）。
+   */
+  auto?: boolean;
+  /**
+   * 指定すると、そのモード（ver1=production / ver2=test）のときだけこのツアーを対象にする。
+   * 省略時は両モード共通。/failures のように、モードごとに別コンポーネント
+   * （data-coach の対象要素）が出るページで使う（同じ path に複数ツアーを出し分ける）。
+   */
+  modeOnly?: "test" | "production";
+};
 
 const FLAG_PREFIX = "mm_coach_";
 
 const TOURS: Tour[] = [
   {
-    key: "home_v5",
+    key: "home_v6",
     match: (p) => p === "/",
     steps: [
       {
         sel: '[data-coach="menu"]',
-        title: "困ったら左上の ☰",
+        title: (
+          <>
+            困ったら左上の <Menu aria-hidden className="inline h-4 w-4" />
+          </>
+        ),
         body: "使い方・チュートリアル・注意・ページ移動は、いつでもここから開けます。",
-      },
-      {
-        sel: '[data-coach="savings"]',
-        title: "防げた分の見える化",
-        body: "「防げた」と選んだ失敗の推定額の合計です（参考値）。下のグラフは棒をタップで内訳。",
       },
     ],
   },
   {
-    key: "events_v3",
+    // 手動「↻ 取り込む」ボタンを廃止（自動取り込みのみになった）ため、そのステップを削除
+    // （2026-10〜）。key を上げて、既に events_v3 を見た人にも更新後のツアーを出す。
+    key: "events_v4",
     match: (p) => p === "/events",
     steps: [
       {
@@ -48,17 +74,13 @@ const TOURS: Tour[] = [
         title: "予定のカード",
         body: "どこをタップしても準備リストへ。細いバーは準備の進み具合です。",
       },
-      {
-        sel: '[data-coach="sync"]',
-        title: "取り込み",
-        body: "普段は自動。すぐ反映したいときだけ「↻ 取り込む」を押してください。",
-      },
     ],
   },
   {
     // 予定詳細を初めて開いたときの案内。1つずつ、他ポップアップと重ねない、
     // 導入チュートリアル完了後に出す（共通ルール）。key を上げると再表示される。
-    key: "event_v6",
+    // event_v8: 「次回の出し方」のステップを追加（ver2だけ。testOnly参照）。
+    key: "event_v8",
     match: (p) => /^\/events\/[^/]+$/.test(p),
     steps: [
       {
@@ -72,40 +94,89 @@ const TOURS: Tour[] = [
         body: "スマホのキーボードのマイクキーで、持ち物や準備を思いつくまま話すだけ。AI が枠に振り分けて追加します。ゼロから打つより速いです。",
       },
       {
+        sel: '[data-coach="future-message"]',
+        title: "💌 過去の自分よりメッセージ",
+        body: "いつか思い出したいことを書いておくと、次に似た予定が入ったときに知らせます。",
+        // ver1（本番版）はこの枠の代わりに「考えられる失敗」が出るため対象が無い
+        // （2026-10-19修正。以前は testOnly が無く、本番版でこの1ステップだけ
+        // 対象が見つからず無駄に待ってから飛ばされていた）。
+        testOnly: true,
+      },
+    ],
+  },
+  {
+    // 予定詳細のチュートリアルの後半（長すぎたため2部に分割、2026-10-19〜）。
+    // ページを開いただけでは出さず、項目を初めて自分で追加したときに
+    // checklist-editor.tsx から "mm:coach-trigger" イベントで呼ばれる（auto: false）。
+    key: "event_item_v1",
+    match: (p) => /^\/events\/[^/]+$/.test(p),
+    auto: false,
+    steps: [
+      {
         sel: '[data-coach="item-expand"]',
         title: "∨ で項目の詳細",
         body: "その項目だけの通知タイミング・メモ・リンク・写真を設定できます。",
+      },
+      {
+        sel: '[data-coach="item-scope"]',
+        title: "📌🔁🏷 次回の出し方",
+        body: "この項目を次も出すかを選べます。📌今回だけ／🔁似た予定（用途が同じ予定にもAIが判断して出す）／🏷この名前（予定名からキーワードを決め、そのキーワードを含む予定にだけ出す）。タップで選び直せます。",
+        testOnly: true,
       },
       {
         sel: '[data-coach="add-item"]',
         title: "直すほど、あなた仕様に",
         body: "いる／いらないを直す・足すと学習して、次から似た予定で似たリストを最初から出します。増えすぎることはありません。",
       },
+    ],
+  },
+  {
+    // ver2（テスト版）の /failures（未来の自分へ）。本番版は別コンポーネント
+    // （対象要素が異なる）なので modeOnly で出し分ける（以前はここが無く、
+    // 本番版で対象要素が見つからずツアーが空振りしていた不具合。2026-10-19修正）。
+    key: "messages_v1",
+    match: (p) => p === "/failures",
+    modeOnly: "test",
+    steps: [
       {
-        sel: '[data-coach="fail-dictation"]',
+        sel: '[data-coach="message-new"]',
+        title: "メッセージを書く",
+        body: "予定が未定でも書けます。キーワード・ジャンルが一致する予定が入ったとき、自動で知らせます。",
+      },
+      {
+        sel: '[data-coach="message-dictation"]',
         title: "🎤 声でも記録できます",
-        body: "話すだけでAIが内容と対策をまとめて記録します。マイクキーからどうぞ。",
+        body: "話すだけでAIが本文・キーワード・ジャンルをまとめます。マイクキーからどうぞ。",
+      },
+      {
+        sel: '[data-coach="message-list"]',
+        title: "登録した内容を確認・編集",
+        body: "いつでも直したり、過去に移したり、削除したりできます。",
       },
     ],
   },
   {
-    key: "failures_v3",
+    // ver1（本番版）の /failures（失敗ログ）。message-new 等の test 版と対になる、
+    // fail-new 等の要素を対象にする（2026-10-19追加。この組が無かったため本番版では
+    // 空振りしていた）。
+    key: "failures_prod_v1",
     match: (p) => p === "/failures",
+    modeOnly: "production",
     steps: [
       {
         sel: '[data-coach="fail-new"]',
-        title: "うっかりを記録する",
-        body: "「何が起きたか」だけでOK。金額は空で大丈夫。予定に紐づけると先回りできます。",
+        title: "ひとこと記録する",
+        body: "必須は「何が起きたか」だけ。予定を選べばその予定に、選ばなければカテゴリ全体の記録になります。",
       },
       {
         sel: '[data-coach="fail-dictation"]',
         title: "🎤 声でも記録できます",
-        body: "話すだけでAIが内容と対策をまとめて記録します。マイクキーからどうぞ。",
+        body: "話すだけでAIが内容・対策を整えます。マイクキーからどうぞ。",
       },
       {
         sel: '[data-coach="fail-list"]',
-        title: "防げた／防げなかった",
-        body: "結果を選べます。「防げた」にしたものだけ、ホームの節約額に積み上がります。",
+        title: "登録した内容を確認・編集",
+        body: "これからの失敗予測・過去の振り返り・予定に紐づかない記録を、分けて確認できます。",
       },
     ],
   },
@@ -136,7 +207,11 @@ const TOURS: Tour[] = [
     steps: [
       {
         sel: '[data-coach="menu"]',
-        title: "困ったら左上の ☰",
+        title: (
+          <>
+            困ったら左上の <Menu aria-hidden className="inline h-4 w-4" />
+          </>
+        ),
         body: "使い方・チュートリアル・注意・ページ移動は、いつでもここから。",
       },
       {
@@ -170,10 +245,25 @@ function writeFlag(key: string) {
   }
 }
 
+/** ver1（本番モード）では testOnly のステップ（対象要素がver1に無い）を除く。 */
+function filterTourForMode(t: Tour, isProductionMode: boolean): Tour {
+  if (!isProductionMode) return t;
+  return { ...t, steps: t.steps.filter((s) => !s.testOnly) };
+}
+
+/** modeOnly が指定されたツアーは、該当するモードのときだけ対象にする。 */
+function matchesMode(t: Tour, isProductionMode: boolean): boolean {
+  if (!t.modeOnly) return true;
+  return t.modeOnly === (isProductionMode ? "production" : "test");
+}
+
 export function PageCoach({
   tutorialDone = false,
+  isProductionMode = false,
 }: {
   tutorialDone?: boolean;
+  /** ver1（本番の機能モード）かどうか。testOnly なステップを出し分けるために使う。 */
+  isProductionMode?: boolean;
 }) {
   const pathname = usePathname();
   const [tour, setTour] = useState<Tour | null>(null);
@@ -200,9 +290,14 @@ export function PageCoach({
   }, []);
 
   // パスが変わったら、そのページのツアーを（未表示なら）仕込む
+  // auto: false のツアーはここでは拾わない（明示的なトリガーでのみ開始）。
   useEffect(() => {
     let cancelled = false;
-    const t = TOURS.find((x) => x.match(pathname)) ?? null;
+    const found =
+      TOURS.find(
+        (x) => x.auto !== false && x.match(pathname) && matchesMode(x, isProductionMode),
+      ) ?? null;
+    const t = found ? filterTourForMode(found, isProductionMode) : null;
 
     // まず今の表示をリセット（effect 内の同期 setState を避けてマイクロタスクで）
     queueMicrotask(() => {
@@ -232,7 +327,7 @@ export function PageCoach({
     };
     const anotherPopup = () =>
       !!document.querySelector(
-        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-prevent-goals],[data-mm-desclink]",
+        "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-desclink],[data-mm-scopehint]",
       );
 
     const start = () => {
@@ -263,13 +358,17 @@ export function PageCoach({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [pathname, tutorialDone]);
+  }, [pathname, tutorialDone, isProductionMode]);
 
   // メニューの「このページの使い方をみる」から手動で開始する。
   // このページにツアーが無ければ何もしない。
   useEffect(() => {
     const onOpen = () => {
-      const t = TOURS.find((x) => x.match(pathname)) ?? null;
+      const found =
+        TOURS.find(
+          (x) => x.auto !== false && x.match(pathname) && matchesMode(x, isProductionMode),
+        ) ?? null;
+      const t = found ? filterTourForMode(found, isProductionMode) : null;
       if (!t) return;
       try {
         localStorage.removeItem(FLAG_PREFIX + t.key);
@@ -284,7 +383,44 @@ export function PageCoach({
     };
     window.addEventListener("mm:open-coach", onOpen);
     return () => window.removeEventListener("mm:open-coach", onOpen);
-  }, [pathname]);
+  }, [pathname, isProductionMode]);
+
+  // auto: false のツアーを、特定の操作（例: 項目を初めて追加した）から明示的に開始する。
+  // window.dispatchEvent(new CustomEvent("mm:coach-trigger", { detail: { key } })) で呼ぶ。
+  useEffect(() => {
+    let cancelled = false;
+    let timer = 0;
+    const onTrigger = (e: Event) => {
+      const key = (e as CustomEvent<{ key?: string }>).detail?.key;
+      const found = key ? TOURS.find((x) => x.key === key) : null;
+      const t = found ? filterTourForMode(found, isProductionMode) : null;
+      if (!t || t.steps.length === 0 || readFlag(t.key)) return;
+
+      const tryStart = () => {
+        if (cancelled) return;
+        if (
+          document.querySelector(
+            "[data-mm-tutorial],[data-mm-guided],[data-mm-firstseen],[data-mm-desclink],[data-mm-scopehint],[data-mm-coach]",
+          )
+        ) {
+          timer = window.setTimeout(tryStart, 400);
+          return;
+        }
+        rectRef.current = null;
+        setRect(null);
+        setIdx(0);
+        setTour(t);
+        void trackFeatureUse(`popup:coach:${t.key}:shown`);
+      };
+      tryStart();
+    };
+    window.addEventListener("mm:coach-trigger", onTrigger);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      window.removeEventListener("mm:coach-trigger", onTrigger);
+    };
+  }, [isProductionMode]);
 
   const finish = useCallback((skipped: boolean) => {
     setTour((cur) => {

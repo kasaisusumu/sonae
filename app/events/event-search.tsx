@@ -9,6 +9,8 @@ export interface SearchRow {
   dateKey: string; // 同じ暦日でまとめるキー
   dateLabel: string; // 小さく出す日付見出し
   node: ReactNode; // 既にサーバーで描画済みの <EventRow>（<li>）
+  /** 済んだ予定か（検索結果の並び順に使う）。 */
+  isPast?: boolean;
 }
 
 /**
@@ -35,11 +37,18 @@ export function EventSearch({
 
   const filtered = useMemo(() => {
     if (terms.length === 0) return rows;
-    // 検索時は済んだ予定も混ぜるため、日付順（昇順）に並べ直す
-    // （rows は未来向け昇順、extraRows は済んだ予定で別の並びのため）。
+    // 検索時は済んだ予定も混ぜる。順序は「現在に近い未来→先の未来→（無くなったら）
+    // 直近の過去→さらに前」にする（ユーザー指摘により2026-10-20: 古い順の単純な
+    // 羅列ではなく、今に近いものを優先する）。
     return [...rows, ...extraRows]
       .filter((r) => terms.every((t) => r.haystack.includes(t)))
-      .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+      .sort((a, b) => {
+        if (!a.isPast && b.isPast) return -1;
+        if (a.isPast && !b.isPast) return 1;
+        return a.isPast
+          ? b.dateKey.localeCompare(a.dateKey) // 過去同士: 直近が先（降順）
+          : a.dateKey.localeCompare(b.dateKey); // 未来同士: 近い順（昇順）
+      });
   }, [rows, extraRows, terms]);
 
   // 連続する同日をグループにまとめる（rows は日付昇順で渡す）。

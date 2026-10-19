@@ -14,7 +14,7 @@ export interface UsageGridRow {
     label: string;
     model: string;
     costYen: number;
-    mode: "ver1" | "ver2" | "共通";
+    mode: "ver1" | "ver2";
   }[][];
   totalMinutes: number;
   aiCostYen: number;
@@ -175,9 +175,7 @@ export function UsageTimeGrid({
                           className={`ml-1.5 rounded-full border px-1.5 py-0 text-[10px] font-normal ${
                             d.mode === "ver1"
                               ? "border-foreground/30 text-foreground"
-                              : d.mode === "ver2"
-                                ? "border-teal/40 text-teal-dark"
-                                : "border-border text-muted"
+                              : "border-teal/40 text-teal-dark"
                           }`}
                         >
                           {d.mode}

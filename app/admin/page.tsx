@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { formatYen, formatDateOnly } from "@/lib/format";
 import { jstDayKey } from "@/lib/activity";
 import { requireAdminVerified } from "@/lib/require-admin";
-import { aiFeatureLabel, aiFeatureMode } from "@/lib/ai-usage";
+import { aiFeatureLabel } from "@/lib/ai-usage";
 import { UsageTimeGrid, type UsageGridRow } from "./usage-time-grid";
 import {
   PAGE_KEYS,
@@ -242,6 +242,7 @@ export default async function AdminPage({
     activityByUserDay,
     usageByKeyUser,
     aiUsageEvents,
+    modeChanges,
   ] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: "asc" },
@@ -311,7 +312,42 @@ export default async function AdminPage({
         feature: true,
       },
     }),
+    // AI利用1回ごとに、その時点でver1/ver2どちらだったかを判定するための履歴
+    // （ユーザー指摘により2026-10-20:「共通」ではなく実際にどちらの状態で行われたか
+    // を出す）。
+    prisma.featureModeChange.findMany({
+      orderBy: { changedAt: "asc" },
+      select: { userId: true, toMode: true, changedAt: true },
+    }),
   ]);
+
+  // 利用者ごとの切替履歴（古い順）から、ある時刻にどちらのモードだったかを判定する。
+  // 履歴が無い（一度も切り替えていない）利用者は、その時点から現在のモード
+  // （featureMode列。既定は production=ver1）のまま変わっていないとみなす。
+  const modeHistoryByUser = new Map<string, { at: Date; mode: "ver1" | "ver2" }[]>();
+  for (const c of modeChanges) {
+    const arr = modeHistoryByUser.get(c.userId) ?? [];
+    arr.push({ at: c.changedAt, mode: c.toMode === "test" ? "ver2" : "ver1" });
+    modeHistoryByUser.set(c.userId, arr);
+  }
+  const currentModeByUser = new Map(
+    users.map((u) => [u.id, u.featureMode === "test" ? ("ver2" as const) : ("ver1" as const)]),
+  );
+  function actualModeAt(userId: string, at: Date): "ver1" | "ver2" {
+    const history = modeHistoryByUser.get(userId);
+    if (!history || history.length === 0) {
+      return currentModeByUser.get(userId) ?? "ver1";
+    }
+    // at より後（未来）の最初の切替の「切替前」の状態を使う＝その切替の1つ前のmode。
+    // at 以前に切替が無ければ、一番古い切替の「切替前」の状態（＝一度も切替未経験の
+    // ときの既定 ver1）を使う。
+    let result: "ver1" | "ver2" = "ver1";
+    for (const h of history) {
+      if (h.at <= at) result = h.mode;
+      else break;
+    }
+    return result;
+  }
 
   const hasChecklistSet = new Set(checklistEvents.map((e) => e.userId));
   const confirmedMap = new Map(
@@ -432,31 +468,35 @@ export default async function AdminPage({
       label: aiFeatureLabel(e.feature),
       model: e.model,
       costYen: e.estimatedCostYen,
-      mode: aiFeatureMode(e.feature),
+      mode: actualModeAt(e.userId, e.createdAt),
     });
     detailMap.set(dk, arr);
   }
 
-  // AI利用金額: 全体で「どの操作」がどのくらい消費したか（ver1/ver2の別つき）。
+  // AI利用金額: 全体で「どの操作」がどのくらい消費したか。同じ操作でもver1の時に
+  // 使われた分とver2の時に使われた分は別の行にする（実際にその時どちらだったかで
+  // 分ける。機能名だけでの「共通」という括りはやめた。ユーザー指摘により2026-10-20）。
   type AiFeatureCostRow = {
     feature: string;
     label: string;
-    mode: "ver1" | "ver2" | "共通";
+    mode: "ver1" | "ver2";
     requests: number;
     costYen: number;
   };
   const aiCostByFeature = new Map<string, AiFeatureCostRow>();
   for (const e of aiUsageEvents) {
-    const cur = aiCostByFeature.get(e.feature) ?? {
+    const mode = actualModeAt(e.userId, e.createdAt);
+    const key = `${e.feature}:${mode}`;
+    const cur = aiCostByFeature.get(key) ?? {
       feature: e.feature,
       label: aiFeatureLabel(e.feature),
-      mode: aiFeatureMode(e.feature),
+      mode,
       requests: 0,
       costYen: 0,
     };
     cur.requests += 1;
     cur.costYen += e.estimatedCostYen;
-    aiCostByFeature.set(e.feature, cur);
+    aiCostByFeature.set(key, cur);
   }
   const aiCostByFeatureRows = [...aiCostByFeature.values()].sort(
     (a, b) => b.costYen - a.costYen,
@@ -996,7 +1036,7 @@ export default async function AdminPage({
             </thead>
             <tbody className="divide-y divide-border">
               {aiCostByFeatureRows.map((f) => (
-                <tr key={f.feature}>
+                <tr key={`${f.feature}:${f.mode}`}>
                   <td className="whitespace-nowrap px-3 py-2 text-foreground">
                     {f.label}
                   </td>
@@ -1005,9 +1045,7 @@ export default async function AdminPage({
                       className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                         f.mode === "ver1"
                           ? "bg-surface-muted text-foreground"
-                          : f.mode === "ver2"
-                            ? "border border-border text-muted"
-                            : "text-muted"
+                          : "border border-border text-muted"
                       }`}
                     >
                       {f.mode}

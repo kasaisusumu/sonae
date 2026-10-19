@@ -155,6 +155,7 @@ export default async function EventsPage({
                 dateKey: eventDateKey(ev.eventDatetime),
                 dateLabel: eventDateLabel(ev.eventDatetime, now),
                 node: <EventRow ev={ev} categoryNames={categoryNames} past />,
+                isPast: true,
               }),
             )}
           />

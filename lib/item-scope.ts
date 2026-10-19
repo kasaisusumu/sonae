@@ -177,11 +177,6 @@ async function saveScopeForItem(
   // ChecklistScopeRule を直接探す。一度保存したカテゴリは再利用し、予定が追加されるたびに
   // 再生成しない（ユーザー指摘により2026-10-19: 引き継ぎのたびにAI再分類が走っていたバグ）。
   let previousSimilarRule: { categories: string } | null = null;
-  // 別の予定から引き継いでカテゴリを使い回すときに、使い回し元のルールも
-  // 一緒に archive する（そうしないと、同じ項目名のアクティブなルールが予定の数だけ
-  // 増え続けてしまう＝学習件数の集計が水増しされるバグがあった。ユーザー指摘により
-  // 2026-10-19に発見・修正）。
-  let reusedFromRuleId: string | null = null;
   if (scope === "similar") {
     if (existing?.scope === "similar" && existing.rule) {
       previousSimilarRule = { categories: existing.rule.categories };
@@ -199,13 +194,20 @@ async function saveScopeForItem(
       });
       if (latestSimilarRule) {
         previousSimilarRule = { categories: latestSimilarRule.categories };
-        reusedFromRuleId = latestSimilarRule.id;
       }
     }
   }
 
-  await archiveRule(existing?.ruleId ?? null);
-  await archiveRule(reusedFromRuleId);
+  // この項目名（kind+normTitle+action）に対する、他の予定から設定されたものも含めた
+  // 全てのアクティブなルール（上で使い回し元として読んだものも含む）をここでまとめて
+  // archive する（ユーザー指摘により2026-10-20: 「この名前」を選んでも、別の予定で前に
+  // 設定した「似た予定」ルールが残っていて、そちらが新しい予定の判定で勝ってしまい
+  // 「勝手に似た予定に変わる」ように見える不具合があった。以前は existing?.ruleId だけを
+  // archive していたため、別の予定のルールが生き残っていた）。
+  await prisma.checklistScopeRule.updateMany({
+    where: { userId: input.userId, kind, normTitle: nt, action, archivedAt: null },
+    data: { archivedAt: new Date() },
+  });
   const ruleData = await buildRuleData(
     input,
     action,

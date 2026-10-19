@@ -295,10 +295,11 @@ export async function buildChecklistForEvent(
   if (recalled?.cleared) return { items: [], customSectionSeeds: [] };
 
   // テスト版（ver2）は、項目ごとの範囲つきルール（3択）だけを当てにする
-  // （ユーザー指摘により2026-10-20: 「学習済みの三択情報以外からの提案は不要」）。
-  // LearnedRule（カテゴリ単位の自動学習・本番版の仕組み）・カテゴリ横断パターンは
-  // 本番版（ver1）だけで使う。AI のたたき台生成・似た予定の丸ごと再利用（recall）は
-  // 範囲ルールとは別物（「提案」ではなく最初の下書き）なので、両方のモードで行う。
+  // （ユーザー指摘により2026-10-20: 「学習済みの三択情報以外からの提案は不要」。
+  // AIのたたき台生成も対象外と明言されたため、似た予定の丸ごと再利用（recall。
+  // AIを呼ばない）も当たらなければ空のまま＝範囲ルールの一致だけで組み立てる）。
+  // LearnedRule（カテゴリ単位の自動学習・本番版の仕組み）・カテゴリ横断パターンも
+  // 本番版（ver1）だけで使う。
   const relyOnScopeOnly = isScopeRuleEnabled(await getFeatureMode(event.userId));
 
   const [gen, taskRules, belongingRules] = await Promise.all([
@@ -308,7 +309,7 @@ export async function buildChecklistForEvent(
           belongings: recalled.belongings,
           source: "recall",
         })
-      : allowAiGeneration
+      : allowAiGeneration && !relyOnScopeOnly
         ? generateBaseChecklist({
             userId: event.userId,
             title: event.title,

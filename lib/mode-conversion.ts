@@ -130,7 +130,7 @@ export async function convertLearnedRulesToScopeRules(
     const genre = categoryName.get(rule.categoryId) ?? "カテゴリ";
 
     const existing = await prisma.checklistScopeRule.findFirst({
-      where: { userId, kind, normTitle: nt, archivedAt: null },
+      where: { userId, kind, normTitle: nt, action, archivedAt: null },
       orderBy: { updatedAt: "desc" },
     });
 
@@ -150,6 +150,24 @@ export async function convertLearnedRulesToScopeRules(
       autoConverted: true,
       convertedFromLearnedRuleId: rule.id,
     };
+
+    // この項目名に対して他に残っているアクティブなルール（例えばユーザーが別の予定で
+    // 明示的に選んだ「この名前」）があれば archive する（ユーザー指摘により2026-10-20:
+    // 変換で作った「genre」ルールと、ユーザーが選んだ「keyword」ルールが両方アクティブに
+    // 残り、新しい予定の判定でどちらが当たるか不安定になっていた＝「勝手に似た予定に
+    // 変わる」ように見える不具合があった）。切替元（本番版）の内容を優先する方針のため、
+    // ここでは existing 以外の同名ルールも含めて置き換える。
+    await prisma.checklistScopeRule.updateMany({
+      where: {
+        userId,
+        kind,
+        normTitle: nt,
+        action,
+        archivedAt: null,
+        ...(existing ? { id: { not: existing.id } } : {}),
+      },
+      data: { archivedAt: new Date() },
+    });
 
     if (existing) {
       await prisma.checklistScopeRule.update({ where: { id: existing.id }, data });

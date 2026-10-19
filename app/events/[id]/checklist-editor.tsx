@@ -670,8 +670,14 @@ export function ChecklistEditor({
                   onKeyDown={(e) => {
                     if (e.key !== "Enter" || e.shiftKey) return;
                     e.preventDefault();
-                    const idx = items.findIndex((x) => x.key === it.key);
-                    const next = items[idx + 1];
+                    // 次の項目＝画面に表示されている順（displayItems）での次の行。
+                    // items（生の state 配列）の順と frozenOrder による表示順は
+                    // ずれることがあるため、表示順の配列で探す必要がある
+                    // （これが無いと、既存のチェック済み項目が state 配列の末尾側に
+                    // いる場合などに、見た目の次の行と違う行へ飛んだり、無関係に
+                    // 新しい行を作ってしまったりするバグがあった）。
+                    const idx = displayItems.findIndex((x) => x.key === it.key);
+                    const next = displayItems[idx + 1];
                     if (next) {
                       setFocusKey(next.key);
                     } else {

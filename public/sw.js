@@ -1,4 +1,4 @@
-/* 私のマニュアル「そなえ」さん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v16 */
+/* 私のマニュアル「そなえ」さん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v17 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -121,57 +121,60 @@ self.addEventListener("notificationclick", (event) => {
         return bv - av;
       });
 
-      // 1) すでに目的ページ（ハッシュまで完全一致）を開いている窓 → フォーカスだけ。
-      const exact = ordered.find(
-        (c) => c.url === targetHref || c.url === targetHref + "/",
-      );
-      if (exact) {
-        if ("focus" in exact) await exact.focus().catch(() => {});
+      // 既存の同一オリジン窓が1つも無い（アプリが完全に閉じている）→ 新規に開く。
+      if (ordered.length === 0) {
+        if (self.clients.openWindow) {
+          const w = await self.clients.openWindow(targetHref).catch(() => null);
+          if (w && "focus" in w) await w.focus().catch(() => {});
+        }
         await rememberPromise;
         return;
       }
 
-      // 2) 既存の同一オリジン窓を、新規に増やさず目的ページへ移動する。
-      //    （インストール済み PWA でも確実に「その通知のページ」へ着くように）
-      //    最初の窓で諦めず、動く窓が見つかるまで順に試す。
-      let handled = false;
+      // 既存の窓がある（バックグラウンドで開いている場合も含む）→ 新規の窓は増やさず、
+      // 最優先の窓をまず前面に出す。navigate の成否に関わらず必ず focus を試みる
+      // （ユーザー指摘により2026-10-19再修正: 以前は navigate が失敗した窓は
+      // focus すら試みていなかったため、バックグラウンドで開いていた窓が
+      // 通知タップでも前面に出てこないことがあった）。
+      const primary = ordered[0];
+      if ("focus" in primary) await primary.focus().catch(() => {});
+
+      // すでに目的ページ（ハッシュまで完全一致）ならこれで完了。
+      if (primary.url === targetHref || primary.url === targetHref + "/") {
+        await rememberPromise;
+        return;
+      }
+
+      // 既存の同一オリジン窓を、目的ページへ移動する（動く窓が見つかるまで順に試す）。
       for (const c of ordered) {
         // 同じパスでハッシュ違いだけ → 全リロードせずページ内遷移をページ側に依頼。
         if (
           (c.url === targetNoHash || c.url === targetNoHash + "/") &&
           target.hash
         ) {
-          if ("focus" in c) await c.focus().catch(() => {});
+          if (c !== primary && "focus" in c) await c.focus().catch(() => {});
           c.postMessage({ type: "navigate", url: targetHref });
-          handled = true;
-          break;
+          await rememberPromise;
+          return;
         }
         if (typeof c.navigate === "function") {
           try {
-            const w = (await c.navigate(targetHref)) || c;
-            if (w && "focus" in w) await w.focus().catch(() => {});
-            handled = true;
-            break;
+            await c.navigate(targetHref);
+            if (c !== primary && "focus" in c) await c.focus().catch(() => {});
+            await rememberPromise;
+            return;
           } catch {
             /* この窓は navigate 不可（未制御など）→ 次の窓へ */
           }
         }
       }
-      if (handled) {
-        await rememberPromise;
-        return;
-      }
 
-      // 3) どの既存窓も移動できなかった。フォーカス中の窓にページ内遷移を依頼しつつ、
-      //    それでも着かない場合に備えて新規窓も必ず開く（「開いても何も起きない」を防ぐ）。
-      if (ordered[0]) {
-        if ("focus" in ordered[0]) await ordered[0].focus().catch(() => {});
-        ordered[0].postMessage({ type: "navigate", url: targetHref });
-      }
-      if (self.clients.openWindow) {
-        const w = await self.clients.openWindow(targetHref).catch(() => null);
-        if (w && "focus" in w) await w.focus().catch(() => {});
-      }
+      // どの窓も navigate できなかった。前面に出した primary へページ内遷移を依頼しつつ、
+      // それでも効かない場合に備え、ページ側の IndexedDB フォールバック
+      // （focus 済みなので visibilitychange/focus/pageshow で拾われる）に委ねる。
+      // 既存窓があるのに openWindow で新規窓を増やすと、古い窓と新しい窓が
+      // 両方残って混乱するため、ここでは増やさない。
+      primary.postMessage({ type: "navigate", url: targetHref });
       await rememberPromise;
     })(),
   );

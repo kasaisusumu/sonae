@@ -138,7 +138,10 @@ export async function generateAndSaveChecklist(
       where: { id: eventId },
       select: { userId: true },
     });
-    if (ev) await addSeedItemsToEvent(ev.userId, eventId, customSectionSeeds);
+    if (ev)
+      await addSeedItemsToEvent(ev.userId, eventId, customSectionSeeds, {
+        markReviewed: false,
+      });
   }
 
   // 生成しても中身が空（似た予定で「何も出さない」を学習済み 等）なら、
@@ -364,7 +367,9 @@ export async function addSeedItemsToEvent(
   userId: string,
   eventId: string,
   seeds: SeedItem[],
+  opts: { markReviewed?: boolean } = {},
 ): Promise<number> {
+  const markReviewed = opts.markReviewed ?? true;
   const event = await prisma.event.findFirst({
     where: { id: eventId, userId },
     include: {
@@ -428,10 +433,17 @@ export async function addSeedItemsToEvent(
     where: { id: eventId, autoManaged: false },
     data: { autoManaged: true },
   });
-  await prisma.event.updateMany({
-    where: { id: eventId, listReviewedAt: null },
-    data: { listReviewedAt: new Date() },
-  });
+  // ユーザーが明示的に行った操作（テンプレート適用・他の予定からコピー・音声入力の
+  // 記録）のときだけ「確認済み」にする。自動生成（generateAndSaveChecklist）からの
+  // 内部呼び出しでは markReviewed=false にして、組み込み枠（準備すること・持ち物）が
+  // まだ未確認のまま残っているのに「確認しました」ボタンが消えてしまう不具合を防ぐ
+  // （ユーザー指摘により2026-10-19修正: ボタンが出ないことがあった）。
+  if (markReviewed) {
+    await prisma.event.updateMany({
+      where: { id: eventId, listReviewedAt: null },
+      data: { listReviewedAt: new Date() },
+    });
+  }
   const twinIds = await resolveNameGroupOnEdit(eventId);
   after(() => {
     void syncEventDescription(eventId);

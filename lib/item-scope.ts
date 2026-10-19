@@ -11,7 +11,7 @@
  * - 範囲の一致判定は lib/scope-match.ts に任せる（ここは保存と提案だけ）。
  */
 import { prisma } from "@/lib/prisma";
-import { looksTooSpecific, normTitle, pickKeyword } from "@/lib/text-norm";
+import { looksTooSpecific, normTitle, extractKeywords } from "@/lib/text-norm";
 import type { EventFeatureData } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
 import {
@@ -34,8 +34,6 @@ interface Recommendation {
 }
 
 const DEFAULT_REASON = "自動で覚えます（従来どおり）";
-
-export { pickKeyword };
 
 export interface EventScopeInput {
   userId: string;
@@ -78,11 +76,27 @@ async function buildRuleData(
     sourceEventTitle: input.eventTitle,
   };
   if (scope === "keyword") {
-    const kw = rec.keyword ?? pickKeyword(input.eventTitle);
+    // rec.keyword があるのは、ユーザーが文章で指定した単一のキーワード
+    // （setItemKeywordScope）のときだけ。それ以外（「この名前」のクイック選択・
+    // バージョン切替時の自動設定）は、予定名を分解した複数語を使う（どれか1つに
+    // 一致すればよい・ユーザー指摘により2026-10-20:「タイトルを分解してできるだけ
+    // 複数キーワードを抽出して」「ORでよかった」）。
+    if (rec.keyword) {
+      return {
+        ...base,
+        scope,
+        keywords: stringifyStrArray([rec.keyword]),
+        genres: "[]",
+        genreKeywords: "[]",
+        categoryIds: "[]",
+        signature: null,
+      };
+    }
+    const kws = extractKeywords(input.eventTitle);
     return {
       ...base,
       scope,
-      keywords: stringifyStrArray([kw]),
+      keywords: stringifyStrArray(kws),
       genres: "[]",
       genreKeywords: "[]",
       categoryIds: "[]",
@@ -380,7 +394,9 @@ export async function setItemScope(input: {
     input.chosen,
     "user",
     {
-      keyword: pickKeyword(scope.eventTitle),
+      // keyword は null にして、buildRuleData 側で予定名を分解した複数語
+      // （AND判定）を使わせる（ユーザー指摘により2026-10-20）。
+      keyword: null,
       genre: scope.categoryName || null,
       reason: "あなたが選びました",
     },

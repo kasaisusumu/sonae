@@ -18,7 +18,7 @@
  * AI は呼ばない（ルールベースのみ）。
  */
 import { prisma } from "@/lib/prisma";
-import { normTitle, pickKeyword } from "@/lib/text-norm";
+import { normTitle, extractKeywords } from "@/lib/text-norm";
 import { stringifyStrArray } from "@/lib/future-messages";
 
 export interface ConversionResult {
@@ -194,7 +194,8 @@ function parseIds(raw: string): string[] {
  * 画面では「この名前」として表示される項目）に、キーワードを自動で設定する
  * （ユーザー指摘により2026-10-20:「キーワード抽出はAIじゃないんだから、バージョン2に
  * 変える時に、三択が定まってない予定（＝この名前）はキーワードも自動抽出して設定して」）。
- * キーワードは予定名そのもの（`lib/text-norm.ts` の `pickKeyword`）。AI は呼ばない。
+ * キーワードは予定名を分解した複数語（`lib/text-norm.ts` の `extractKeywords`、AND判定）。
+ * AI は呼ばない。
  * 項目名（kind+normTitle）が同じなら1つのルールにまとめ、代表の予定名は
  * その項目名の中で最も新しい予定のものを使う。
  */
@@ -263,6 +264,7 @@ export async function backfillKeywordScopesOnModeSwitch(
         ruleId = existingRule.id;
       } else {
         const eventTitle = representativeTitle.get(ruleKey) ?? t.title;
+        const kws = extractKeywords(eventTitle);
         const rule = await prisma.checklistScopeRule.create({
           data: {
             userId,
@@ -271,7 +273,7 @@ export async function backfillKeywordScopesOnModeSwitch(
             normTitle: t.normTitle,
             title: t.title,
             scope: "keyword",
-            keywords: stringifyStrArray([pickKeyword(eventTitle)]),
+            keywords: stringifyStrArray(kws),
             reason: "バージョン切替時に自動でキーワードを設定しました",
             autoConverted: true,
           },

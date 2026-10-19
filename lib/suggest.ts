@@ -9,7 +9,7 @@ import { parseLead } from "@/lib/lead-time";
 import { stripSonaeBlock } from "@/lib/description";
 import { applyScopeDecisions, resolveScopeRules } from "@/lib/scope-match";
 import { loadActiveScopeRules } from "@/lib/item-scope";
-import { normTitle, pickKeyword } from "@/lib/text-norm";
+import { normTitle, extractKeywords } from "@/lib/text-norm";
 import { stringifyStrArray } from "@/lib/future-messages";
 import { matchEventToSlotType } from "@/lib/pattern-classify";
 import { getFeatureMode, isScopeRuleEnabled } from "@/lib/feature-mode";
@@ -442,7 +442,7 @@ export async function buildChecklistForEvent(
       (it) => !decisions.has(`${it.kind}:${normTitle(it.title)}`),
     );
     if (undecided.length > 0) {
-      const keyword = pickKeyword(event.title);
+      const keywords = extractKeywords(event.title);
       await Promise.all(
         undecided.map(async (it) => {
           const nt = normTitle(it.title);
@@ -465,7 +465,7 @@ export async function buildChecklistForEvent(
                 normTitle: nt,
                 title: it.title,
                 scope: "keyword",
-                keywords: stringifyStrArray([keyword]),
+                keywords: stringifyStrArray(keywords),
                 sourceEventId: event.id,
                 sourceEventTitle: event.title,
                 reason: "この名前の予定のときに出すよう自動で設定しました",

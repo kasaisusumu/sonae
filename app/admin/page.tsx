@@ -1,19 +1,13 @@
 import fs from "fs";
 import path from "path";
+import Link from "next/link";
 import { Check, TriangleAlert } from "lucide-react";
-import { notFound, redirect } from "next/navigation";
-import { cookies } from "next/headers";
-import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { formatYen, formatDateOnly } from "@/lib/format";
 import { jstDayKey } from "@/lib/activity";
+import { requireAdminVerified } from "@/lib/require-admin";
 import { aiFeatureLabel, aiFeatureMode } from "@/lib/ai-usage";
 import { UsageTimeGrid, type UsageGridRow } from "./usage-time-grid";
-import {
-  isAdminEmail,
-  isAdminVerifiedCookieValid,
-  ADMIN_VERIFIED_COOKIE,
-} from "@/lib/admin-auth";
 import {
   PAGE_KEYS,
   FEATURE_KEYS,
@@ -596,7 +590,7 @@ export default async function AdminPage({
       title: "データ量",
       tiles: [
         { label: "取り込んだ予定数", value: String(eventCount) },
-        { label: "失敗ログ数", value: String(failureLogCount) },
+        { label: "未来の自分へのメッセージ数", value: String(messageCount) },
       ],
     },
     {
@@ -661,40 +655,35 @@ export default async function AdminPage({
       {/* ── 全体サマリー ── */}
       <section id="summary" className="space-y-3">
         <h2 className="text-sm font-semibold">全体サマリー</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {[
-            ["ユーザー数", String(users.length)],
-            ["取り込んだ予定数", String(eventCount)],
-            ["未来の自分へのメッセージ数", String(messageCount)],
-            ["今日アクティブ（DAU）", `${dau} / ${users.length}`],
-            ["直近7日アクティブ（WAU）", `${wau} / ${users.length}`],
-            [
-              "はじめかた完了（G連携+予定+リスト+通知）",
-              `${onboardingDoneCount} / ${users.length}`,
-            ],
-            ["Google連携率", `${googleConnectedCount} / ${users.length}`],
-            ["うち連携切れ（再接続要）", `${syncBrokenCount} / ${googleConnectedCount}`],
-            ["通知オン率", `${notifyOnCount} / ${users.length}`],
-            ["平均累計利用時間", formatMinutes(avgTotalMinutes)],
-            [
-              "平均継続率（登録日数のうち利用日）",
-              `${Math.round(avgActiveDayRatio * 100)}%`,
-            ],
-            ["フィードバック件数", String(feedback.length)],
-            ["うち WTP 回答", String(wtp.length)],
-            ["うちコメントあり", String(withComment)],
-            ["AI利用金額（全期間・概算）", formatYenApprox(aiCostTotal)],
-            ["AI利用金額（今月・概算）", formatYenApprox(aiCostThisMonth)],
-            ...(currentEstimateYen !== null
-              ? ([["AI利用金額（現在の推定合計）", formatYenApprox(currentEstimateYen)]] as const)
-              : []),
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="rounded-xl border border-border bg-surface p-4 shadow-sm"
-            >
-              <p className="text-xs text-muted">{label}</p>
-              <p className="mt-1 text-xl font-bold tabular-nums">{value}</p>
+        <div className="space-y-4">
+          {summaryGroups.map((g) => (
+            <div key={g.title}>
+              <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                {g.title}
+              </h3>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {g.tiles.map((t) => (
+                  <div
+                    key={t.label}
+                    className={`rounded-xl border p-4 shadow-sm ${
+                      t.warn
+                        ? "border-warn/30 bg-warn-soft"
+                        : "border-border bg-surface"
+                    }`}
+                  >
+                    <p className={`text-xs ${t.warn ? "text-warn" : "text-muted"}`}>
+                      {t.label}
+                    </p>
+                    <p
+                      className={`mt-1 text-xl font-bold tabular-nums ${
+                        t.warn ? "text-warn" : ""
+                      }`}
+                    >
+                      {t.value}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
@@ -763,6 +752,7 @@ export default async function AdminPage({
                 <th className="whitespace-nowrap px-3 py-2 font-medium">
                   AI利用金額（累計・概算）
                 </th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -860,11 +850,19 @@ export default async function AdminPage({
                   <td className="whitespace-nowrap px-3 py-2 tabular-nums">
                     {formatYenApprox(r.aiCostYen)}
                   </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <Link
+                      href={`/admin/users/${r.id}`}
+                      className="inline-flex items-center gap-0.5 rounded-full bg-surface-muted px-2.5 py-1 text-[11px] font-medium text-foreground no-underline hover:bg-border"
+                    >
+                      詳細 ›
+                    </Link>
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-3 py-6 text-center text-muted">
+                  <td colSpan={14} className="px-3 py-6 text-center text-muted">
                     まだユーザーがいません。
                   </td>
                 </tr>

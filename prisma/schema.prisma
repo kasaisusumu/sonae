@@ -33,7 +33,7 @@ model User {
   // （未来の自分へ・次回の出し方3択）／"production" = 本番版の機能（失敗ログ・
   // 節約額ダッシュボード）。既定は "test"（これまでの挙動を変えない）。
   // lib/feature-mode.ts の getFeatureMode が読む。
-  featureMode String @default("test")
+  featureMode String @default("production")
 
   googleAccount  UserGoogleAccount?
   categories     Category[]
@@ -377,6 +377,7 @@ model FailureLog {
   savingsEntries SavingsEntry[]
 
   @@index([userId, categoryId])
+  @@index([eventId])
 }
 
 model SavingsEntry {

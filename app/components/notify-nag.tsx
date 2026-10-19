@@ -1,6 +1,5 @@
 "use client";
 
-import { Bell } from "lucide-react";
 import { useEffect, useState } from "react";
 import { pushSupported, registerServiceWorker } from "@/lib/push-client";
 import { NotifyEnableButton } from "./push-controls";
@@ -98,9 +97,8 @@ export function NotifyNag({
       className="fixed inset-0 z-[59] flex items-center justify-center bg-black/50 p-4"
     >
       <div className="w-full max-w-sm rounded-2xl bg-surface p-6 shadow-2xl">
-        <h2 className="flex items-center gap-1.5 text-base font-semibold text-foreground">
-          <Bell aria-hidden className="h-4 w-4" />
-          通知がオフのままです
+        <h2 className="text-base font-semibold text-foreground">
+          🔔 通知がオフのままです
         </h2>
         <p className="mt-2 text-sm text-muted">
           新しい予定の取り込みや、準備・失敗の先回りリマインドは通知で届きます。

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Circle } from "lucide-react";
 import { ScopeChip, SCOPE_CHIP } from "@/app/components/scope-chip";
 import { InfoHint } from "@/app/components/info-hint";
 import type { ItemScope } from "@/lib/item-scope";
@@ -120,7 +119,7 @@ export function ScopeQuickToggle({
               />
             ) : (
               <span className="pointer-events-none inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-px text-[11px] leading-tight text-muted">
-                {meta.icon && <meta.icon aria-hidden className="h-3 w-3 shrink-0" />}
+                {meta.icon && <span aria-hidden>{meta.icon}</span>}
                 <span className="truncate">{meta.label}</span>
               </span>
             )}
@@ -186,11 +185,7 @@ export function ScopeEmojiToggle({
             : "border-border text-muted hover:border-teal hover:text-teal-dark"
         }`}
       >
-        {current.icon ? (
-          <current.icon aria-hidden className="h-4 w-4" />
-        ) : (
-          <Circle aria-hidden className="h-4 w-4" />
-        )}
+        <span aria-hidden>{current.icon || "🔘"}</span>
       </button>
       {open && (
         <span
@@ -229,7 +224,9 @@ export function ScopeEmojiToggle({
                         : "border-border text-foreground hover:border-teal/50"
                     }`}
                   >
-                    {meta.icon && <meta.icon aria-hidden className="h-5 w-5" />}
+                    <span aria-hidden className="text-xl leading-none">
+                      {meta.icon}
+                    </span>
                     <span className="text-sm font-medium leading-none">
                       {meta.label}
                     </span>

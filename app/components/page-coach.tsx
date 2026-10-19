@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname } from "next/navigation";
-import { Mail, Menu, Mic, Pin, Repeat, Tag } from "lucide-react";
+import { Menu } from "lucide-react";
 import { trackFeatureUse } from "@/app/actions";
 
 /**
@@ -95,12 +95,7 @@ const TOURS: Tour[] = [
       },
       {
         sel: '[data-coach="future-message"]',
-        title: (
-          <span className="inline-flex items-center gap-1">
-            <Mail aria-hidden className="h-4 w-4" />
-            過去の自分よりメッセージ
-          </span>
-        ),
+        title: "💌 過去の自分よりメッセージ",
         body: "いつか思い出したいことを書いておくと、次に似た予定が入ったときに知らせます。",
         // ver1（本番版）はこの枠の代わりに「考えられる失敗」が出るため対象が無い
         // （2026-10-19修正。以前は testOnly が無く、本番版でこの1ステップだけ
@@ -124,15 +119,8 @@ const TOURS: Tour[] = [
       },
       {
         sel: '[data-coach="item-scope"]',
-        title: (
-          <span className="inline-flex items-center gap-1">
-            <Pin aria-hidden className="h-3.5 w-3.5" />
-            <Repeat aria-hidden className="h-3.5 w-3.5" />
-            <Tag aria-hidden className="h-3.5 w-3.5" />
-            次回の出し方
-          </span>
-        ),
-        body: "この項目を次も出すかを選べます。今回だけ／似た予定（用途が同じ予定にもAIが判断して出す）／この名前（予定名からキーワードを決め、そのキーワードを含む予定にだけ出す）。タップで選び直せます。",
+        title: "📌🔁🏷 次回の出し方",
+        body: "この項目を次も出すかを選べます。📌今回だけ／🔁似た予定（用途が同じ予定にもAIが判断して出す）／🏷この名前（予定名からキーワードを決め、そのキーワードを含む予定にだけ出す）。タップで選び直せます。",
         testOnly: true,
       },
       {
@@ -157,12 +145,7 @@ const TOURS: Tour[] = [
       },
       {
         sel: '[data-coach="message-dictation"]',
-        title: (
-          <span className="inline-flex items-center gap-1">
-            <Mic aria-hidden className="h-4 w-4" />
-            声でも記録できます
-          </span>
-        ),
+        title: "🎤 声でも記録できます",
         body: "話すだけでAIが本文・キーワード・ジャンルをまとめます。マイクキーからどうぞ。",
       },
       {
@@ -187,12 +170,7 @@ const TOURS: Tour[] = [
       },
       {
         sel: '[data-coach="fail-dictation"]',
-        title: (
-          <span className="inline-flex items-center gap-1">
-            <Mic aria-hidden className="h-4 w-4" />
-            声でも記録できます
-          </span>
-        ),
+        title: "🎤 声でも記録できます",
         body: "話すだけでAIが内容・対策を整えます。マイクキーからどうぞ。",
       },
       {

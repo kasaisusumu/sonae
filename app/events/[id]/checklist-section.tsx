@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ThumbsUp, Wand2 } from "lucide-react";
 import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
@@ -169,7 +168,7 @@ export async function ChecklistSection({
   // ユーザーが意図的に全部消した予定は、二度と自動生成・自動提案しない。
   // ここは「連携時に取り込んだ予定を開いたときの自動生成」なので、学習元
   // （再利用・確定ルール・範囲ルール・パターン）が無ければAIでのたたき台生成はしない
-  // （ユーザー指定。手動の「準備リストを作る」「作り直す」はAI生成を残す）。
+  // （ユーザー指定。手動の「🪄 準備リストを作る」「作り直す」はAI生成を残す）。
   if (needsGeneration && event.autoManaged) {
     await ensureChecklistForEvent(event.id, { allowAiGeneration: false });
     items = await prisma.checklistItem.findMany({
@@ -268,12 +267,7 @@ export async function ChecklistSection({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <form action={markNoFailure}>
                 <input type="hidden" name="eventId" value={event.id} />
-                <SubmitButton variant="ghost">
-                  <span className="inline-flex items-center gap-1">
-                    なかった
-                    <ThumbsUp aria-hidden className="h-3.5 w-3.5" />
-                  </span>
-                </SubmitButton>
+                <SubmitButton variant="ghost">なかった 🙆</SubmitButton>
               </form>
               <FailureDictationInput eventId={event.id} />
             </div>
@@ -509,12 +503,7 @@ export async function ChecklistSection({
             </p>
             <form action={generateChecklistForEvent}>
               <input type="hidden" name="eventId" value={event.id} />
-              <SubmitButton>
-                <span className="inline-flex items-center gap-1">
-                  <Wand2 aria-hidden className="h-3.5 w-3.5" />
-                  準備リストを作る
-                </span>
-              </SubmitButton>
+              <SubmitButton>🪄 準備リストを作る</SubmitButton>
             </form>
           </div>
         )}

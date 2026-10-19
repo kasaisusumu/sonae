@@ -137,12 +137,9 @@ export default async function RootLayout({
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-2.5 sm:px-5 sm:py-3">
             <div className="flex min-w-0 items-center gap-2">
               {isLoggedIn ? <MenuButton /> : null}
-              <Link href="/" className="flex items-baseline gap-2 no-underline">
+              <Link href="/" className="flex items-center no-underline">
                 <span className="truncate text-[15px] font-semibold tracking-tight text-foreground">
                   {APP_NAME}
-                </span>
-                <span className="hidden text-xs text-muted sm:inline">
-                  予定の準備、わすれない
                 </span>
               </Link>
             </div>

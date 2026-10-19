@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check, Mail, Mic, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { PrivateModeNotice } from "@/app/components/private-mode-notice";
 import { APP_NAME } from "@/lib/app-info";
 
@@ -120,9 +120,8 @@ function MessageMock() {
         <span className="hidden sm:inline">→</span>
       </div>
       <div className="rounded-xl bg-gradient-to-br from-foreground to-foreground/85 p-3.5 text-white shadow-[0_10px_30px_-12px_rgba(0,0,0,0.5)]">
-        <p className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-white/60">
-          <Mail aria-hidden className="h-3 w-3" />
-          未来の自分へのメッセージ
+        <p className="text-[10px] uppercase tracking-wide text-white/60">
+          💌 未来の自分へのメッセージ
         </p>
         <p className="mt-1 text-[13px] font-medium leading-snug">
           「田中さん」に、未来の自分からのメッセージがあります
@@ -248,12 +247,9 @@ export function Landing({
             </li>
           ))}
         </ol>
-        <p className="mt-7 flex max-w-lg items-start gap-1.5 rounded-xl border border-border bg-surface-muted px-4 py-3 text-[13px] leading-relaxed text-muted">
-          <Mic aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            スマホのキーボードのマイクで「着替えと充電器、宿の予約を確認、駅で弁当」
-            と話すだけでも、AI が準備すること・持ち物・その他の枠に振り分けます。
-          </span>
+        <p className="mt-7 max-w-lg rounded-xl border border-border bg-surface-muted px-4 py-3 text-[13px] leading-relaxed text-muted">
+          🎤 スマホのキーボードのマイクで「着替えと充電器、宿の予約を確認、駅で弁当」
+          と話すだけでも、AI が準備すること・持ち物・その他の枠に振り分けます。
         </p>
       </section>
 

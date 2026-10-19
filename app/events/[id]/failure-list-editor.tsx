@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { CalendarDays, Frown, Lightbulb, Link as LinkIcon, Shield, type LucideIcon } from "lucide-react";
 import {
   clearEventFailureLogs,
   createFailureLog,
@@ -32,18 +31,18 @@ export type FLOther = {
   eventTitle: string | null;
 };
 
-function meta(o: string | null): { icon: LucideIcon | null; text: string | null; label: string } {
+function meta(o: string | null): { icon: string; label: string } {
   switch (o) {
     case "prevented":
-      return { icon: Shield, text: null, label: "防げた" };
+      return { icon: "🛡", label: "防げた" };
     case "not_prevented":
-      return { icon: Frown, text: null, label: "防げなかった" };
+      return { icon: "😓", label: "防げなかった" };
     case "irrelevant":
-      return { icon: null, text: "—", label: "今回は関係ない" };
+      return { icon: "—", label: "今回は関係ない" };
     case "linked":
-      return { icon: LinkIcon, text: null, label: "紐付け" };
+      return { icon: "🔗", label: "紐付け" };
     default:
-      return { icon: null, text: "・", label: "未確認" };
+      return { icon: "・", label: "未確認" };
   }
 }
 
@@ -357,9 +356,7 @@ export function FailureListEditor({
                 }`}
               >
                 <div className="flex items-start gap-2">
-                  <span className="mt-0.5 shrink-0 text-sm">
-                    {m.icon ? <m.icon aria-hidden className="h-4 w-4" /> : m.text}
-                  </span>
+                  <span className="mt-0.5 shrink-0 text-sm">{m.icon}</span>
                   <span className="min-w-0 flex-1 whitespace-pre-wrap break-words py-0.5 text-sm">
                     {r.description}
                   </span>
@@ -380,9 +377,8 @@ export function FailureListEditor({
                   </button>
                 </div>
                 {suggested && r.countermeasure && !open && (
-                  <p className="ml-6 mt-0.5 flex items-center gap-1 text-[11px] text-teal-dark">
-                    <Lightbulb aria-hidden className="h-3 w-3 shrink-0" />
-                    対策候補: {r.countermeasure}
+                  <p className="ml-6 mt-0.5 text-[11px] text-teal-dark">
+                    💡 対策候補: {r.countermeasure}
                   </p>
                 )}
 
@@ -483,10 +479,9 @@ export function FailureListEditor({
                       setMoreOpen(false);
                       setPickOpen(true);
                     }}
-                    className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs text-foreground hover:bg-surface-muted"
+                    className="block w-full px-3 py-2 text-left text-xs text-foreground hover:bg-surface-muted"
                   >
-                    <CalendarDays aria-hidden className="h-3.5 w-3.5" />
-                    過去の失敗から追加
+                    📆 過去の失敗から追加
                   </button>
                 </div>
               </>
@@ -508,9 +503,8 @@ export function FailureListEditor({
             className="w-full max-w-sm space-y-3 rounded-2xl bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-              <CalendarDays aria-hidden className="h-4 w-4" />
-              過去の失敗から追加
+            <h3 className="text-sm font-semibold text-foreground">
+              📆 過去の失敗から追加
             </h3>
             <form action={logRepeatedFailure} className="space-y-2">
               <input type="hidden" name="eventId" value={eventId} />

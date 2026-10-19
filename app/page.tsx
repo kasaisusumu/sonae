@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { after } from "next/server";
-import { Mail } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { isDevLoginEnabled } from "@/lib/dev-login";
-import { getPendingMessageReviews } from "@/lib/future-messages";
+import { getPendingMessageReviews, listFutureMessages } from "@/lib/future-messages";
 import { getUpcomingWarnings } from "@/lib/failures";
 import { primeNotifiedChecklists } from "@/lib/checklist";
 import { trackEvent } from "@/lib/track";
@@ -14,6 +13,7 @@ import { Landing } from "@/app/components/landing";
 import { NotifyOffBanner } from "@/app/components/notify-off-banner";
 import { SavingsDashboard } from "@/app/components/savings-dashboard";
 import { GrowthDashboard } from "@/app/components/growth-dashboard";
+import { MessageList } from "@/app/failures/message-list";
 
 export const maxDuration = 60;
 
@@ -90,10 +90,11 @@ export default async function HomePage({
   const mode = featureModeOf(user);
   const isProd = isFailureLogEnabled(mode);
 
-  const [pendingReviews, warnings, pushCount] = await Promise.all([
+  const [pendingReviews, warnings, pushCount, futureMessages] = await Promise.all([
     isProd ? Promise.resolve([]) : getPendingMessageReviews(user.id),
     isProd ? getUpcomingWarnings(user.id) : Promise.resolve([]),
     prisma.pushSubscription.count({ where: { userId: user.id } }),
+    isProd ? Promise.resolve([]) : listFutureMessages(user.id),
   ]);
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
 
@@ -152,12 +153,26 @@ export default async function HomePage({
             <Link
               href="/failures#review"
               data-coach="message-review-nudge"
-              className="flex items-center gap-1.5 rounded-2xl border border-teal/30 bg-teal-soft px-4 py-3 text-sm text-teal-dark no-underline hover:opacity-90"
+              className="block rounded-2xl border border-teal/30 bg-teal-soft px-4 py-3 text-sm text-teal-dark no-underline hover:opacity-90"
             >
-              <Mail aria-hidden className="h-4 w-4 shrink-0" />
-              未来の自分へのメッセージ、{pendingReviews.length}件の確定待ちがあります
+              💌 未来の自分へのメッセージ、{pendingReviews.length}件の確定待ちがあります
             </Link>
           )}
+
+          <MessageList
+            messages={futureMessages.map((m) => ({
+              id: m.id,
+              body: m.body,
+              keywords: m.keywords,
+              genres: m.genres,
+              categoryIds: m.categoryIds,
+              scope: m.scope,
+              archivedAt: m.archivedAt,
+              confirmedCount: m.confirmedCount,
+              upcomingEvents: m.upcomingEvents,
+              sourceEventTitle: m.sourceEventTitle,
+            }))}
+          />
         </>
       )}
 

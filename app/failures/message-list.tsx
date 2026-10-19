@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Tag } from "lucide-react";
 import {
   archiveFutureMessageAction,
   deleteFutureMessageAction,
@@ -66,9 +65,7 @@ function EditableRow({ m }: { m: MLMessage }) {
           <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
           <div className="flex flex-wrap items-center gap-1.5">
             {keywords ? (
-              <span className="inline-flex items-center gap-0.5 text-[11px] text-muted">
-                <Tag aria-hidden className="h-3 w-3" />「{keywords}」のとき
-              </span>
+              <span className="text-[11px] text-muted">🏷「{keywords}」のとき</span>
             ) : (
               <span className="text-[11px] text-muted">キーワード未設定</span>
             )}

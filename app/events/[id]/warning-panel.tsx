@@ -1,4 +1,4 @@
-import { Check, Coffee, Frown, Lightbulb, PartyPopper } from "lucide-react";
+import { Check } from "lucide-react";
 import {
   ackEventWarning,
   addPreventionItem,
@@ -25,9 +25,8 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
     >
       {isPast ? (
         <>
-          <h2 className="flex items-center gap-1 text-sm font-semibold text-foreground">
-            {event.title}、おつかれさまでした
-            <Coffee aria-hidden className="h-4 w-4" />
+          <h2 className="text-sm font-semibold text-foreground">
+            {event.title}、おつかれさまでした 🍵
           </h2>
           <p className="mt-1 text-xs text-muted">
             前に「{event.categoryName}」であった失敗です。今回はどうだったか、ワンタップで教えてください。
@@ -65,9 +64,8 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                 : ""}
             </p>
             {log.countermeasure && (
-              <p className="mt-1 flex items-center gap-1 text-xs text-teal-dark">
-                <Lightbulb aria-hidden className="h-3.5 w-3.5 shrink-0" />
-                前回効いた対策: {log.countermeasure}
+              <p className="mt-1 text-xs text-teal-dark">
+                💡 前回効いた対策: {log.countermeasure}
               </p>
             )}
 
@@ -148,10 +146,7 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                       className="w-full rounded-md border bg-background px-2 py-1 text-xs text-foreground"
                     />
                     <SubmitButton>
-                      <span className="inline-flex items-center gap-1">
-                        {isPast ? "今回は防げた" : "これは防げた"}
-                        <PartyPopper aria-hidden className="h-3.5 w-3.5" />
-                      </span>
+                      {isPast ? "今回は防げた 🎉" : "これは防げた 🎉"}
                     </SubmitButton>
                   </form>
                   {isPast && (
@@ -165,10 +160,9 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                       />
                       <button
                         type="submit"
-                        className="inline-flex w-full items-center gap-1 rounded-lg border border-warn/50 bg-surface px-3 py-2.5 text-sm font-medium text-warn hover:bg-warn-soft sm:w-auto sm:px-4"
+                        className="block w-full rounded-lg border border-warn/50 bg-surface px-3 py-2.5 text-sm font-medium text-warn hover:bg-warn-soft sm:w-auto sm:px-4"
                       >
-                        今回もやってしまった
-                        <Frown aria-hidden className="h-4 w-4" />
+                        今回もやってしまった 😢
                       </button>
                     </form>
                   )}

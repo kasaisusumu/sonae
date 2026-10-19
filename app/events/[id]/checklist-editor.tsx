@@ -2,15 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Bell,
-  Calendar,
-  ClipboardList,
-  Image as ImageIcon,
-  NotebookPen,
-  Star,
-  X,
-} from "lucide-react";
+import { X } from "lucide-react";
 import {
   applyTemplateToEvent,
   clearChecklistSection,
@@ -703,9 +695,8 @@ export function ChecklistEditor({
                       {ex.title}
                     </span>
                     {ex.lead && (
-                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-teal-dark">
-                        <Bell aria-hidden className="h-3 w-3" />
-                        {ex.lead}
+                      <span className="shrink-0 text-[11px] tabular-nums text-teal-dark">
+                        🔔{ex.lead}
                       </span>
                     )}
                     <button
@@ -803,15 +794,13 @@ export function ChecklistEditor({
                   </span>
                 )}
                 {it.notifyLeadMinutes != null && (
-                  <span className="mt-1.5 inline-flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-teal-dark">
-                    <Bell aria-hidden className="h-3 w-3" />
-                    {formatLead(it.notifyLeadMinutes)}
+                  <span className="mt-1.5 shrink-0 text-[11px] tabular-nums text-teal-dark">
+                    🔔{formatLead(it.notifyLeadMinutes)}
                   </span>
                 )}
                 {it.images.length > 0 && (
-                  <span className="mt-1.5 inline-flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-muted">
-                    <ImageIcon aria-hidden className="h-3 w-3" />
-                    {it.images.length}
+                  <span className="mt-1.5 shrink-0 text-[11px] tabular-nums text-muted">
+                    🖼️{it.images.length}
                   </span>
                 )}
                 {/* 3つは横幅をできるだけ詰めて1かたまりに。入りきらなければ
@@ -1011,16 +1000,15 @@ export function ChecklistEditor({
               <div className="absolute left-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-lg">
                 {[
                   {
-                    label: "メモから一括で追加",
-                    icon: NotebookPen,
+                    label: "📝 メモから一括で追加",
                     on: () => {
                       setBulkOpen(true);
                       setBulkNote(null);
                     },
                   },
-                  { label: "マニュアルから追加", icon: ClipboardList, on: () => setModal("apply") },
-                  { label: "他の予定からコピー", icon: Calendar, on: () => setModal("copy") },
-                  { label: "名前をつけて保存", icon: Star, on: () => setModal("save") },
+                  { label: "📋 マニュアルから追加", on: () => setModal("apply") },
+                  { label: "📆 他の予定からコピー", on: () => setModal("copy") },
+                  { label: "⭐ 名前をつけて保存", on: () => setModal("save") },
                 ].map((m) => (
                   <button
                     key={m.label}
@@ -1029,9 +1017,8 @@ export function ChecklistEditor({
                       setMoreOpen(false);
                       m.on();
                     }}
-                    className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs text-foreground hover:bg-surface-muted"
+                    className="block w-full px-3 py-2 text-left text-xs text-foreground hover:bg-surface-muted"
                   >
-                    <m.icon aria-hidden className="h-3.5 w-3.5 shrink-0" />
                     {m.label}
                   </button>
                 ))}
@@ -1123,9 +1110,8 @@ export function ChecklistEditor({
           >
             {modal === "save" && (
               <>
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                  <Star aria-hidden className="h-4 w-4" />
-                  この{kindLabel}リストを保存
+                <h3 className="text-sm font-semibold text-foreground">
+                  ⭐ この{kindLabel}リストを保存
                 </h3>
                 <p className="text-[11px] text-muted">
                   名前を付けて保存すると、どの予定でも「マニュアルから」で追加できます。同じ名前は上書きします。
@@ -1161,9 +1147,8 @@ export function ChecklistEditor({
 
             {modal === "apply" && (
               <>
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                  <ClipboardList aria-hidden className="h-4 w-4" />
-                  マニュアルから追加
+                <h3 className="text-sm font-semibold text-foreground">
+                  📋 マニュアルから追加
                 </h3>
                 {templates.length === 0 ? (
                   <p className="text-xs text-muted">
@@ -1211,9 +1196,8 @@ export function ChecklistEditor({
 
             {modal === "copy" && (
               <>
-                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                  <Calendar aria-hidden className="h-4 w-4" />
-                  他の予定から{kindLabel}をコピー
+                <h3 className="text-sm font-semibold text-foreground">
+                  📆 他の予定から{kindLabel}をコピー
                 </h3>
                 {pastEvents.length === 0 ? (
                   <p className="text-xs text-muted">

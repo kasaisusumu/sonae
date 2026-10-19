@@ -88,9 +88,9 @@ function TemplateCard({
               className="rounded-md border bg-surface px-2 py-1 text-xs"
             >
               <option value="">次回の出し方: 自動</option>
-              <option value="event_only">今回だけ</option>
-              <option value="similar">似た予定</option>
-              <option value="keyword">この名前</option>
+              <option value="event_only">📌 今回だけ</option>
+              <option value="similar">🔁 似た予定</option>
+              <option value="keyword">🏷 この名前</option>
             </select>
             <button
               type="submit"
@@ -151,7 +151,7 @@ export function TemplatesGroup({
       <p className="flex items-center gap-1 text-xs text-muted">
         よく使う準備すること・持ち物に名前を付けて保存できます。
         <InfoHint id="savings-templates-intro">
-          予定ページの「その他」から「マニュアルから追加」で、どの予定にも追加できます。
+          予定ページの「その他」から「📋 マニュアルから追加」で、どの予定にも追加できます。
           追加すると、その予定には<strong>この名前の新しい枠</strong>ができます
           （既存の準備すること・持ち物には混ざりません）。名前の横の（　）は、
           予定ページのどの枠の「マニュアルから追加」に出てくるかです。

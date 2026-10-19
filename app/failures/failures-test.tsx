@@ -1,49 +1,14 @@
 import { Check } from "lucide-react";
-import { prisma } from "@/lib/prisma";
 import { createFutureMessageAction } from "@/app/actions";
-import { listFutureMessages, getPendingMessageReviews } from "@/lib/future-messages";
-import { getCachedOrBuildMessageProposal } from "@/lib/message-proposal";
+import { listFutureMessages } from "@/lib/future-messages";
 import { MessageCreateSubmit } from "./message-create-submit";
 import { InfoHint } from "@/app/components/info-hint";
-import { MessageReviewCard } from "@/app/components/message-review-card";
 import { MessageDictationInput } from "./message-dictation-input";
 import { MessageList } from "./message-list";
 
-// 確定カードごとに AI 提案を作るため、1回のページ表示で試す上限（コスト・速度対策）。
-const MAX_REVIEW_PROPOSALS = 10;
-
 /** テスト版モードの /failures（未来の自分へのメッセージ）。 */
 export async function FailuresPageTest({ userId }: { userId: string }) {
-  const [pendingReviews, messages] = await Promise.all([
-    getPendingMessageReviews(userId),
-    listFutureMessages(userId),
-  ]);
-
-  const reviewsToShow = pendingReviews.slice(0, MAX_REVIEW_PROPOSALS);
-  const reviewCards = await Promise.all(
-    reviewsToShow.map(async (r) => {
-      const event = await prisma.event.findUnique({
-        where: { id: r.eventId },
-        select: { memo: true, categoryId: true },
-      });
-      return {
-        review: r,
-        proposal: await getCachedOrBuildMessageProposal(r.linkId, {
-          userId,
-          eventTitle: r.eventTitle,
-          eventMemo: event?.memo ?? null,
-          categoryId: event?.categoryId ?? null,
-          current: {
-            body: r.body,
-            keywords: r.keywords,
-            genres: r.genres,
-            categoryIds: r.categoryIds,
-            scope: r.scope,
-          },
-        }),
-      };
-    }),
-  );
+  const messages = await listFutureMessages(userId);
 
   return (
     <div className="space-y-8">
@@ -53,34 +18,12 @@ export async function FailuresPageTest({ userId }: { userId: string }) {
           いつ入るか分からない予定のために、思い出したいことを書いておくページです。
           該当する予定が入ったときに知らせます。
           <InfoHint id="failures-intro">
-            予定が終わるたびに、書いた内容を見直すか聞かれます（最初に書いた予定でも、
-            次に似た予定が来たときでも同じです）。直すところだけ直せば、使うほど
-            直す量が減っていきます。
+            予定が終わっても、確定の操作は要りません。思い出したい内容・次回の出し方
+            （似た予定／この名前）は、下の「登録したメッセージを見る」からいつでも
+            直せます。終わった予定のページからも同じように直せます。
           </InfoHint>
         </p>
       </div>
-
-      {reviewCards.length > 0 && (
-        <section id="review" className="scroll-mt-4 space-y-3">
-          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            🤔 結果を記録しよう({pendingReviews.length}件)
-            <InfoHint id="failures-review-queue">
-              終わった予定のメッセージを見直しましょう。全項目に提案が入っているので、
-              直すところだけ直して確定するだけでOKです。
-            </InfoHint>
-          </h2>
-          <div className="space-y-4">
-            {reviewCards.map(({ review, proposal }) => (
-              <MessageReviewCard
-                key={review.linkId}
-                linkId={review.linkId}
-                eventTitle={review.eventTitle}
-                proposal={proposal}
-              />
-            ))}
-          </div>
-        </section>
-      )}
 
       <section
         data-coach="message-new"

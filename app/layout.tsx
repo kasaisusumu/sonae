@@ -4,7 +4,6 @@ import Link from "next/link";
 import "./globals.css";
 import { getSessionUserId } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { pendingMessageReviewWhere } from "@/lib/future-messages";
 import { reviewPendingFailureWhere } from "@/lib/failures";
 import { featureModeOf, isFailureLogEnabled } from "@/lib/feature-mode";
 import { APP_NAME, APP_TAGLINE, APP_DESCRIPTION } from "@/lib/app-info";
@@ -82,7 +81,9 @@ export default async function RootLayout({
   const uid = await getSessionUserId();
   const isLoggedIn = uid !== null;
 
-  // 「結果記録待ち」の件数（ナビにドットを出す）。1 件の軽い count。
+  // 「結果記録待ち」の件数（ナビにドットを出す）。本番版の失敗ログだけの概念
+  // （テスト版の未来の自分へのメッセージは、他の準備リストの枠と同じ扱いにしたため
+  // 「確定待ち」というバッジ自体を持たない。ユーザー指摘により2026-10-19）。
   let pendingReview = 0;
   let tutorialDone = false;
   let hasPushSubscription = false;
@@ -101,7 +102,7 @@ export default async function RootLayout({
       // （長い予定・終日予定など）で「ドットは出るのに操作対象が無い」状態になっていた。
       isProductionMode
         ? prisma.failureLog.count({ where: reviewPendingFailureWhere(uid) })
-        : prisma.eventFutureMessage.count({ where: pendingMessageReviewWhere(uid) }),
+        : Promise.resolve(0),
       prisma.pushSubscription.count({ where: { userId: uid } }),
     ]);
     pendingReview = count;

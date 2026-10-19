@@ -237,8 +237,9 @@ export function buildSonaeBlock(
 
   // 最終更新時刻は末尾の行に書く（ユーザー指摘により2026-10-19。先頭だと
   // 準備リストより上に目立ってしまい、カレンダー上で毎回ここだけ見えるのが
-  // 煩わしいとのこと）。
-  if (opts.updatedAt) lines.push(`最終更新: ${formatUpdatedAt(opts.updatedAt)}`);
+  // 煩わしいとのこと）。直前に空行を1行入れて、リストの内容から見切れて見えるように
+  // 区切る（ユーザー指摘により2026-10-19追加）。
+  if (opts.updatedAt) lines.push("", `最終更新: ${formatUpdatedAt(opts.updatedAt)}`);
   lines.push(END);
   return lines.join("\n");
 }

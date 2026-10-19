@@ -16,43 +16,59 @@ export type QuickScope = Extract<ItemScope, "event_only" | "similar" | "keyword"
  * それぞれの保存処理（キーワードの算出を含む）を行う。
  */
 export const QUICK_SCOPES: QuickScope[] = ["event_only", "similar", "keyword"];
+/** 未来の自分へのメッセージ用の2択（「今回だけ」は無い。常に先の予定向けのため）。 */
+export const MESSAGE_QUICK_SCOPES: QuickScope[] = ["similar", "keyword"];
 
-/** ⓘ の説明文の中身。`ScopeQuickToggle`・`ScopeEmojiToggle` の両方の InfoHint から共通で使う。 */
-function ScopeHintBody() {
+/** ⓘ の説明文の中身。`ScopeQuickToggle`・`ScopeEmojiToggle` の両方の InfoHint から共通で使う。
+ * `scopes` に含まれるボタンぶんだけ説明を出す（未来の自分へのメッセージは2択なので
+ * 「今回だけ」の説明は要らない）。 */
+function ScopeHintBody({ scopes }: { scopes: QuickScope[] }) {
   return (
     <>
       <p className="mb-3 text-sm font-semibold text-foreground">
-        「次回の出し方」の3つのボタン
+        「次回の出し方」の{scopes.length}つのボタン
       </p>
 
-      <p className="mb-1">
-        <ScopeChip scope="event_only" status="chosen" />
-      </p>
-      <p className="mb-3 text-[13px]">
-        この予定の中だけ。次回以降の予定には影響しません。例えば「ホテルに電話する」
-        のような、この予定限定の内容に向いています。
-      </p>
+      {scopes.includes("event_only") && (
+        <>
+          <p className="mb-1">
+            <ScopeChip scope="event_only" status="chosen" />
+          </p>
+          <p className="mb-3 text-[13px]">
+            この予定の中だけ。次回以降の予定には影響しません。例えば「ホテルに電話する」
+            のような、この予定限定の内容に向いています。
+          </p>
+        </>
+      )}
 
-      <p className="mb-1">
-        <ScopeChip scope="similar" status="chosen" />
-      </p>
-      <p className="mb-3 text-[13px]">
-        日時や長さではなく、用途が同じ種類の予定（例: バスも新幹線も「移動」）でも
-        同じように出す／出さないようにします。種類はAIが自動で判断します。
-        例えば「新幹線のチケットを確認」なら、バス移動・飛行機移動の予定にも
-        同じように出るようにできます。
-      </p>
+      {scopes.includes("similar") && (
+        <>
+          <p className="mb-1">
+            <ScopeChip scope="similar" status="chosen" />
+          </p>
+          <p className="mb-3 text-[13px]">
+            日時や長さではなく、用途が同じ種類の予定（例: バスも新幹線も「移動」）でも
+            同じように出す／出さないようにします。種類はAIが自動で判断します。
+            例えば「新幹線のチケットを確認」なら、バス移動・飛行機移動の予定にも
+            同じように出るようにできます。
+          </p>
+        </>
+      )}
 
-      <p className="mb-1">
-        <ScopeChip scope="keyword" status="chosen" />
-      </p>
-      <p className="mb-3 text-[13px]">
-        この予定の名前から自動でキーワードを決めて、次にそのキーワードを含む予定が
-        来たときだけ出す／出さないようにします。例えば「田中さんと商談」なら
-        キーワード「田中さん」が決まり、次に「田中さん」を含む予定が来たときだけ
-        出ます。∨ で項目の詳細を開くと「キーワード「田中さん」」のように出るので、
-        そこで直せます（空にすると、次からは自動では一致しなくなります）。
-      </p>
+      {scopes.includes("keyword") && (
+        <>
+          <p className="mb-1">
+            <ScopeChip scope="keyword" status="chosen" />
+          </p>
+          <p className="mb-3 text-[13px]">
+            この予定の名前から自動でキーワードを決めて、次にそのキーワードを含む予定が
+            来たときだけ出す／出さないようにします。例えば「田中さんと商談」なら
+            キーワード「田中さん」が決まり、次に「田中さん」を含む予定が来たときだけ
+            出ます。∨ で項目の詳細を開くと「キーワード「田中さん」」のように出るので、
+            そこで直せます（空にすると、次からは自動では一致しなくなります）。
+          </p>
+        </>
+      )}
 
       <p className="mb-1 mt-4 text-sm font-semibold text-foreground">
         「提案」と「選んだ」の違い
@@ -75,6 +91,7 @@ export function ScopeQuickToggle({
   showHint = true,
   hintOpen,
   onHintOpenChange,
+  scopes = QUICK_SCOPES,
 }: {
   /** 3択のどれかと一致すればハイライトする（keyword はカスタムの値でも3番目がハイライトする）。
    * それ以外の値（旧ジャンル・自動など）ならどれも非選択。 */
@@ -91,10 +108,12 @@ export function ScopeQuickToggle({
    */
   hintOpen?: boolean;
   onHintOpenChange?: (open: boolean) => void;
+  /** 表示する択（既定は3択）。未来の自分へのメッセージは MESSAGE_QUICK_SCOPES（2択）を渡す。 */
+  scopes?: QuickScope[];
 }) {
   return (
     <div className={`flex flex-nowrap items-center gap-1 ${className}`}>
-      {QUICK_SCOPES.map((sc) => {
+      {scopes.map((sc) => {
         const selected = value === sc;
         const meta = SCOPE_CHIP[sc];
         return (
@@ -128,7 +147,7 @@ export function ScopeQuickToggle({
       })}
       {showHint && (
         <InfoHint id="scope-quick-toggle" open={hintOpen} onOpenChange={onHintOpenChange}>
-          <ScopeHintBody />
+          <ScopeHintBody scopes={scopes} />
         </InfoHint>
       )}
     </div>
@@ -151,6 +170,7 @@ export function ScopeEmojiToggle({
   onHintOpenChange,
   className = "mt-0.5",
   dataCoach,
+  scopes = QUICK_SCOPES,
 }: {
   value: string;
   onChange: (next: QuickScope) => void;
@@ -163,8 +183,10 @@ export function ScopeEmojiToggle({
   className?: string;
   /** コーチマーク（app/components/page-coach.tsx）が指す対象にするときの `data-coach` 値。 */
   dataCoach?: string;
+  /** 表示する択（既定は3択）。未来の自分へのメッセージは MESSAGE_QUICK_SCOPES（2択）を渡す。 */
+  scopes?: QuickScope[];
 }) {
-  const current = (QUICK_SCOPES as string[]).includes(value)
+  const current = (scopes as string[]).includes(value)
     ? SCOPE_CHIP[value as QuickScope]
     : SCOPE_CHIP.auto;
   return (
@@ -201,11 +223,11 @@ export function ScopeEmojiToggle({
                 次回の出し方
               </span>
               <InfoHint id="scope-quick-toggle" open={hintOpen} onOpenChange={onHintOpenChange}>
-                <ScopeHintBody />
+                <ScopeHintBody scopes={scopes} />
               </InfoHint>
             </span>
             <span className="mt-3 block space-y-2">
-              {QUICK_SCOPES.map((sc) => {
+              {scopes.map((sc) => {
                 const selected = value === sc;
                 const meta = SCOPE_CHIP[sc];
                 return (

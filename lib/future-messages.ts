@@ -1,7 +1,6 @@
 import OpenAI from "openai";
 import { toHiragana } from "wanakana";
 import { prisma } from "@/lib/prisma";
-import { Prisma } from "@/generated/prisma";
 import { stripSonaeBlock } from "@/lib/description";
 import { sendPushToUser } from "@/lib/push";
 import { recordAiUsage } from "@/lib/ai-usage";
@@ -691,82 +690,6 @@ export async function removeMessageFromEvent(
   });
 }
 
-// ── 予定後の確定待ち ──
-
-export interface PendingReview {
-  linkId: string;
-  eventId: string;
-  eventTitle: string;
-  messageId: string;
-  body: string;
-  keywords: string[];
-  genres: string[];
-  categoryIds: string[];
-  scope: string;
-  matchReason: string | null;
-}
-
-/** 「結果を記録しよう」に出す条件。ナビのドット判定と必ず同じ意味に保つこと。 */
-export function pendingMessageReviewWhere(
-  userId: string,
-  now: Date = new Date(),
-): Prisma.EventFutureMessageWhereInput {
-  return {
-    userId,
-    status: "shown",
-    event: {
-      OR: [
-        { endDatetime: { lte: now } },
-        { endDatetime: null, eventDatetime: { lte: now } },
-      ],
-    },
-  };
-}
-
-function toPendingReview(l: {
-  id: string;
-  eventId: string;
-  event: { title: string };
-  message: Parameters<typeof toRow>[0];
-  matchReason: string | null;
-}): PendingReview {
-  const m = toRow(l.message);
-  return {
-    linkId: l.id,
-    eventId: l.eventId,
-    eventTitle: l.event.title,
-    messageId: m.id,
-    body: m.body,
-    keywords: m.keywords,
-    genres: m.genres,
-    categoryIds: m.categoryIds,
-    scope: m.scope,
-    matchReason: l.matchReason,
-  };
-}
-
-export async function getPendingMessageReviews(userId: string): Promise<PendingReview[]> {
-  const links = await prisma.eventFutureMessage.findMany({
-    where: pendingMessageReviewWhere(userId),
-    include: { message: true, event: { select: { title: true } } },
-    orderBy: { createdAt: "asc" },
-  });
-  return links.map(toPendingReview);
-}
-
-/** 1 予定ぶんの確定待ち（同じ予定に複数のメッセージが結びついていることもある）。 */
-export async function getPendingMessageReviewsForEvent(
-  eventId: string,
-  userId: string,
-): Promise<PendingReview[]> {
-  const links = await prisma.eventFutureMessage.findMany({
-    where: { ...pendingMessageReviewWhere(userId), eventId },
-    include: { message: true, event: { select: { title: true } } },
-    orderBy: { createdAt: "asc" },
-  });
-  return links.map(toPendingReview);
-}
-
 // ── Google カレンダー説明欄に書く「未来の自分へ」の内容 ──
 
 export interface EventDescriptionMessage {
@@ -784,92 +707,6 @@ export async function getEventDescriptionMessages(
     orderBy: { createdAt: "asc" },
   });
   return links.map((l) => ({ body: l.message.body, isDone: l.isDone }));
-}
-
-// ── 確定カードの操作（§2.6） ──
-
-/** 「この内容で確定」／項目ごとの修正後に確定。final の内容で FutureMessage を更新する。 */
-export async function confirmMessageReview(
-  userId: string,
-  linkId: string,
-  final: {
-    body: string;
-    keywords: string[];
-    genres: string[];
-    categoryIds: string[];
-    scope: string;
-  },
-): Promise<{ messageId: string; eventId: string } | null> {
-  const link = await prisma.eventFutureMessage.findFirst({
-    where: { id: linkId, userId },
-    select: { messageId: true, eventId: true },
-  });
-  if (!link) return null;
-
-  const genreKeywords = await expandGenreKeywords(
-    final.genres.slice(0, 5),
-    parseGenreKeywords(
-      (await prisma.futureMessage.findUnique({ where: { id: link.messageId } }))
-        ?.genreKeywords ?? "[]",
-    ),
-    userId,
-  );
-
-  await prisma.$transaction([
-    prisma.futureMessage.update({
-      where: { id: link.messageId },
-      data: {
-        body: final.body.trim().slice(0, 2000),
-        keywords: stringifyStrArray(final.keywords),
-        genres: stringifyStrArray(final.genres),
-        genreKeywords: stringifyGenreKeywords(genreKeywords),
-        categoryIds: stringifyStrArray(final.categoryIds),
-        scope:
-          final.scope === "similar" || final.scope === "once" ? final.scope : "keyword",
-        confirmedCount: { increment: 1 },
-        lastConfirmedAt: new Date(),
-        ...(final.scope === "once" ? { archivedAt: new Date() } : {}),
-      },
-    }),
-    prisma.eventFutureMessage.update({
-      where: { id: linkId },
-      data: { status: "confirmed" },
-    }),
-  ]);
-  return link;
-}
-
-/** 振り返りカードの提案（AI）を作るための、現在の値と予定の情報。自分のリンクだけ返す。 */
-export async function getLinkForReview(userId: string, linkId: string) {
-  const link = await prisma.eventFutureMessage.findFirst({
-    where: { id: linkId, userId },
-    include: {
-      message: true,
-      event: { select: { title: true, memo: true, categoryId: true } },
-    },
-  });
-  if (!link) return null;
-  const m = toRow(link.message);
-  return {
-    eventTitle: link.event.title,
-    eventMemo: link.event.memo,
-    categoryId: link.event.categoryId,
-    current: {
-      body: m.body,
-      keywords: m.keywords,
-      genres: m.genres,
-      categoryIds: m.categoryIds,
-      scope: m.scope,
-    },
-  };
-}
-
-/** 「今回は更新しない」。scope は変えない。 */
-export async function skipMessageReview(userId: string, linkId: string): Promise<void> {
-  await prisma.eventFutureMessage.updateMany({
-    where: { id: linkId, userId },
-    data: { status: "skipped" },
-  });
 }
 
 // ── 予定後の「メッセージを更新しませんか？」通知 ──

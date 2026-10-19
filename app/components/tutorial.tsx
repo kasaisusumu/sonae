@@ -76,6 +76,7 @@ function Visual({ id }: { id: string }): ReactNode {
 ☑ 充電器（1日前）
 ・モバイルバッテリー
 ・常備薬
+
 最終更新: 10/19 14:30
 ---`}
         </pre>

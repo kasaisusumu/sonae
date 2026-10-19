@@ -93,7 +93,7 @@ export async function syncEventDescription(eventId: string): Promise<void> {
   // 変わらず、既に書き込み済みの予定が再書き込みされない（ユーザー指摘により
   // 2026-10-19に発覚）。そのレイアウト変更のたびにこの番号を上げることで、
   // 既存の予定にも一度だけ新しいレイアウトで書き直させる。
-  const CONTENT_FORMAT_VERSION = 2;
+  const CONTENT_FORMAT_VERSION = 3;
   const contentHash = hashDescription(`${contentOnly}\u0000fmt${CONTENT_FORMAT_VERSION}`);
   if (contentHash === event.lastWrittenContentHash) return;
 

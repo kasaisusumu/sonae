@@ -2,7 +2,7 @@ import Link from "next/link";
 import { after } from "next/server";
 import { getCurrentUser } from "@/lib/session";
 import { isDevLoginEnabled } from "@/lib/dev-login";
-import { getPendingMessageReviews, listFutureMessages } from "@/lib/future-messages";
+import { listFutureMessages } from "@/lib/future-messages";
 import { getUpcomingWarnings } from "@/lib/failures";
 import { primeNotifiedChecklists } from "@/lib/checklist";
 import { trackEvent } from "@/lib/track";
@@ -90,8 +90,7 @@ export default async function HomePage({
   const mode = featureModeOf(user);
   const isProd = isFailureLogEnabled(mode);
 
-  const [pendingReviews, warnings, pushCount, futureMessages] = await Promise.all([
-    isProd ? Promise.resolve([]) : getPendingMessageReviews(user.id),
+  const [warnings, pushCount, futureMessages] = await Promise.all([
     isProd ? getUpcomingWarnings(user.id) : Promise.resolve([]),
     prisma.pushSubscription.count({ where: { userId: user.id } }),
     isProd ? Promise.resolve([]) : listFutureMessages(user.id),
@@ -148,16 +147,6 @@ export default async function HomePage({
           <div data-coach="growth">
             <GrowthDashboard userId={user.id} />
           </div>
-
-          {pendingReviews.length > 0 && (
-            <Link
-              href="/failures#review"
-              data-coach="message-review-nudge"
-              className="block rounded-2xl border border-teal/30 bg-teal-soft px-4 py-3 text-sm text-teal-dark no-underline hover:opacity-90"
-            >
-              💌 未来の自分へのメッセージ、{pendingReviews.length}件の確定待ちがあります
-            </Link>
-          )}
 
           <MessageList
             messages={futureMessages.map((m) => ({

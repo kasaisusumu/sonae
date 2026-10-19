@@ -51,16 +51,7 @@ import {
   createMessageForEvent,
   removeMessageFromEvent,
   toggleEventFutureMessageDone,
-  confirmMessageReview,
-  skipMessageReview,
-  getLinkForReview,
 } from "@/lib/future-messages";
-import {
-  getCachedOrBuildMessageProposal,
-  recordProposalOutcome,
-  type ProposalFields as MessageProposalFields,
-  type MessageFields,
-} from "@/lib/message-proposal";
 import {
   isAutoScopeDecision,
   proposeScopesForSave,
@@ -1418,26 +1409,6 @@ export async function saveDictatedMessages(input: {
 }
 
 /**
- * 済んだ予定・学習内容から振り返りを開いたときの提案（AI）を作る。
- * 開いたときだけ呼ぶ（一覧の描画ごとに AI を呼ばないため）。自分のリンクだけ扱う。
- */
-export async function loadMessageProposalAction(
-  linkId: string,
-): Promise<MessageProposalFields | null> {
-  const userId = await requireUserId();
-  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return null;
-  const link = await getLinkForReview(userId, linkId);
-  if (!link) return null;
-  return getCachedOrBuildMessageProposal(linkId, {
-    userId,
-    eventTitle: link.eventTitle,
-    eventMemo: link.eventMemo,
-    categoryId: link.categoryId,
-    current: link.current,
-  });
-}
-
-/**
  * 準備リストの項目の「次回いつ出すか」をチップから選び直す。
  * 自分の予定の、いま残っている項目だけ対象にする。
  */
@@ -1530,47 +1501,6 @@ export async function setItemKeywordScopeAction(input: {
   }
   revalidateAppViews(event.id);
   return { ok: true };
-}
-
-/** 予定後の確定カード：「この内容で確定」／項目ごとの修正後に確定する。 */
-export async function confirmMessageReviewAction(input: {
-  linkId: string;
-  proposed: MessageProposalFields;
-  final: MessageFields;
-  acceptedNewMessages?: { body: string; keywords: string[] }[];
-}): Promise<{ ok: boolean }> {
-  const userId = await requireUserId();
-  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return { ok: false };
-  trackEvent(userId, "feature:message-review-confirm");
-
-  const link = await confirmMessageReview(userId, input.linkId, input.final);
-  if (!link) return { ok: false };
-
-  await recordProposalOutcome({
-    userId,
-    messageId: link.messageId,
-    eventId: link.eventId,
-    proposed: input.proposed,
-    final: input.final,
-  });
-
-  for (const s of input.acceptedNewMessages ?? []) {
-    if (!s.body.trim()) continue;
-    await createFutureMessage(userId, { body: s.body, keywords: s.keywords });
-  }
-
-  revalidateAppViews(link.eventId);
-  return { ok: true };
-}
-
-/** 予定後の確定カード：「今回は更新しない」。 */
-export async function skipMessageReviewAction(formData: FormData): Promise<void> {
-  const userId = await requireUserId();
-  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
-  const linkId = String(formData.get("linkId") ?? "");
-  if (!linkId) return;
-  await skipMessageReview(userId, linkId);
-  revalidateAppViews();
 }
 
 // ─────────────────────────────────────────────

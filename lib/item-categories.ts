@@ -5,7 +5,7 @@
  *
  * 設計:
  * - リスト項目を「似た予定」に設定したタイミングで、AI を1回だけ呼び出し、
- *   この語彙の中から最大5個のカテゴリを選んで ChecklistScopeRule.categories に保存する
+ *   この語彙の中から最大10個のカテゴリを選んで ChecklistScopeRule.categories に保存する
  *   （classifyItemCategories）。以後そのルールが生きている間は再生成しない。
  * - 新しい予定が追加されたときは、予定名・説明文からこの語彙をキーワードで
  *   ルールベースに判定するだけ（inferCategoriesFromText）。AI は一切呼ばない。
@@ -81,13 +81,13 @@ export function inferCategoriesFromText(text: string): string[] {
 
 const SYSTEM = `あなたは準備リストの項目を分類します。
 与えられた項目名・予定の文脈から、次の事前定義カテゴリの中から当てはまるものを
-最大5個選んでください（0個でもよい）。カテゴリはこのリストの表記そのまま使うこと。
+最大10個選んでください（0個でもよい）。カテゴリはこのリストの表記そのまま使うこと。
 カテゴリ一覧: ${ITEM_CATEGORY_VOCAB.join("、")}
 出力は必ず次の JSON のみ: {"categories":["カテゴリ名", "..."]}`;
 
 /**
  * リスト項目が「似た予定」に設定されたタイミングで1回だけ呼ぶ。
- * AI の出力は必ず ITEM_CATEGORY_VOCAB に含まれるものだけに絞る（最大5個）。
+ * AI の出力は必ず ITEM_CATEGORY_VOCAB に含まれるものだけに絞る（最大10個）。
  * OpenAI 未設定・失敗時は、項目名自体をルールベースで推定したカテゴリにフォールバックする。
  */
 export async function classifyItemCategories(
@@ -95,7 +95,7 @@ export async function classifyItemCategories(
   eventContext: string,
   userId?: string | null,
 ): Promise<string[]> {
-  const fallback = inferCategoriesFromText(`${itemTitle}\n${eventContext}`).slice(0, 5);
+  const fallback = inferCategoriesFromText(`${itemTitle}\n${eventContext}`).slice(0, 10);
   if (!process.env.OPENAI_API_KEY) return fallback;
   try {
     const client = new OpenAI({
@@ -127,7 +127,7 @@ export async function classifyItemCategories(
       ? raw.categories.map((c) => String(c).trim())
       : [];
     const valid = picked.filter((c) => ITEM_CATEGORY_VOCAB.includes(c));
-    const uniq = [...new Set(valid)].slice(0, 5);
+    const uniq = [...new Set(valid)].slice(0, 10);
     return uniq.length > 0 ? uniq : fallback;
   } catch (e) {
     console.error("[item-categories] classifyItemCategories 失敗", e);

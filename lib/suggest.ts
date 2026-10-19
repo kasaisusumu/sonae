@@ -23,11 +23,6 @@ import {
   type ItemKind,
 } from "@/lib/learning";
 
-const LIMITS: Record<ItemKind, { min: number; max: number }> = {
-  task: { min: 3, max: 7 },
-  belonging: { min: 2, max: 8 },
-};
-
 export interface BuiltItem {
   kind: ItemKind;
   title: string;
@@ -60,7 +55,6 @@ function composeKind(
   rules: ApplicableRule[],
   opts: { autofillNotify?: boolean; verbatim?: boolean } = {},
 ): BuiltItem[] {
-  const { min, max } = LIMITS[kind];
   let items: BuiltItem[] = baseItems.map((b) => ({
     ...base(kind, b.title, b.timingLabel),
     notifyLeadMinutes: b.notifyLeadMinutes ?? null,
@@ -168,19 +162,6 @@ function composeKind(
     return true;
   });
 
-  // 上限で間引き（priority の低い＝confidence の低いものから。確定 fixed は守る）
-  if (items.length > max) {
-    const protectedCount = items.filter((it) => it.priority >= 1).length;
-    const keepCount = Math.max(min, max - protectedCount);
-    const kept = new Set(
-      items
-        .filter((it) => it.priority < 1)
-        .sort((a, b) => b.priority - a.priority)
-        .slice(0, keepCount),
-    );
-    items = items.filter((it) => it.priority >= 1 || kept.has(it));
-  }
-
   return items;
 }
 
@@ -247,7 +228,8 @@ export interface BuildChecklistResult {
 
 /**
  * 予定の準備リスト（準備すること＋持ち物）を組み立てる。
- * 一般ベース → 確定ルール強制適用 → 仮ルールは提案 → 上限で間引き。
+ * 一般ベース → 確定ルール強制適用 → 仮ルールは提案。件数の上限は設けない
+ * （ユーザー指摘により2026-10-19: 予定ごとの学習が十分厳密になったため撤廃）。
  * 学習が薄いカテゴリ・パターンではベースがほぼそのまま出る。
  *
  * `allowAiGeneration` (既定 true): 再利用できる過去予定が無いとき、AI（`generateBaseChecklist`）

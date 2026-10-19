@@ -1,11 +1,12 @@
 /**
  * 準備リストの項目ごとの「次回いつ出すか」（範囲）の提案・保存・切り替え。
  *
- * - 項目を追加・削除したとき、範囲を推奨する。新規項目の既定値は「似た予定」
- *   （ユーザー指摘により2026-10-19: 画面の初期表示と保存時の実際の決定が
- *   食い違い、保存すると「今回だけ」に勝手に変わってしまうバグがあったため、
- *   AIには判定させず画面の既定値と同じ「似た予定」に揃えた）。日付・番号・時刻
- *   などを含む明らかに一度きりの内容だけは「今回だけ」に決める（looksTooSpecific）。
+ * - 項目を追加・削除したとき、範囲を推奨する。新規項目の既定値は「この名前」
+ *   （ユーザー指摘により2026-10-19:「似た予定」は選ぶたびにカテゴリ分類のAI呼び出しが
+ *   走りコストがかかるため、コスト無しの「この名前」を既定にした。画面の初期表示
+ *   （checklist-editor.tsx の shownScope）と必ず揃えること。ずれると保存した瞬間に
+ *   表示が変わってしまう）。日付・番号・時刻などを含む明らかに一度きりの内容だけは
+ *   「今回だけ」に決める（looksTooSpecific）。
  * - 推奨は「提案のまま適用中」（status=proposed）。ユーザーが選び直すと「選んだ」（status=chosen）。
  * - 範囲の一致判定は lib/scope-match.ts に任せる（ここは保存と提案だけ）。
  */
@@ -33,7 +34,6 @@ interface Recommendation {
 }
 
 const DEFAULT_REASON = "自動で覚えます（従来どおり）";
-const SIMILAR_DEFAULT_REASON = "似た予定でも出せるよう、まず「似た予定」にしています";
 
 export { pickKeyword };
 
@@ -325,15 +325,14 @@ export async function proposeScopesForSave(input: {
         source: "default",
       };
     } else {
-      // 既定値は「似た予定」（ユーザー指摘により2026-10-19）。画面の初期表示
-      // （checklist-editor.tsx の shownScope）と必ず揃える。AIには判定させない
-      // （以前はAIに判定させていたが、画面の既定値と食い違い、保存すると
-      // 勝手に「今回だけ」に変わってしまうことがあった）。
+      // 既定値は「この名前」（ユーザー指摘により2026-10-19）。「似た予定」は選ぶたびに
+      // カテゴリ分類のAI呼び出しが走りコストがかかるため、コスト無しの「この名前」を
+      // 既定にする。画面の初期表示（checklist-editor.tsx の shownScope）と必ず揃える。
       rec = {
-        scope: "similar",
+        scope: "keyword",
         keyword: null,
         genre: null,
-        reason: SIMILAR_DEFAULT_REASON,
+        reason: DEFAULT_REASON,
         source: "default",
       };
     }

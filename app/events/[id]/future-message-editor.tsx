@@ -9,13 +9,19 @@ import { FutureMessageRows, type EMRow } from "@/app/components/future-message-r
 
 export type { EMRow };
 
-/** 予定詳細の「💌 過去の自分よりメッセージ」枠。結びついたメッセージは確定後も含めて、いつでも編集できる。 */
+/**
+ * 予定詳細の「💌 過去の自分よりメッセージ」枠。結びついたメッセージは確定後も含めて、いつでも編集できる。
+ * `retro`: 予定が終わっている間だけ true（振り返りのその場限り見出しを
+ * 「未来の自分へのメッセージ」に変える。中身・保存先は全く同じ、ユーザー指摘により2026-10-19）。
+ */
 export function FutureMessageEditor({
   eventId,
   initial,
+  retro = false,
 }: {
   eventId: string;
   initial: EMRow[];
+  retro?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
 
@@ -25,7 +31,9 @@ export function FutureMessageEditor({
       className="rounded-2xl border border-teal/30 bg-teal-soft p-3"
     >
       <div className="mb-1.5 flex items-baseline gap-2">
-        <h3 className="text-sm font-semibold text-teal-dark">💌 過去の自分よりメッセージ</h3>
+        <h3 className="text-sm font-semibold text-teal-dark">
+          {retro ? "💌 未来の自分へのメッセージ" : "💌 過去の自分よりメッセージ"}
+        </h3>
         <span className="text-xs text-teal-dark/70 tabular-nums">
           {initial.length}
         </span>
@@ -91,22 +99,9 @@ export function FutureMessageEditor({
             placeholder="次に思い出したいこと（例: 前回のギブアンドテイクを忘れない）"
             className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
           />
-          <input
-            name="keywords"
-            placeholder="キーワード（任意・読点区切り。例: 田中、A社）"
-            className="w-full rounded-md border bg-background px-2 py-1 text-xs"
-          />
+          {/* キーワード・次回の出し方は追加後、行の ∨ を開いて設定する（他の枠の項目と同じ流れ）。 */}
           <div className="flex flex-wrap items-center gap-2">
-            <SubmitButton
-              confirmIf={(form) => {
-                const kw = (form.elements.namedItem("keywords") as HTMLInputElement | null)?.value ?? "";
-                return kw.trim()
-                  ? null
-                  : "キーワードが未設定です。このままだと、似た予定が来ても自動では思い出せません。このまま保存しますか？";
-              }}
-            >
-              追加する
-            </SubmitButton>
+            <SubmitButton>追加する</SubmitButton>
             <button
               type="button"
               onClick={() => setAdding(false)}

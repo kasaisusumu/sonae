@@ -107,7 +107,7 @@ export default async function EventsPage({
                 <span className="mt-1 block">【準備すること】 1/3</span>
                 <span className="block">☑ お茶を買う（1時間前）</span>
                 <span className="block">・集合時間を確認</span>
-                <span className="block">最終更新: 10/19 14:30</span>
+                <span className="mt-1.5 block">最終更新: 10/19 14:30</span>
               </span>
               <span className="mt-2 block text-muted">
                 連携より前の予定は、アプリで1回編集するか「確認しました」を

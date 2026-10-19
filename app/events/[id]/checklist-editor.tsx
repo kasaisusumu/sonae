@@ -540,13 +540,14 @@ export function ChecklistEditor({
   // 範囲を選び直した直後に、保存の反映を待たず表示を変えるための一時の値（項目の key ごと）
   const [scopeOverride, setScopeOverride] = useState<Record<string, ItemScope>>({});
 
-  /** 画面に出す範囲（選び直した直後の一時の値を優先）。範囲の指定が無い項目は「似た予定」。 */
+  /** 画面に出す範囲（選び直した直後の一時の値を優先）。範囲の指定が無い項目は「この名前」。 */
   function shownScope(it: Item): ItemScope {
-    // まだ何も決まっていない項目の既定表示は「似た予定」（ユーザー指摘により2026-10-19）。
-    // 保存時の実際の決定（lib/item-scope.ts の proposeScopesForSave）もこれと同じ既定値に
-    // 揃えてある。以前はここだけ「似た予定」を見せつつ保存側はAIに判定させていたため、
-    // 保存すると勝手に「今回だけ」に変わってしまうことがあった（この食い違いが原因のバグ）。
-    const persisted = (it.scope?.scope as ItemScope) || "similar";
+    // まだ何も決まっていない項目の既定表示は「この名前」（ユーザー指摘により2026-10-19:
+    // 「似た予定」は選ぶたびにAIでカテゴリ分類が走りコストがかかるため、既定は
+    // コスト無しの「この名前」にする）。保存時の実際の決定
+    // （lib/item-scope.ts の proposeScopesForSave）もこれと同じ既定値に揃えてある
+    // （画面の初期表示と保存側の決定がずれると、保存した瞬間に表示が変わってしまうため）。
+    const persisted = (it.scope?.scope as ItemScope) || "keyword";
     // 「genre」はAIがカテゴリで一致判定した「似た予定」の内部表現（ユーザーが選べる3択には
     // 無い）。クイックの3択UIでは「似た予定」として表示する（◯のような無地アイコンに
     // 落とさない。ユーザー指摘により2026-10-19）。同様に旧仕様の「auto」も同じ扱いにする。

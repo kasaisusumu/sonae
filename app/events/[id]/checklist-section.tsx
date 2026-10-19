@@ -12,9 +12,7 @@ import { getWarningForEvent, ensureSuggestedFailures } from "@/lib/failures";
 import {
   ensureFutureMessageMatchesForEvent,
   getMessagesForEvent,
-  getPendingMessageReviewsForEvent,
 } from "@/lib/future-messages";
-import { getCachedOrBuildMessageProposal } from "@/lib/message-proposal";
 import { refreshEventFromGoogle } from "@/lib/sync";
 import { getEventsWithLists, getUserTemplates } from "@/lib/templates";
 import { formatDateOnly } from "@/lib/format";
@@ -40,8 +38,6 @@ import {
 } from "./failure-list-editor";
 import { WarningPanel } from "./warning-panel";
 import { FutureMessageEditor, type EMRow } from "./future-message-editor";
-import { RetroMessagePrompt } from "./retro-message-prompt";
-import { MessageReviewCard } from "@/app/components/message-review-card";
 import { ListReminderControl } from "./list-reminder-control";
 import { AddSectionButton } from "./section-manager";
 import { SectionList, type SectionEntry } from "./section-list";
@@ -289,9 +285,13 @@ export async function ChecklistSection({
     eventDatetime: event.eventDatetime,
     endDatetime: event.endDatetime,
   });
+  // 予定が終わっているか（振り返り＝「未来の自分へのメッセージ」枠を他の枠と同じ
+  // 見た目で編集できるようにする文言を出すかの判定に使う。テスト版モードだけ）。
+  const eventIsPast =
+    (event.endDatetime ?? new Date(event.eventDatetime.getTime() + 2 * 3_600_000)) <=
+    new Date();
   const [
     warning,
-    pendingReviews,
     taskRules,
     belongingRules,
     reviewState,
@@ -300,9 +300,6 @@ export async function ChecklistSection({
     itemImages,
   ] = await Promise.all([
     isProd ? getWarningForEvent(event.id) : Promise.resolve(null),
-    isProd
-      ? Promise.resolve([])
-      : getPendingMessageReviewsForEvent(event.id, event.userId),
     getApplicableRules(event.categoryId, feature, "task"),
     getApplicableRules(event.categoryId, feature, "belonging"),
     prisma.event.findUnique({
@@ -324,9 +321,11 @@ export async function ChecklistSection({
     }),
   ]);
   // 結びついたメッセージ（確定後・スキップ後も含む）は、予定詳細からいつでも編集できる。
+  // retro: 予定が終わっている間、見出しを「未来の自分へのメッセージ」にする（その場だけ）。
   const futureMessageNode = (
     <FutureMessageEditor
       eventId={event.id}
+      retro={!isProd && eventIsPast}
       initial={linkedMessages.map(
         (m): EMRow => ({
           id: m.id,
@@ -346,26 +345,6 @@ export async function ChecklistSection({
       )}
     />
   );
-  const reviewCards = isProd
-    ? []
-    : await Promise.all(
-        pendingReviews.map(async (r) => ({
-          review: r,
-          proposal: await getCachedOrBuildMessageProposal(r.linkId, {
-            userId: event.userId,
-            eventTitle: event.title,
-            eventMemo: event.memo,
-            categoryId: event.categoryId,
-            current: {
-              body: r.body,
-              keywords: r.keywords,
-              genres: r.genres,
-              categoryIds: r.categoryIds,
-              scope: r.scope,
-            },
-          }),
-        })),
-      );
   const forced = [...taskRules, ...belongingRules].filter((r) => r.forced);
   const rows = items as unknown as Row[];
 
@@ -395,7 +374,9 @@ export async function ChecklistSection({
   // 並べ替え対象にする。まだ並べ替えたことがなければ、話して作るのすぐ下（先頭）に置く。
   // テスト版は、この予定に結びついたメッセージが1件も無ければ枠自体を出さない
   // （空の「＋追加」だけの枠が毎回出るのを避ける。追加は /failures からできる）。
-  const hasFutureMessages = linkedMessages.length > 0;
+  // 予定が終わっている（振り返り）ときは、メッセージが1件もなくてもここから
+  // 新しく書けるよう、枠自体は出す。
+  const hasFutureMessages = linkedMessages.length > 0 || (!isProd && eventIsPast);
   const specialKey = isProd ? FAILURE_LOG_KEY : FUTURE_MESSAGE_KEY;
   // 今のモードで使わない方の特別キーは、以前のモードで保存された sectionOrder に
   // 残っていても表示上は除く（データとしては保ったまま。モードを戻せば復帰する）。
@@ -440,7 +421,8 @@ export async function ChecklistSection({
   return (
     <>
       {/* 本番版: 「過去に失敗の記録があります」の警告（終わった予定の振り返りだけ）。
-          テスト版: 確定待ちの振り返りカード（複数件ぶん）。 */}
+          テスト版: 振り返りの一言案内（専用カードは持たず、下のリストをそのまま
+          直せばよい。ユーザー指摘により2026-10-19: 確定カード形式を廃止）。 */}
       {isProd ? (
         warning &&
         warning.isPast && (
@@ -448,25 +430,11 @@ export async function ChecklistSection({
             <WarningPanel warning={warning} />
           </div>
         )
-      ) : reviewCards.length > 0 ? (
-        <div id="message-review" className="scroll-mt-4 space-y-4">
-          {reviewCards.map(({ review, proposal }) => (
-            <MessageReviewCard
-              key={review.linkId}
-              linkId={review.linkId}
-              eventTitle={review.eventTitle}
-              proposal={proposal}
-            />
-          ))}
-        </div>
       ) : (
-        // 一致する未来メッセージが無い、終わった予定。ここからでも新規に
-        // 「次回への一言」を書ける（一致があるときの振り返りカードと同じ仕組み）。
-        (event.endDatetime ?? new Date(event.eventDatetime.getTime() + 2 * 3_600_000)) <=
-          new Date() && (
-          <div id="message-review" className="scroll-mt-4">
-            <RetroMessagePrompt eventId={event.id} eventTitle={event.title} />
-          </div>
+        eventIsPast && (
+          <p id="message-review" className="scroll-mt-4 text-sm text-foreground">
+            今回の予定を振り返って、次回の自分のために準備リストを修正しましょう。
+          </p>
         )
       )}
 

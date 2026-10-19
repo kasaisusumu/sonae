@@ -12,14 +12,16 @@ export function looksTooSpecific(title: string): boolean {
 }
 
 /**
- * 予定名から、キーワード候補を1つ選ぶ（区切りで分けた最初の2文字以上）。
- * 「この名前の予定だけ」クイック選択の自動キーワードに使う。サーバー・クライアントどちらでも
- * 使えるよう純粋な文字列処理だけにしてある（prisma/openai 等への依存なし）。
+ * 予定名から、キーワード候補を1つ選ぶ。「この名前の予定だけ」クイック選択の
+ * 自動キーワードに使う。サーバー・クライアントどちらでも使えるよう純粋な文字列処理
+ * だけにしてある（prisma/openai 等への依存なし）。
+ * 予定名そのもの（トリムのみ）を使う（ユーザー指摘により2026-10-20再修正: 以前は
+ * 区切りで分けた最初のトークンだけを使っていたため、例えば「〇〇社 定例会議」のような
+ * タイトルで「〇〇社」だけがキーワードになり、「〇〇社」を含む全く別の予定にまで広く
+ * 一致してしまっていた＝「この名前」のはずが「似た予定」のように振る舞う不具合があった。
+ * 「この名前」は予定名そのものへの一致が最も正確）。
  */
 export function pickKeyword(eventTitle: string): string {
-  const parts = eventTitle
-    .split(/[\s　・／/（）()「」【】『』,、]+/)
-    .map((p) => p.trim())
-    .filter((p) => p.length >= 2);
-  return (parts[0] ?? eventTitle.trim()).slice(0, 30);
+  const trimmed = eventTitle.trim();
+  return (trimmed || eventTitle).slice(0, 60);
 }

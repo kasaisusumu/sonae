@@ -3014,12 +3014,20 @@ export async function switchFeatureModeAction(
     return { ok: true, from, to, converted: 0, dormant: 0 };
   }
 
-  const { convertScopeRulesToLearnedRules, convertLearnedRulesToScopeRules } =
-    await import("@/lib/mode-conversion");
+  const {
+    convertScopeRulesToLearnedRules,
+    convertLearnedRulesToScopeRules,
+    backfillKeywordScopesOnModeSwitch,
+  } = await import("@/lib/mode-conversion");
   const result =
     to === "production"
       ? await convertScopeRulesToLearnedRules(userId)
       : await convertLearnedRulesToScopeRules(userId);
+  // ver2側へ切替えたときだけ、三択が未決定の項目（＝画面では既定の「この名前」表示に
+  // なる項目）にキーワードを自動で設定する（ユーザー指摘により2026-10-20）。
+  if (to === "test") {
+    await backfillKeywordScopesOnModeSwitch(userId);
+  }
 
   await prisma.$transaction([
     prisma.user.update({ where: { id: userId }, data: { featureMode: to } }),

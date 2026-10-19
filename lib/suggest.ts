@@ -11,6 +11,7 @@ import { applyScopeDecisions, resolveScopeRules } from "@/lib/scope-match";
 import { loadActiveScopeRules } from "@/lib/item-scope";
 import { normTitle } from "@/lib/text-norm";
 import { matchEventToSlotType } from "@/lib/pattern-classify";
+import { getFeatureMode, isScopeRuleEnabled } from "@/lib/feature-mode";
 import {
   getApplicableRules,
   getApplicablePatternRules,
@@ -293,6 +294,13 @@ export async function buildChecklistForEvent(
   // 似た予定で「準備リストを全部消した」と学習済み → 何も出さない（提案も無し）。
   if (recalled?.cleared) return { items: [], customSectionSeeds: [] };
 
+  // テスト版（ver2）は、項目ごとの範囲つきルール（3択）だけを当てにする
+  // （ユーザー指摘により2026-10-20: 「学習済みの三択情報以外からの提案は不要」）。
+  // LearnedRule（カテゴリ単位の自動学習・本番版の仕組み）・カテゴリ横断パターンは
+  // 本番版（ver1）だけで使う。AI のたたき台生成・似た予定の丸ごと再利用（recall）は
+  // 範囲ルールとは別物（「提案」ではなく最初の下書き）なので、両方のモードで行う。
+  const relyOnScopeOnly = isScopeRuleEnabled(await getFeatureMode(event.userId));
+
   const [gen, taskRules, belongingRules] = await Promise.all([
     recalled
       ? Promise.resolve<GeneratedBase>({
@@ -313,10 +321,14 @@ export async function buildChecklistForEvent(
         : Promise.resolve<GeneratedBase>({ tasks: [], belongings: [], source: "none" }),
     // 似た予定を思い出したときは、シグネチャ違いも含めて前回の学習を全部当てる。
     // そこで今回の予定が違う形に編集されたら、初めてシグネチャごとに枝分かれする。
-    getApplicableRules(event.categoryId, feature, "task", { broad: !!recalled }),
-    getApplicableRules(event.categoryId, feature, "belonging", {
-      broad: !!recalled,
-    }),
+    relyOnScopeOnly
+      ? Promise.resolve<ApplicableRule[]>([])
+      : getApplicableRules(event.categoryId, feature, "task", { broad: !!recalled }),
+    relyOnScopeOnly
+      ? Promise.resolve<ApplicableRule[]>([])
+      : getApplicableRules(event.categoryId, feature, "belonging", {
+          broad: !!recalled,
+        }),
   ]);
 
   // 項目ごとの通知は既定「なし」。生成時に時間を自動で埋めない（学習した notify_override があればそれは効く）。
@@ -334,13 +346,10 @@ export async function buildChecklistForEvent(
   ];
 
   // カテゴリ横断パターン（例:「新幹線の時間を確認する」→ 別カテゴリでも交通手段の項目として転用）。
-  // 既に同じ内容の項目があれば重複させない。
-  const patternItems = await buildPatternItems(
-    event.userId,
-    event.title,
-    feature,
-    verbatim,
-  );
+  // 既に同じ内容の項目があれば重複させない。ver2は範囲ルールだけを当てにするため対象外。
+  const patternItems = relyOnScopeOnly
+    ? []
+    : await buildPatternItems(event.userId, event.title, feature, verbatim);
   const existingKeys = new Set(composed.map((it) => `${it.kind}:${norm(it.title)}`));
   const dedupedPatternItems = patternItems.filter(
     (it) => !existingKeys.has(`${it.kind}:${norm(it.title)}`),

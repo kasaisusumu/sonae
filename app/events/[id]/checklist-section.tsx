@@ -300,8 +300,12 @@ export async function ChecklistSection({
     itemImages,
   ] = await Promise.all([
     isProd ? getWarningForEvent(event.id) : Promise.resolve(null),
-    getApplicableRules(event.categoryId, feature, "task"),
-    getApplicableRules(event.categoryId, feature, "belonging"),
+    // 「この種類の予定で学習済みのこと」カードはver1だけで出す（ユーザー指摘により
+    // 2026-10-20:「学習済みの三択情報以外からの提案は不要」）。ver2では問い合わせ自体も省く。
+    isProd ? getApplicableRules(event.categoryId, feature, "task") : Promise.resolve([]),
+    isProd
+      ? getApplicableRules(event.categoryId, feature, "belonging")
+      : Promise.resolve([]),
     prisma.event.findUnique({
       where: { id: event.id },
       select: {
@@ -533,7 +537,7 @@ export async function ChecklistSection({
         </div>
       </section>
 
-      {forced.length > 0 && (
+      {isProd && forced.length > 0 && (
         <section className="rounded-2xl bg-teal-soft p-4 text-sm">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-teal-dark">

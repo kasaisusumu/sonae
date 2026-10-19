@@ -9,7 +9,13 @@ export interface UsageGridRow {
   email: string;
   byDay: number[];
   costByDay: number[];
-  detailByDay: { at: string; label: string; model: string; costYen: number }[][];
+  detailByDay: {
+    at: string;
+    label: string;
+    model: string;
+    costYen: number;
+    mode: "ver1" | "ver2" | "共通";
+  }[][];
   totalMinutes: number;
   aiCostYen: number;
 }
@@ -165,6 +171,17 @@ export function UsageTimeGrid({
                     <div className="min-w-0">
                       <p className="truncate font-medium text-foreground">
                         {d.label}
+                        <span
+                          className={`ml-1.5 rounded-full border px-1.5 py-0 text-[10px] font-normal ${
+                            d.mode === "ver1"
+                              ? "border-foreground/30 text-foreground"
+                              : d.mode === "ver2"
+                                ? "border-teal/40 text-teal-dark"
+                                : "border-border text-muted"
+                          }`}
+                        >
+                          {d.mode}
+                        </span>
                       </p>
                       <p className="text-xs text-muted">
                         {d.at} ・ {d.model}

@@ -403,7 +403,13 @@ export default async function AdminPage({
   // AI利用金額: 利用者×日（JST）ごとの金額＋内訳（操作・時刻ごと）。
   // 利用時間カレンダーのマスに金額も出し、タップで内訳を見られるようにする
   // （ユーザー指摘により2026-10-19）。
-  type AiCostDetail = { at: string; label: string; model: string; costYen: number };
+  type AiCostDetail = {
+    at: string;
+    label: string;
+    model: string;
+    costYen: number;
+    mode: "ver1" | "ver2" | "共通";
+  };
   const aiCostByUserDay = new Map<string, Map<string, number>>();
   const aiDetailByUserDay = new Map<string, Map<string, AiCostDetail[]>>();
   for (const e of aiUsageEvents) {
@@ -426,6 +432,7 @@ export default async function AdminPage({
       label: aiFeatureLabel(e.feature),
       model: e.model,
       costYen: e.estimatedCostYen,
+      mode: aiFeatureMode(e.feature),
     });
     detailMap.set(dk, arr);
   }

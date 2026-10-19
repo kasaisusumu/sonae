@@ -148,6 +148,15 @@ export default async function EventsPage({
                 node: <EventRow ev={ev} categoryNames={categoryNames} />,
               }),
             )}
+            extraRows={past.map(
+              (ev): SearchRow => ({
+                id: ev.id,
+                haystack: eventHaystack(ev, now),
+                dateKey: eventDateKey(ev.eventDatetime),
+                dateLabel: eventDateLabel(ev.eventDatetime, now),
+                node: <EventRow ev={ev} categoryNames={categoryNames} past />,
+              }),
+            )}
           />
         )}
       </section>

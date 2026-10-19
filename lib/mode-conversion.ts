@@ -18,7 +18,7 @@
  * AI は呼ばない（ルールベースのみ）。
  */
 import { prisma } from "@/lib/prisma";
-import { normTitle } from "@/lib/text-norm";
+import { normTitle, pickKeyword } from "@/lib/text-norm";
 import { stringifyStrArray } from "@/lib/future-messages";
 
 export interface ConversionResult {
@@ -169,4 +169,125 @@ function parseIds(raw: string): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * ver1→ver2 切替時、三択がまだ決まっていない項目（EventChecklistScope が無い＝
+ * 画面では「この名前」として表示される項目）に、キーワードを自動で設定する
+ * （ユーザー指摘により2026-10-20:「キーワード抽出はAIじゃないんだから、バージョン2に
+ * 変える時に、三択が定まってない予定（＝この名前）はキーワードも自動抽出して設定して」）。
+ * キーワードは予定名そのもの（`lib/text-norm.ts` の `pickKeyword`）。AI は呼ばない。
+ * 項目名（kind+normTitle）が同じなら1つのルールにまとめ、代表の予定名は
+ * その項目名の中で最も新しい予定のものを使う。
+ */
+export async function backfillKeywordScopesOnModeSwitch(
+  userId: string,
+): Promise<{ created: number }> {
+  const [items, existingScopes] = await Promise.all([
+    prisma.checklistItem.findMany({
+      where: { event: { userId }, isSuggested: false },
+      orderBy: { event: { eventDatetime: "desc" } },
+      select: {
+        kind: true,
+        title: true,
+        eventId: true,
+        event: { select: { title: true } },
+      },
+    }),
+    prisma.eventChecklistScope.findMany({
+      where: { userId, action: "include", status: { not: "dropped" } },
+      select: { eventId: true, kind: true, normTitle: true },
+    }),
+  ]);
+
+  const decided = new Set(
+    existingScopes.map((s) => `${s.eventId}:${s.kind}:${s.normTitle}`),
+  );
+
+  // items は予定日の新しい順。項目名（kind:normTitle）ごとに最初に出てきたもの
+  // （＝最新の予定）の予定名を、その項目名の代表キーワード元として使う。
+  const representativeTitle = new Map<string, string>();
+  const targets: {
+    eventId: string;
+    kind: string;
+    title: string;
+    normTitle: string;
+  }[] = [];
+  for (const it of items) {
+    const nt = normTitle(it.title);
+    if (!nt) continue;
+    const eventKey = `${it.eventId}:${it.kind}:${nt}`;
+    if (decided.has(eventKey)) continue;
+    const ruleKey = `${it.kind}:${nt}`;
+    if (!representativeTitle.has(ruleKey)) {
+      representativeTitle.set(ruleKey, it.event.title);
+    }
+    targets.push({ eventId: it.eventId, kind: it.kind, title: it.title, normTitle: nt });
+  }
+
+  let created = 0;
+  const ruleIdByKey = new Map<string, string>();
+  for (const t of targets) {
+    const ruleKey = `${t.kind}:${t.normTitle}`;
+    let ruleId = ruleIdByKey.get(ruleKey);
+    if (!ruleId) {
+      const existingRule = await prisma.checklistScopeRule.findFirst({
+        where: {
+          userId,
+          kind: t.kind,
+          normTitle: t.normTitle,
+          action: "include",
+          archivedAt: null,
+        },
+        orderBy: { updatedAt: "desc" },
+      });
+      if (existingRule) {
+        ruleId = existingRule.id;
+      } else {
+        const eventTitle = representativeTitle.get(ruleKey) ?? t.title;
+        const rule = await prisma.checklistScopeRule.create({
+          data: {
+            userId,
+            action: "include",
+            kind: t.kind,
+            normTitle: t.normTitle,
+            title: t.title,
+            scope: "keyword",
+            keywords: stringifyStrArray([pickKeyword(eventTitle)]),
+            reason: "バージョン切替時に自動でキーワードを設定しました",
+            autoConverted: true,
+          },
+        });
+        ruleId = rule.id;
+      }
+      ruleIdByKey.set(ruleKey, ruleId);
+    }
+
+    await prisma.eventChecklistScope.upsert({
+      where: {
+        eventId_kind_normTitle: {
+          eventId: t.eventId,
+          kind: t.kind,
+          normTitle: t.normTitle,
+        },
+      },
+      update: {},
+      create: {
+        userId,
+        eventId: t.eventId,
+        kind: t.kind,
+        normTitle: t.normTitle,
+        title: t.title,
+        action: "include",
+        scope: "keyword",
+        ruleId,
+        reason: "バージョン切替時に自動でキーワードを設定しました",
+        source: "default",
+        status: "chosen",
+      },
+    });
+    created++;
+  }
+
+  return { created };
 }

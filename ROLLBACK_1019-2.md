@@ -131,7 +131,27 @@
 戻した後、`scripts/migration-baseline-1019-2.json` の値と一致するか
 （テーブル行数・主要テーブルのハッシュ・適用済みマイグレーション一覧）を確認する。
 
-## 4. 実装の記録（作業完了後に追記）
+## 4. 実装の記録
 
-（ここに、実際のマージコミットhash・適用したマイグレーション・デプロイ結果・
-検証結果を追記する。）
+- 作業ブランチでのマージコミット: `79f7d68`（`migration/1019-2-promote-test-to-main`、
+  `--no-ff` で `origin/test` を取り込み。コンフリクトは `-X theirs` で自動解消）。
+- マージ後の手動修正コミット: `46a2efc`（`app/admin/page.tsx` の import 欠落・
+  `failureLogCount` 参照・「詳細」リンク消失・サマリーグルーピング消失を修正、
+  featureMode 既定値の修正マイグレーション追加、FailureLog の index 復元）。
+- 本番DB（`production`, `br-gentle-silence-a7fm2l9o`）に適用したマイグレーション（6件）:
+  `20261014090000_feature_mode`, `20261018195634_add_last_written_content_hash`,
+  `20261018210215_add_item_scope_categories`, `20261018210944_add_list_template_default_scope`,
+  `20261019130000_default_feature_mode_production`, `20261019130100_restore_failurelog_eventid_index`。
+- 適用前に使い捨てブランチ `_tmp-rehearsal-1019-2`（本番からのコピー）で同じ6マイグレーションを
+  リハーサルし、`npm run dev` を接続先だけ切り替えて起動して確認（検証後、ブランチは削除済み）:
+  - 既存ユーザー8人全員の `featureMode` が `'production'` になること。
+  - 新規ユーザー（dev-login で作成）の既定が ver1（`/failures` に失敗ログUI、
+    「未来の自分へ」は出ない）で、`/settings` に ver1/ver2 切替があること。
+  - `FailureLog_eventId_idx` インデックスが復元されていること。
+- 本番への実適用後の検証結果:
+  - 行数: `User` 8 / `Event` 242 / `LearnedRule` 721（基準値と一致）。
+  - 主要テーブルの内容ハッシュ: `ChecklistItem`/`EditRecord`/`Category`/`FailureLog`/
+    `SavingsEntry` は基準値と完全一致。`User`/`Event`/`LearnedRule` は今回の
+    マイグレーションで列が追加された影響でハッシュ値自体は変わるが、行数・既存列の内容は
+    変化なし（新規列追加のみ）であることを個別に確認済み。
+  - `featureMode` 分布: 8人全員 `production`（意図通り、ver2への意図しない切替は無し）。

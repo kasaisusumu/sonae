@@ -1,4 +1,4 @@
-/* 私のマニュアル「そなえ」さん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v15 */
+/* 私のマニュアル「そなえ」さん Service Worker — Web Push の受信のみ（オフラインキャッシュはしない） v16 */
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
@@ -99,12 +99,16 @@ self.addEventListener("notificationclick", (event) => {
   // ハッシュを外した比較用（/events/x と /events/x#failure-check を同じ窓扱いにする）
   const targetNoHash = target.origin + target.pathname + target.search;
 
+  // IndexedDB への保存は保険であり、本命の画面遷移を待たせてはいけない
+  // （ユーザー指摘により2026-10-19再修正: 以前はこの書き込みを await してから
+  // openWindow/navigate を呼んでいたため、SW のコールドスタート時にIndexedDBの
+  // 往復が遅いと、notificationclick が持つ「ユーザー操作」としての有効期限が
+  // 切れてしまい、openWindow が静かに失敗する＝通知タップが何も起こさない、
+  // という不具合が起きていた。保存は並行して走らせ、完了は待たずに遷移を試みる）。
+  const rememberPromise = rememberPendingNav(targetHref);
+
   event.waitUntil(
     (async () => {
-      // まず行き先を IndexedDB に控える（他の手段がすべて効かなくても、
-      // アプリが次に見えるようになったときに拾える保険）。
-      await rememberPendingNav(targetHref);
-
       const all = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
@@ -123,6 +127,7 @@ self.addEventListener("notificationclick", (event) => {
       );
       if (exact) {
         if ("focus" in exact) await exact.focus().catch(() => {});
+        await rememberPromise;
         return;
       }
 
@@ -152,7 +157,10 @@ self.addEventListener("notificationclick", (event) => {
           }
         }
       }
-      if (handled) return;
+      if (handled) {
+        await rememberPromise;
+        return;
+      }
 
       // 3) どの既存窓も移動できなかった。フォーカス中の窓にページ内遷移を依頼しつつ、
       //    それでも着かない場合に備えて新規窓も必ず開く（「開いても何も起きない」を防ぐ）。
@@ -164,6 +172,7 @@ self.addEventListener("notificationclick", (event) => {
         const w = await self.clients.openWindow(targetHref).catch(() => null);
         if (w && "focus" in w) await w.focus().catch(() => {});
       }
+      await rememberPromise;
     })(),
   );
 });

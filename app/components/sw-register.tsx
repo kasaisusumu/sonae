@@ -98,6 +98,7 @@ export function SwRegister() {
     // フォアグラウンドに戻ってもすぐには処理できないことがある。そのケースでも
     // 拾えるよう、アプリが見えるようになるたびに sw.js が控えた行き先
     // （IndexedDB）を確認する。
+    let cancelled = false;
     const applyPendingNav = () => {
       consumePendingNav().then((url) => {
         if (url && url !== window.location.href) {
@@ -105,6 +106,16 @@ export function SwRegister() {
         }
       });
     };
+    // 通知タップでアプリが新規に（コールドで）立ち上がった直後は、SW 側の
+    // IndexedDB 書き込みがまだ終わっていない可能性がある（ユーザー指摘により
+    // 2026-10-19再修正: 1回だけの確認だと間に合わないタイミングがあった）。
+    // 起動直後だけ、短い間隔で数回リトライする（見つかれば以降は何もしない）。
+    const retryDelaysMs = [300, 800, 1500, 3000];
+    for (const delay of retryDelaysMs) {
+      setTimeout(() => {
+        if (!cancelled) applyPendingNav();
+      }, delay);
+    }
     applyPendingNav();
     const onVisible = () => {
       if (document.visibilityState === "visible") applyPendingNav();
@@ -119,6 +130,7 @@ export function SwRegister() {
     window.addEventListener("focus", applyPendingNav);
 
     return () => {
+      cancelled = true;
       navigator.serviceWorker.removeEventListener("message", onMsg);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("pageshow", applyPendingNav);

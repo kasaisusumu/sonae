@@ -69,9 +69,11 @@
    〈`autoConverted=true`〉の削除と、down SQL による列・テーブルの削除を両方行う。
    既定は dry-run、接続先が test ブランチ以外なら即中止する安全策あり）:
    ```
+   # 接続文字列はこの文書には埋め込まない（パスワードが他ブランチと共通のため）。
+   # npx neonctl connection-string test --project-id snowy-night-35247032 --pooled で取得する。
    # まず dry-run で内容を確認
-   DATABASE_URL="postgresql://neondb_owner:npg_jc0oDL1ubTKm@ep-bitter-queen-a7bsqfo8-pooler.ap-southeast-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require" \
-   DIRECT_URL="postgresql://neondb_owner:npg_jc0oDL1ubTKm@ep-bitter-queen-a7bsqfo8.ap-southeast-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require" \
+   DATABASE_URL="<testブランチの接続文字列>" \
+   DIRECT_URL="<testブランチの接続文字列（direct）>" \
    node scripts/rollback-mode-switch.mjs
 
    # 内容を確認したら --execute を付けて実行

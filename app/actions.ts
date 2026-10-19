@@ -92,15 +92,24 @@ function parseYen(raw: FormDataEntryValue | null): number {
 }
 
 /**
- * アプリで能動的に触った予定は、以後の自動管理（説明欄同期）の対象にし、
- * かつ「確認済み」扱いにする。編集した時点でリストには目を通しているので、
- * 「確認しました」を押していなくても未確認表示（アプリ・カレンダー説明欄）を消す。
+ * アプリで能動的に触った予定は、以後の自動管理（説明欄同期）の対象にする。
  */
 async function markAutoManaged(eventId: string) {
   await prisma.event.updateMany({
     where: { id: eventId, autoManaged: false },
     data: { autoManaged: true },
   });
+}
+
+/**
+ * 準備リスト（項目）そのものを能動的に触ったときだけ呼ぶ。「確認済み」扱いにし、
+ * 「確認しました」を押していなくても未確認表示（アプリ・カレンダー説明欄）を消す。
+ * 「未来の自分へのメッセージ」「失敗ログ」など準備リストと無関係な操作からは
+ * 呼ばない（ユーザー指摘により2026-10-20: メッセージを追加しただけで、まだ見ていない
+ * 準備リストの「確認しました」ボタンが消えてしまっていた）。
+ */
+async function markChecklistTouched(eventId: string) {
+  await markAutoManaged(eventId);
   await prisma.event.updateMany({
     where: { id: eventId, listReviewedAt: null },
     data: { listReviewedAt: new Date() },
@@ -380,7 +389,7 @@ export async function regenerateChecklist(formData: FormData): Promise<void> {
 
   // 「作り直す」は必ず生成し直す（同名コピーはしない）
   await generateAndSaveChecklist(eventId, { force: true });
-  await markAutoManaged(eventId);
+  await markChecklistTouched(eventId);
   // この予定が同名グループに属している（未編集）なら、作り直した内容を同名の未編集予定にも配る
   const twinIds = await propagateListToNameGroup(eventId);
   after(() => {
@@ -419,7 +428,7 @@ export async function generateChecklistForEvent(
   } else {
     await ensureFutureMessageMatchesForEvent(eventId).catch(() => {});
   }
-  await markAutoManaged(eventId);
+  await markChecklistTouched(eventId);
   revalidateAppViews(eventId);
   after(() => void syncEventDescription(eventId));
 }
@@ -442,7 +451,7 @@ export async function toggleChecklistItemDone(
   });
   if (res.count === 0) return;
   // 完了状態をカレンダー説明欄（取り消し線）にも反映
-  await markAutoManaged(item.eventId);
+  await markChecklistTouched(item.eventId);
   after(() => syncEventDescription(item.eventId));
   revalidateAppViews(item.eventId);
 }
@@ -536,7 +545,7 @@ export async function setItemNotifyLead(
     });
   }
 
-  await markAutoManaged(item.eventId);
+  await markChecklistTouched(item.eventId);
   const twinIds = await resolveNameGroupOnEdit(item.eventId);
   after(() => {
     void syncEventDescription(item.eventId);
@@ -852,7 +861,7 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
         .catch(() => {});
     }
 
-    await markAutoManaged(input.eventId);
+    await markChecklistTouched(input.eventId);
 
     // 内容（項目・通知時間）が変わった編集なら、同名グループの扱いを更新する。
     const contentChanged =
@@ -915,7 +924,7 @@ export async function clearChecklistSection(formData: FormData): Promise<void> {
     data: { listCleared: remaining === 0 },
   });
 
-  await markAutoManaged(eventId);
+  await markChecklistTouched(eventId);
   revalidateAppViews(eventId);
   after(() => void syncEventDescription(eventId));
 }
@@ -938,7 +947,7 @@ async function loadEventForSection(eventId: string) {
  * 予定ページからでも学習ページ（まとめられた同名予定）からでも整合するように。
  */
 async function propagateSectionChange(eventId: string): Promise<void> {
-  await markAutoManaged(eventId);
+  await markChecklistTouched(eventId);
   let twinIds: string[] = [];
   try {
     twinIds = await resolveNameGroupOnEdit(eventId);
@@ -1102,7 +1111,7 @@ export async function acceptSuggestion(itemId: string): Promise<void> {
   }
 
   if (item.suggestionRuleId) await confirmRule(item.suggestionRuleId);
-  await markAutoManaged(item.eventId);
+  await markChecklistTouched(item.eventId);
   after(() => syncEventDescription(item.eventId));
   revalidateAppViews(item.eventId);
 }
@@ -1131,7 +1140,7 @@ export async function rejectSuggestion(itemId: string): Promise<void> {
   }
 
   if (item.suggestionRuleId) await contradictRule(item.suggestionRuleId);
-  await markAutoManaged(item.eventId);
+  await markChecklistTouched(item.eventId);
   after(() => syncEventDescription(item.eventId));
   revalidateAppViews(item.eventId);
 }

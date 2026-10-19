@@ -302,18 +302,29 @@ export async function proposeScopesForSave(input: {
     };
     // すでに同じ名前の項目で範囲を決めたこと（ルール）があれば、AIに聞き直さず
     // その範囲のまま引き継ぐ（ユーザー指摘により2026-10-14追加。「次回の出し方」は
-    // 前回その名前で決めた状態を毎回引き継ぐ、という原則）。
+    // 前回その名前で決めた状態を毎回引き継ぐ、という原則）。「genre」はユーザーが
+    // 選べる3択には無い内部表現（本番版からの自動変換だけで作られる）なので対象外にする
+    // （ユーザー指摘により2026-10-20: 一度も見直していないカテゴリ学習が新規項目にも
+    // 「似た予定」として引き継がれてしまっていた）。
     const priorRule = await prisma.checklistScopeRule.findFirst({
-      where: { userId: scope.userId ?? undefined, kind, normTitle: nt, action: t.action, archivedAt: null },
+      where: {
+        userId: scope.userId ?? undefined,
+        kind,
+        normTitle: nt,
+        action: t.action,
+        scope: { in: ["keyword", "similar"] },
+        archivedAt: null,
+      },
       orderBy: { updatedAt: "desc" },
     });
     // 明らかに今回限定の項目は、AI 枠（aiLeft）を使わずに event_only へ即決める
     // （recommend 内にも同じ足切りがあるが、ここで止めれば AI 枠を消費しない分、
     // 他の本当に判断が要る項目に枠を残せる）。
-    if (priorRule && (priorRule.scope === "genre" || priorRule.scope === "keyword" || priorRule.scope === "similar")) {
+    if (priorRule) {
+      const priorScope = priorRule.scope as "keyword" | "similar";
       rec = {
-        scope: priorRule.scope,
-        keyword: priorRule.scope === "keyword" ? firstRuleKeyword(priorRule.keywords) : null,
+        scope: priorScope,
+        keyword: priorScope === "keyword" ? firstRuleKeyword(priorRule.keywords) : null,
         genre: priorRule.scope !== "keyword" ? (parseJsonArray(priorRule.genres)[0] ?? null) : null,
         reason: "前回この名前で決めた範囲のまま",
         source: "default",

@@ -9,7 +9,8 @@ import { parseLead } from "@/lib/lead-time";
 import { stripSonaeBlock } from "@/lib/description";
 import { applyScopeDecisions, resolveScopeRules } from "@/lib/scope-match";
 import { loadActiveScopeRules } from "@/lib/item-scope";
-import { normTitle } from "@/lib/text-norm";
+import { normTitle, pickKeyword } from "@/lib/text-norm";
+import { stringifyStrArray } from "@/lib/future-messages";
 import { matchEventToSlotType } from "@/lib/pattern-classify";
 import { getFeatureMode, isScopeRuleEnabled } from "@/lib/feature-mode";
 import {
@@ -363,7 +364,14 @@ export async function buildChecklistForEvent(
   const candidateTitles = [...composed, ...dedupedPatternItems]
     .map((it) => it.title)
     .join("\n");
-  const scopeRules = await loadActiveScopeRules(event.userId);
+  // 「genre」はユーザーが選べる3択（この名前／似た予定／今回だけ）には無い内部表現で、
+  // 本番版（LearnedRule）からの自動変換だけで作られる（lib/mode-conversion.ts）。
+  // これを新規提案の一致判定に使うと、ユーザーが一度も見直していないカテゴリ学習が
+  // 新しい予定に「似た予定」として勝手に出てきてしまう（ユーザー指摘により2026-10-20）。
+  // 3択のうちユーザーが実際に選べる keyword／similar だけを新規提案の対象にする。
+  const scopeRules = (await loadActiveScopeRules(event.userId)).filter(
+    (r) => r.scope !== "genre",
+  );
   const decisions = resolveScopeRules(scopeRules, {
     text: `${event.title}\n${stripSonaeBlock(event.memo)}\n${candidateTitles}`,
     categoryId: event.categoryId,
@@ -420,6 +428,74 @@ export async function buildChecklistForEvent(
           .catch(() => {}),
       ),
     );
+  }
+
+  // 「この名前」が選ばれた時点でキーワードを自動抽出して設定する（ユーザー指摘により
+  // 2026-10-20:「キーワードなしで『この名前』になってるやつ」が、キーワード不在のまま
+  // 他のルール（似た予定等）に紛れて提案されてしまっていた）。範囲ルールで当たらなかった
+  // （decisionsに含まれない）新規項目は、ここで「この名前」＋予定名そのものをキーワードに
+  // したルールを明示的に作る。これにより、同じ項目名を持つ既存の他のアクティブなルール
+  // （例: 本番版からの変換で残っていた「似た予定」）も archive される
+  // （lib/item-scope.ts の archive-all 処理）。
+  if (relyOnScopeOnly) {
+    const undecided = items.filter(
+      (it) => !decisions.has(`${it.kind}:${normTitle(it.title)}`),
+    );
+    if (undecided.length > 0) {
+      const keyword = pickKeyword(event.title);
+      await Promise.all(
+        undecided.map(async (it) => {
+          const nt = normTitle(it.title);
+          try {
+            await prisma.checklistScopeRule.updateMany({
+              where: {
+                userId: event.userId,
+                kind: it.kind,
+                normTitle: nt,
+                action: "include",
+                archivedAt: null,
+              },
+              data: { archivedAt: new Date() },
+            });
+            const rule = await prisma.checklistScopeRule.create({
+              data: {
+                userId: event.userId,
+                action: "include",
+                kind: it.kind,
+                normTitle: nt,
+                title: it.title,
+                scope: "keyword",
+                keywords: stringifyStrArray([keyword]),
+                sourceEventId: event.id,
+                sourceEventTitle: event.title,
+                reason: "この名前の予定のときに出すよう自動で設定しました",
+              },
+            });
+            await prisma.eventChecklistScope.upsert({
+              where: {
+                eventId_kind_normTitle: { eventId: event.id, kind: it.kind, normTitle: nt },
+              },
+              update: {},
+              create: {
+                userId: event.userId,
+                eventId: event.id,
+                kind: it.kind,
+                normTitle: nt,
+                title: it.title,
+                action: "include",
+                scope: "keyword",
+                ruleId: rule.id,
+                reason: "この名前の予定のときに出すよう自動で設定しました",
+                source: "default",
+                status: "chosen",
+              },
+            });
+          } catch {
+            /* 失敗しても生成自体は止めない */
+          }
+        }),
+      );
+    }
   }
 
   return {

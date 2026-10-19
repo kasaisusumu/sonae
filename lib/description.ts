@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { formatLead, parseLead } from "@/lib/lead-time";
 import { sectionKeyFromLabel, sectionLabel } from "@/lib/sections";
 import { APP_NAME } from "@/lib/app-info";
+import { JST } from "@/lib/format";
 
 const START = `--- ${APP_NAME} ---`;
 // 旧マーカー（互換のため、除去・パース対象に含める）。
@@ -94,7 +95,7 @@ function progress(items: DescItem[]): string {
   return ` ${done}/${items.length}`;
 }
 
-/** 失敗まわりの追記（リンクの下・準備リストの前に置く情報セクション）。 */
+/** 失敗まわりの追記（本番版モードのときだけ使う。リンクの下・準備リストの前に置く）。 */
 export interface DescFailureSections {
   /** 予定終了前: 予想される（＝過去に似た予定であった）失敗の内容と対策候補。 */
   anticipated?: { text: string; countermeasure: string | null }[];
@@ -109,16 +110,65 @@ export interface BuildBlockOpts {
   unreviewed?: boolean;
   /** 枠（セクション）のキー順。省略時は項目から task→belonging→その他 で導出。 */
   sections?: string[];
-  /** 失敗の予想／結果。中身のある枠だけ書き出す（無ければ見出しごと出さない）。 */
+  /**
+   * この予定に結びついた「未来の自分へのメッセージ」（テスト版）。空なら見出しごと出さない。
+   * `isDone` は準備リストの項目と同じ「チェックで完了」で、☑/・として書き出す。
+   */
+  futureMessages?: { body: string; isDone: boolean }[];
+  /** 失敗の予想／結果（本番版）。中身のある枠だけ書き出す（無ければ見出しごと出さない）。 */
   failures?: DescFailureSections;
+  /**
+   * 最終更新時刻。指定するとブロック末尾（END の直前）に「最終更新: …」を書く。
+   * 省略時はその行自体を出さない（＝実際に書き込む内容が変わっていないかを
+   * ハッシュ比較するときは渡さない。渡すと比較のたびに値が変わって無限に
+   * 書き込みが発生してしまうため）。
+   */
+  updatedAt?: Date | null;
 }
 
-/** 情報表示だけの見出し（逆パースでは項目として取り込まない）。 */
+/** 「最終更新: …」行（JST）。 */
+function formatUpdatedAt(d: Date): string {
+  return d.toLocaleString("ja-JP", {
+    timeZone: JST,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/**
+ * 情報表示だけの見出し（逆パースでは項目として取り込まない）。
+ * 機能モード切替（2026-10-14〜）で両方のモードの書式が混在する可能性があるため、
+ * どちらの見出しも常にここに含める（他モードで書いた予定の説明欄を開いても、
+ * その情報セクションを誤って準備リストの項目として読み込んでしまわないように）。
+ */
 export const INFO_HEADINGS = new Set([
+  // 「過去の自分よりメッセージ」が現行の見出し（2026-10-19〜）。「未来の自分へ」は
+  // それ以前に書き込んだ説明欄に残っている旧見出し（後方互換のため、逆パースでは
+  // 両方を情報セクションとして認識し続ける）。
+  "過去の自分よりメッセージ",
+  "未来の自分へ",
   "予想される失敗",
   "回避した失敗",
   "今回の失敗",
 ]);
+
+/**
+ * 「過去の自分よりメッセージ」セクションを行配列にする。中身が無ければ出さない。
+ * 完了は準備リストの項目と同じ `CHECK_DONE`=☑、未完了は `CHECK_TODO`=・で示す。
+ */
+function futureMessageLines(
+  messages: { body: string; isDone: boolean }[] | undefined,
+): string[] {
+  if (!messages || messages.length === 0) return [];
+  const out = ["", "【過去の自分よりメッセージ】"];
+  for (const m of messages) {
+    out.push(`${m.isDone ? CHECK_DONE : CHECK_TODO} ${oneLine(m.body)}`);
+  }
+  return out;
+}
 
 /** 失敗セクション（予想／回避／今回）を行配列にする。中身が無い枠は出さない。 */
 function failureLines(f: DescFailureSections | undefined): string[] {
@@ -137,7 +187,6 @@ function failureLines(f: DescFailureSections | undefined): string[] {
     out.push("", "【回避した失敗】");
     for (const a of f.avoided) {
       out.push(`🛡 ${oneLine(a.text)}`);
-      // 有効だった対策は、準備リストのコメントと同じ要領で次の行に字下げして書く。
       if (a.countermeasure) {
         out.push(`${COMMENT_INDENT}対策: ${oneLine(a.countermeasure)}`);
       }
@@ -167,10 +216,12 @@ export function buildSonaeBlock(
         ]
   ).filter((k) => !k.startsWith("@")); // "@faillog" 等の特別キーは説明欄に出さない
 
-  const lines = [START, `準備リスト: ${url}`];
+  const lines = [START];
+  lines.push(`準備リスト: ${url}`);
   if (opts.unreviewed) lines.push("", UNREVIEWED_NOTE);
 
-  // リンクの下・準備リストの前に「予想される失敗 / 回避した失敗 / 今回の失敗」。
+  // リンクの下・準備リストの前に「未来の自分へ」（テスト版）または失敗の予想／結果（本番版）。
+  lines.push(...futureMessageLines(opts.futureMessages));
   lines.push(...failureLines(opts.failures));
 
   const seen = new Set<string>();
@@ -184,6 +235,11 @@ export function buildSonaeBlock(
     lines.push(...group.map(bullet));
   }
 
+  // 最終更新時刻は末尾の行に書く（ユーザー指摘により2026-10-19。先頭だと
+  // 準備リストより上に目立ってしまい、カレンダー上で毎回ここだけ見えるのが
+  // 煩わしいとのこと）。直前に空行を1行入れて、リストの内容から見切れて見えるように
+  // 区切る（ユーザー指摘により2026-10-19追加）。
+  if (opts.updatedAt) lines.push("", `最終更新: ${formatUpdatedAt(opts.updatedAt)}`);
   lines.push(END);
   return lines.join("\n");
 }
@@ -271,7 +327,12 @@ export function parseSonaeBlock(desc: string | null | undefined): {
     if (skipInfo) continue;
     // 「未確認」注記行は取り込み対象外
     if (/^※/.test(line)) continue;
-    if (/^準備リスト\s*[:：]/.test(line) || /^https?:\/\//.test(line)) continue;
+    if (
+      /^準備リスト\s*[:：]/.test(line) ||
+      /^最終更新\s*[:：]/.test(line) ||
+      /^https?:\/\//.test(line)
+    )
+      continue;
 
     // 行頭が記号（チェックボックス・箇条書き・番号）、または末尾が「（…）」＝タイミング付き項目
     const startsAsItem =

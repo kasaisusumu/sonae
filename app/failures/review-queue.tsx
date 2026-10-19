@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Check } from "lucide-react";
 import { deleteFailureLog, setFailureOutcome } from "@/app/actions";
 import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
@@ -168,8 +169,9 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
 
               {settled ? (
                 <div className="mt-3 space-y-1.5">
-                  <p className="text-sm font-medium text-foreground">
-                    ✓ 「{OUTCOME_LABEL[l.outcome!] ?? l.outcome}」で記録しました。
+                  <p className="flex items-center gap-1 text-sm font-medium text-foreground">
+                    <Check aria-hidden className="h-4 w-4 shrink-0" />
+                    「{OUTCOME_LABEL[l.outcome!] ?? l.outcome}」で記録しました。
                   </p>
                   <RetroOutcomeSelect
                     logId={l.id}

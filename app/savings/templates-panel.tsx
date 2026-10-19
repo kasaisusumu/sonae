@@ -3,15 +3,23 @@ import {
   duplicateListTemplate,
   renameListTemplate,
   setListTemplateKind,
+  setListTemplateScope,
 } from "@/app/actions";
 import type { TemplateDetail } from "@/lib/templates";
 import { sectionLabel } from "@/lib/sections";
 import { ConfirmButton } from "@/app/components/confirm-button";
+import { InfoHint } from "@/app/components/info-hint";
 import { TemplateEditor } from "./template-editor";
 import { CopyTemplateButton } from "./copy-template-button";
 import { NewTemplateForm } from "./new-template-form";
 
-function TemplateCard({ t }: { t: TemplateDetail }) {
+function TemplateCard({
+  t,
+  scopeRuleEnabled,
+}: {
+  t: TemplateDetail;
+  scopeRuleEnabled: boolean;
+}) {
   return (
     <details
       id={`tpl-${t.id}`}
@@ -70,6 +78,33 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
             枠を変更
           </button>
         </form>
+        {scopeRuleEnabled && (
+          <form action={setListTemplateScope} className="flex items-center gap-1">
+            <input type="hidden" name="id" value={t.id} />
+            <select
+              name="scope"
+              defaultValue={t.defaultScope ?? ""}
+              aria-label="このテンプレートの項目の「次回の出し方」"
+              className="rounded-md border bg-surface px-2 py-1 text-xs"
+            >
+              <option value="">次回の出し方: 自動</option>
+              <option value="event_only">📌 今回だけ</option>
+              <option value="similar">🔁 似た予定</option>
+              <option value="keyword">🏷 この名前</option>
+            </select>
+            <button
+              type="submit"
+              className="rounded-md border border-border px-2 py-1 text-[11px] text-teal-dark hover:border-teal"
+            >
+              設定
+            </button>
+            <InfoHint id="template-default-scope">
+              このテンプレートを予定に追加したとき、中の項目すべてに自動で設定する
+              「次回の出し方」。「自動」のままだと、項目ごとに既定（似た予定）が
+              個別に適用されます。
+            </InfoHint>
+          </form>
+        )}
         <CopyTemplateButton text={t.items.map((i) => i.title).join("\n")} />
         <form action={duplicateListTemplate}>
           <input type="hidden" name="id" value={t.id} />
@@ -103,15 +138,24 @@ function TemplateCard({ t }: { t: TemplateDetail }) {
 }
 
 /** 名前付きマニュアル。準備すること／持ち物をまとめて 1 リストで表示する。 */
-export function TemplatesGroup({ templates }: { templates: TemplateDetail[] }) {
+export function TemplatesGroup({
+  templates,
+  scopeRuleEnabled,
+}: {
+  templates: TemplateDetail[];
+  /** テスト版モード（次回の出し方の3択が使える）かどうか。 */
+  scopeRuleEnabled: boolean;
+}) {
   return (
     <div className="space-y-2">
-      <p className="text-xs text-muted">
-        よく使う準備すること・持ち物に名前を付けて保存。予定ページの
-        「📋 マニュアル・他の予定から」でどの予定にも追加できます。追加すると、
-        その予定には<strong>この名前の新しい枠</strong>ができます（既存の準備すること・
-        持ち物には混ざりません）。名前の横の（　）は、予定ページのどの枠の
-        「マニュアルから追加」に出てくるかです。
+      <p className="flex items-center gap-1 text-xs text-muted">
+        よく使う準備すること・持ち物に名前を付けて保存できます。
+        <InfoHint id="savings-templates-intro">
+          予定ページの「その他」から「📋 マニュアルから追加」で、どの予定にも追加できます。
+          追加すると、その予定には<strong>この名前の新しい枠</strong>ができます
+          （既存の準備すること・持ち物には混ざりません）。名前の横の（　）は、
+          予定ページのどの枠の「マニュアルから追加」に出てくるかです。
+        </InfoHint>
       </p>
 
       {templates.length === 0 && (
@@ -123,7 +167,7 @@ export function TemplatesGroup({ templates }: { templates: TemplateDetail[] }) {
       {templates.length > 0 && (
         <div className="space-y-1.5">
           {templates.map((t) => (
-            <TemplateCard key={t.id} t={t} />
+            <TemplateCard key={t.id} t={t} scopeRuleEnabled={scopeRuleEnabled} />
           ))}
         </div>
       )}

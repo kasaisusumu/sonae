@@ -51,5 +51,8 @@ next-env.d.ts
 /prisma/migrations/dev.db*
 build.log
 
+.vercel
+.env*
+
 # 実際のOpenAI利用データ・書き出し結果（個人の利用データのため絶対にコミットしない）
 /tmp/

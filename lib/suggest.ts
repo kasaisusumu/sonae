@@ -6,6 +6,10 @@ import {
   type RecalledCustomSectionSeed,
 } from "@/lib/recall";
 import { parseLead } from "@/lib/lead-time";
+import { stripSonaeBlock } from "@/lib/description";
+import { applyScopeDecisions, resolveScopeRules } from "@/lib/scope-match";
+import { loadActiveScopeRules } from "@/lib/item-scope";
+import { normTitle } from "@/lib/text-norm";
 import { matchEventToSlotType } from "@/lib/pattern-classify";
 import {
   getApplicableRules,
@@ -18,11 +22,6 @@ import {
   type GeneratedItem,
   type ItemKind,
 } from "@/lib/learning";
-
-const LIMITS: Record<ItemKind, { min: number; max: number }> = {
-  task: { min: 3, max: 7 },
-  belonging: { min: 2, max: 8 },
-};
 
 export interface BuiltItem {
   kind: ItemKind;
@@ -56,7 +55,6 @@ function composeKind(
   rules: ApplicableRule[],
   opts: { autofillNotify?: boolean; verbatim?: boolean } = {},
 ): BuiltItem[] {
-  const { min, max } = LIMITS[kind];
   let items: BuiltItem[] = baseItems.map((b) => ({
     ...base(kind, b.title, b.timingLabel),
     notifyLeadMinutes: b.notifyLeadMinutes ?? null,
@@ -164,19 +162,6 @@ function composeKind(
     return true;
   });
 
-  // 上限で間引き（priority の低い＝confidence の低いものから。確定 fixed は守る）
-  if (items.length > max) {
-    const protectedCount = items.filter((it) => it.priority >= 1).length;
-    const keepCount = Math.max(min, max - protectedCount);
-    const kept = new Set(
-      items
-        .filter((it) => it.priority < 1)
-        .sort((a, b) => b.priority - a.priority)
-        .slice(0, keepCount),
-    );
-    items = items.filter((it) => it.priority >= 1 || kept.has(it));
-  }
-
   return items;
 }
 
@@ -201,6 +186,7 @@ async function buildPatternItems(
   const match = await matchEventToSlotType(
     { title: eventTitle, keywords: feature.keywords },
     knownSlotTypes,
+    userId,
   );
   if (!match) return [];
 
@@ -242,12 +228,22 @@ export interface BuildChecklistResult {
 
 /**
  * 予定の準備リスト（準備すること＋持ち物）を組み立てる。
- * 一般ベース → 確定ルール強制適用 → 仮ルールは提案 → 上限で間引き。
+ * 一般ベース → 確定ルール強制適用 → 仮ルールは提案。件数の上限は設けない
+ * （ユーザー指摘により2026-10-19: 予定ごとの学習が十分厳密になったため撤廃）。
  * 学習が薄いカテゴリ・パターンではベースがほぼそのまま出る。
+ *
+ * `allowAiGeneration` (既定 true): 再利用できる過去予定が無いとき、AI（`generateBaseChecklist`）
+ * でベースを新規生成するかどうか。false にすると、学習元（再利用・確定ルール・範囲ルール・
+ * カテゴリ横断パターン）が無ければ何も生成しない（空のまま）。カレンダー連携による自動生成
+ * （`primeNotifiedChecklists`／予定詳細の遅延生成）だけ false を渡す（ユーザー指定）。
+ * 「🪄 準備リストを作る」「作り直す」のような手動操作では、学習元が無くても従来どおり
+ * AI でたたき台を作る（既定の true のまま）。
  */
 export async function buildChecklistForEvent(
   eventId: string,
+  opts: { allowAiGeneration?: boolean } = {},
 ): Promise<BuildChecklistResult> {
+  const allowAiGeneration = opts.allowAiGeneration ?? true;
   const event = await prisma.event.findUnique({
     where: { id: eventId },
     include: { category: true },
@@ -304,15 +300,17 @@ export async function buildChecklistForEvent(
           belongings: recalled.belongings,
           source: "recall",
         })
-      : generateBaseChecklist({
-          userId: event.userId,
-          title: event.title,
-          categoryName: event.category?.name ?? "その他",
-          eventDatetime: event.eventDatetime,
-          memo: event.memo,
-          isOverseas: feature.isOverseas,
-          durationNights: feature.durationNights,
-        }),
+      : allowAiGeneration
+        ? generateBaseChecklist({
+            userId: event.userId,
+            title: event.title,
+            categoryName: event.category?.name ?? "その他",
+            eventDatetime: event.eventDatetime,
+            memo: event.memo,
+            isOverseas: feature.isOverseas,
+            durationNights: feature.durationNights,
+          })
+        : Promise.resolve<GeneratedBase>({ tasks: [], belongings: [], source: "none" }),
     // 似た予定を思い出したときは、シグネチャ違いも含めて前回の学習を全部当てる。
     // そこで今回の予定が違う形に編集されたら、初めてシグネチャごとに枝分かれする。
     getApplicableRules(event.categoryId, feature, "task", { broad: !!recalled }),
@@ -348,8 +346,74 @@ export async function buildChecklistForEvent(
     (it) => !existingKeys.has(`${it.kind}:${norm(it.title)}`),
   );
 
+  // 項目ごとの範囲つきルール（「この予定だけ」以外の指定）を最後に当てる。
+  // 範囲ルールは自動学習（LearnedRule）より優先する。
+  // 一致判定の対象テキストは、予定タイトル・説明欄に加えて、ここまでに組み立てた
+  // 準備リストの項目名も含める（キーワードが予定名に出ず、項目名にだけ出ることがあるため）。
+  const candidateTitles = [...composed, ...dedupedPatternItems]
+    .map((it) => it.title)
+    .join("\n");
+  const scopeRules = await loadActiveScopeRules(event.userId);
+  const decisions = resolveScopeRules(scopeRules, {
+    text: `${event.title}\n${stripSonaeBlock(event.memo)}\n${candidateTitles}`,
+    categoryId: event.categoryId,
+    feature,
+  });
+  const items = applyScopeDecisions(
+    [...composed, ...dedupedPatternItems],
+    decisions,
+    (d): BuiltItem => ({
+      kind: d.kind,
+      title: d.title,
+      timingLabel: null,
+      notifyLeadMinutes: null,
+      isSuggested: false,
+      suggestionType: null,
+      suggestionRuleId: null,
+      suggestionValue: null,
+      priority: 1,
+    }),
+  );
+
+  // 範囲ルールで当たった項目（include）は、この予定でも「次回の出し方」の初期状態を
+  // 当てたルールの範囲（キーワード／似た予定／ジャンル）のまま引き継ぐ（ユーザー指摘により
+  // 2026-10-14追加）。EventChecklistScope が無いと、画面では範囲未選択（自動）に見えてしまい、
+  // 前回決めた「次回の出し方」が見た目には引き継がれていないように見えていた。
+  const includeDecisions = [...decisions.values()].filter((d) => d.action === "include");
+  if (includeDecisions.length > 0) {
+    await Promise.all(
+      includeDecisions.map((d) =>
+        prisma.eventChecklistScope
+          .upsert({
+            where: {
+              eventId_kind_normTitle: {
+                eventId: event.id,
+                kind: d.kind,
+                normTitle: normTitle(d.title),
+              },
+            },
+            update: {},
+            create: {
+              userId: event.userId,
+              eventId: event.id,
+              kind: d.kind,
+              normTitle: normTitle(d.title),
+              title: d.title,
+              action: "include",
+              scope: d.scope,
+              ruleId: d.ruleId,
+              reason: d.reason,
+              source: "default",
+              status: "chosen",
+            },
+          })
+          .catch(() => {}),
+      ),
+    );
+  }
+
   return {
-    items: [...composed, ...dedupedPatternItems],
+    items,
     customSectionSeeds: recalled?.customSectionSeeds ?? [],
   };
 }

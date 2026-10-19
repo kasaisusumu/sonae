@@ -1,13 +1,12 @@
 import type { MetadataRoute } from "next";
 
 /**
- * テスト環境（sonae-test 等）は検索に出したくない（ユーザー指定）。
- * 環境変数 NOINDEX=true を立てた環境だけ全面的にクロールを拒否する。
- * 本番にはこの変数を設定しないので、従来どおりクロールを許可する。
+ * クロール（読み込み）は全環境で許可する。
+ * テスト環境（NOINDEX=true）の検索除外は、robots.txt の拒否ではなく各ページの
+ * `<meta name="robots" content="noindex, nofollow">`（app/layout.tsx）で行う。
+ * 以前は robots.txt で全面拒否していたが、分析サイトなどが読めなくなるため、
+ * 検索に出ない対策は noindex だけに一本化した。
  */
 export default function robots(): MetadataRoute.Robots {
-  if (process.env.NOINDEX === "true") {
-    return { rules: { userAgent: "*", disallow: "/" } };
-  }
   return { rules: { userAgent: "*", allow: "/" } };
 }

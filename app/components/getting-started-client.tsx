@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { syncCalendar } from "@/app/actions";
@@ -83,14 +84,18 @@ export function GettingStartedClient({
           <p>
             アプリのように1タップで開けて、通知も届きやすくなります。次の「通知をオン」の前に、まずこれを。
           </p>
-          <ol className="mt-2 space-y-1 rounded-lg bg-surface-muted p-2.5 text-[13px] text-foreground">
-            <li>
-              1. iPhone（Safari）: 画面下の共有ボタン（□に↑）→「ホーム画面に追加」→「追加」
+          <ol className="mt-2 space-y-1.5 rounded-lg bg-surface-muted p-2.5 text-[13px] text-foreground">
+            <li className="flex gap-2">
+              <span className="shrink-0 font-semibold text-muted">1.</span>
+              <div className="space-y-1">
+                <p>iPhone（Safari）: 画面下の共有ボタン（□に↑）→「ホーム画面に追加」→「追加」</p>
+                <p>Android（Chrome）: 右上のメニュー（︙）→「アプリをインストール」／「ホーム画面に追加」</p>
+              </div>
             </li>
-            <li>
-              2. Android（Chrome）: 右上のメニュー（︙）→「アプリをインストール」／「ホーム画面に追加」
+            <li className="flex gap-2">
+              <span className="shrink-0 font-semibold text-muted">2.</span>
+              <span>追加したアイコンから開き直す（以降はそのアイコンで使う）</span>
             </li>
-            <li>3. 追加したアイコンから開き直す（以降はそのアイコンで使う）</li>
           </ol>
           {!step4 && (
             <button
@@ -219,7 +224,7 @@ export function GettingStartedClient({
                       : "border border-border bg-surface text-foreground"
                   }`}
                 >
-                  {s.done ? "✓" : i + 1}
+                  {s.done ? <Check aria-hidden className="h-3.5 w-3.5" /> : i + 1}
                 </span>
                 <span
                   className={`min-w-0 flex-1 text-sm font-medium ${

@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { recordAiUsage } from "@/lib/ai-usage";
+import { looksTooSpecific } from "@/lib/text-norm";
 
 const MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
 
@@ -12,12 +13,6 @@ export interface PatternClassification {
 }
 
 const norm = (s: string) => s.trim().replace(/\s+/g, " ");
-
-// 明らかに日付・番号・時刻などを含む項目は、その予定固有の内容である可能性が高い。
-// AI を呼ぶまでもなく除外する（呼び出し回数を減らすための足切り。判定の主体はAI）。
-function looksTooSpecific(title: string): boolean {
-  return /\d{1,4}\s*(年|月|日|時|号|番|階)/.test(title);
-}
 
 const SYSTEM = `あなたは、予定の準備リストの項目が「別カテゴリの予定でも意味的に
 転用できる汎用パターン」かどうかを判定するアシスタントです。

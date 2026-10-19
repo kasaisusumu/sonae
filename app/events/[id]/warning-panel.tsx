@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import {
   ackEventWarning,
   addPreventionItem,
@@ -105,8 +106,9 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
             <div className="mt-3 space-y-2">
               {log.prevented ? (
                 <div className="space-y-1.5">
-                  <p className="text-sm font-medium text-teal-dark">
-                    ✓ 「防げた」で記録しました
+                  <p className="flex items-center gap-1 text-sm font-medium text-teal-dark">
+                    <Check aria-hidden className="h-4 w-4 shrink-0" />
+                    「防げた」で記録しました
                   </p>
                   {log.thisEventLogId && (
                     <RetroOutcomeSelect
@@ -117,8 +119,9 @@ export function WarningPanel({ warning }: { warning: EventWarning }) {
                 </div>
               ) : log.loggedThisEventCount > 0 ? (
                 <div className="space-y-1.5">
-                  <p className="text-sm font-medium text-warn">
-                    ✓ 「今回もやってしまった」で記録しました。次の似た予定で先回りします。
+                  <p className="flex items-center gap-1 text-sm font-medium text-warn">
+                    <Check aria-hidden className="h-4 w-4 shrink-0" />
+                    「今回もやってしまった」で記録しました。次の似た予定で先回りします。
                   </p>
                   {log.thisEventLogId && (
                     <RetroOutcomeSelect

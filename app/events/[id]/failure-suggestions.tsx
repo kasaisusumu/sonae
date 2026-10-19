@@ -1,3 +1,4 @@
+import { TriangleAlert } from "lucide-react";
 import { attachFailureToEvent } from "@/app/actions";
 import { suggestFailureLogsForEvent } from "@/lib/failures";
 import { SubmitButton } from "@/app/components/submit-button";
@@ -16,8 +17,9 @@ export async function FailureSuggestions({ eventId }: { eventId: string }) {
       data-coach="failure-suggest"
       className="rounded-2xl border border-warn/30 bg-warn-soft p-4 [&_summary::-webkit-details-marker]:hidden"
     >
-      <summary className="cursor-pointer list-none text-sm font-semibold text-warn">
-        ⚠ 似た予定でよくある失敗（{suggestions.length}）
+      <summary className="flex cursor-pointer list-none items-center gap-1 text-sm font-semibold text-warn">
+        <TriangleAlert aria-hidden className="h-4 w-4" />
+        似た予定でよくある失敗（{suggestions.length}）
       </summary>
       <p className="mt-1 text-xs text-warn/80">
         当てはまりそうなら「紐付け」や結果を選んで記録、関係なければ「今回は関係ない」で消せます。

@@ -47,12 +47,10 @@ export function estimateCostYen(model: string, usage: TokenUsage | null | undefi
 
 /**
  * AI利用の「操作」（recordAiUsage の feature 引数）ごとの表示名と、
- * どちらの機能モード（lib/feature-mode.ts。本番版=ver1専用ビルド）に属するか。
- * 管理画面の内訳表示用（ユーザー指摘により2026-10-19: 「全体でどの操作がどのくらいの
- * 金額消費したか」「それがver1,2どっちなのかもわかるように」）。
- * テスト版（ver2）専用の feature キーも、集計コードを共通化するためここに含めている
- * （本番版では実際には記録されない）。新しく recordAiUsage を呼ぶ箇所を足したら、
- * ここにも追記すること。
+ * どちらの機能モード（lib/feature-mode.ts）に属するか。管理画面の内訳表示用
+ * （ユーザー指摘により2026-10-19: 「全体でどの操作がどのくらいの金額消費したか」
+ * 「それがver1,2どっちなのかもわかるように」）。
+ * 新しく recordAiUsage を呼ぶ箇所を足したら、ここにも追記すること。
  */
 export const AI_FEATURE_INFO: Record<string, { label: string; mode: "ver1" | "ver2" | "共通" }> = {
   "checklist-generate": { label: "準備リスト生成", mode: "共通" },

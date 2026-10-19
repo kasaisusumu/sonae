@@ -7,6 +7,7 @@ import {
   SectionControls,
 } from "@/app/events/[id]/section-manager";
 import { isBuiltinSection } from "@/lib/sections";
+import { FutureMessageRows, type EMRow } from "@/app/components/future-message-rows";
 import { DeleteLearnedEventButton } from "./tree-delete-button";
 
 export interface LeafItem {
@@ -16,6 +17,7 @@ export interface LeafItem {
   isDone: boolean;
   isUserAdded: boolean;
   notifyLeadMinutes: number | null;
+  scope?: { scope: string; status: string; reason: string | null; keyword: string | null } | null;
 }
 
 export interface LeafSectionData {
@@ -33,12 +35,15 @@ export function LeafBody({
   eventIds,
   compact,
   sections,
+  messages = [],
 }: {
   eventId: string;
   /** 削除（学習を忘れる）の対象。同名グループなら siblingEventIds も含めて渡す。 */
   eventIds: string[];
   compact: ReactNode;
   sections: LeafSectionData[];
+  /** 「未来の自分へ」。特別扱いせず、他の枠と同じく「編集」を押したときだけ編集UIになる。 */
+  messages?: EMRow[];
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -86,6 +91,11 @@ export function LeafBody({
           />
         </Fragment>
       ))}
+      {messages.length > 0 && (
+        <div className="mt-3">
+          <FutureMessageRows rows={messages} />
+        </div>
+      )}
       <div className="mt-3">
         <AddSectionButton eventId={eventId} />
       </div>

@@ -16,6 +16,7 @@ import { sendPushToUser } from "@/lib/push";
 import { hashDescription, stripSonaeBlock } from "@/lib/description";
 import { applyInboundDescription } from "@/lib/description-inbound";
 import { primeNotifiedChecklists } from "@/lib/checklist";
+import { ensureFutureMessageMatchesForEvent } from "@/lib/future-messages";
 
 export interface SyncResult {
   newEvents: {
@@ -521,5 +522,12 @@ export async function syncAndNotify(
     userId,
     opts?.generateBudget ?? 3,
   );
+
+  // 未来の自分へのメッセージの一致判定（取り込み時）。キーワード一致だけなので
+  // AIは呼ばない（予算で絞る必要も無くなった。2026-10-19〜）。
+  for (const ev of result.newEvents) {
+    await ensureFutureMessageMatchesForEvent(ev.id).catch(() => {});
+  }
+
   return { ...result, generated };
 }

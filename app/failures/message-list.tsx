@@ -8,9 +8,9 @@ import {
 } from "@/app/actions";
 import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
+import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import {
   ScopeQuickToggle,
-  ScopeEmojiToggle,
   KeywordSentenceField,
   MESSAGE_QUICK_SCOPES,
   type QuickScope,
@@ -36,17 +36,34 @@ export type MLMessage = {
   sourceEventTitle: string | null;
 };
 
+/** 行を開く前の、次回の出し方の要約バッジ。「似た予定」のときは何に似ているか
+ * （元の予定名）を書く（ユーザー指摘により2026-10-19）。 */
+function ScopeSummaryBadge({ m }: { m: MLMessage }) {
+  if (toQuickScope(m.scope) === "similar") {
+    return (
+      <span className="text-[11px] text-muted">
+        🔁「{m.sourceEventTitle ?? "元の予定"}」に似た予定のとき
+      </span>
+    );
+  }
+  const kw = m.keywords.join("、");
+  return kw ? (
+    <span className="text-[11px] text-muted">🏷「{kw}」のとき</span>
+  ) : (
+    <span className="text-[11px] text-muted">キーワード未設定</span>
+  );
+}
+
 /**
- * 準備リストの項目行（checklist-editor.tsx）と同じ見た目・操作（本文・∨・次回の出し方の
- * 小さいボタン）。違いは三択ではなく二択（「今回だけ」は無い）だけ
- * （ユーザー指摘により2026-10-19）。
+ * 閉じている間は文言・バッジだけの軽い表示（元の表示方法のまま）。「編集」を押したときだけ
+ * 本文・次回の出し方の編集欄になる（ユーザー指摘により2026-10-19: 閉じている間から
+ * 常に編集欄になっているのは分かりにくい）。
  */
 function EditableRow({ m }: { m: MLMessage }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState(m.body);
   const [scope, setScope] = useState<QuickScope>(toQuickScope(m.scope));
   const [keyword, setKeyword] = useState(m.keywords.join("、"));
-  const [scopePopupOpen, setScopePopupOpen] = useState(false);
   const [scopeHintOpen, setScopeHintOpen] = useState(false);
   const [pending, start] = useTransition();
 
@@ -77,47 +94,36 @@ function EditableRow({ m }: { m: MLMessage }) {
   }
 
   return (
-    <li className="py-1.5">
-      <div className="flex items-start gap-2">
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onBlur={flushBody}
-          rows={1}
-          className="block min-w-0 flex-1 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg leading-snug [field-sizing:content] hover:border-border focus:border-border focus:bg-background"
-        />
-        {m.confirmedCount > 0 && (
-          <span className="mt-1.5 shrink-0 text-[11px] text-muted">{m.confirmedCount}回更新</span>
-        )}
-        <span className="mt-0.5 flex shrink-0 flex-row-reverse flex-wrap items-center gap-0.5">
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            aria-label={open ? "詳細を閉じる" : "詳細を開く"}
-            className={`shrink-0 rounded-md border px-1.5 py-1 text-sm leading-none transition-colors ${
-              open
-                ? "border-teal bg-teal-soft text-teal-dark"
-                : "border-border text-muted hover:border-teal hover:text-teal-dark"
-            }`}
-          >
-            {open ? "∧" : "∨"}
-          </button>
-          <ScopeEmojiToggle
-            value={scope}
-            onChange={chooseScope}
-            open={scopePopupOpen}
-            onOpenChange={setScopePopupOpen}
-            hintOpen={scopeHintOpen}
-            onHintOpenChange={setScopeHintOpen}
-            className="mt-0"
-            scopes={MESSAGE_QUICK_SCOPES}
-          />
-        </span>
+    <li className="rounded-xl bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <ScopeSummaryBadge m={m} />
+            {m.confirmedCount > 0 && (
+              <span className="text-[11px] text-muted">{m.confirmedCount}回更新</span>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted hover:text-foreground"
+        >
+          {open ? "閉じる" : "編集"}
+        </button>
       </div>
 
       {open && (
-        <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
+        <div className="mt-3 space-y-2 rounded-lg bg-background/60 p-3">
+          <AutosaveIndicator show={pending} />
+          <textarea
+            rows={2}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onBlur={flushBody}
+            className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+          />
           <ScopeQuickToggle
             value={scope}
             onChange={chooseScope}
@@ -180,7 +186,7 @@ export function MessageList({ messages }: { messages: MLMessage[] }) {
         <summary className="cursor-pointer list-none text-xs font-semibold text-muted">
           ▸ 登録したメッセージを見る({active.length}件)
         </summary>
-        <ul className="mt-2 divide-y divide-border/70">
+        <ul className="mt-2 space-y-2">
           {active.map((m) => (
             <EditableRow key={m.id} m={m} />
           ))}

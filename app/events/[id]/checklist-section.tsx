@@ -339,6 +339,8 @@ export async function ChecklistSection({
           status: m.status,
           matchReason: m.matchReason,
           eventTitle: m.eventTitle,
+          sourceEventTitle: m.sourceEventTitle,
+          confirmedCount: m.confirmedCount,
           eventEnded: m.eventEnded,
           isDone: m.isDone,
         }),

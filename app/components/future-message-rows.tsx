@@ -8,9 +8,9 @@ import {
   toggleFutureMessageDoneAction,
 } from "@/app/actions";
 import { ConfirmButton } from "@/app/components/confirm-button";
+import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 import {
   ScopeQuickToggle,
-  ScopeEmojiToggle,
   KeywordSentenceField,
   MESSAGE_QUICK_SCOPES,
   type QuickScope,
@@ -32,6 +32,9 @@ export type EMRow = {
   status: string;
   matchReason: string | null;
   eventTitle: string;
+  /** 作られたきっかけの予定名（あれば）。「似た予定」のとき、何に似ているかの表示に使う。 */
+  sourceEventTitle: string | null;
+  confirmedCount: number;
   /** 予定が済んでいるか。 */
   eventEnded: boolean;
   /** 準備リストの項目と同じ「チェックで完了」。次回の提案・一致判定には影響しない。 */
@@ -44,6 +47,25 @@ function toQuickScope(scope: string): QuickScope {
   return scope === "similar" ? "similar" : "keyword";
 }
 
+/** 行を開く前の、次回の出し方の要約バッジ。「似た予定」のときは何に似ているか
+ * （元の予定名）を書く。これが無いと、何に似ているのか分からず不安になる
+ * （ユーザー指摘により2026-10-19）。 */
+function ScopeSummaryBadge({ r }: { r: EMRow }) {
+  if (toQuickScope(r.scope) === "similar") {
+    return (
+      <span className="text-[11px] text-muted">
+        🔁「{r.sourceEventTitle ?? r.eventTitle}」に似た予定のとき
+      </span>
+    );
+  }
+  const kw = r.keywords.join("、");
+  return kw ? (
+    <span className="text-[11px] text-muted">🏷「{kw}」のとき</span>
+  ) : (
+    <span className="text-[11px] text-muted">キーワード未設定</span>
+  );
+}
+
 const REMOVE_CONFIRM_MESSAGE =
   "この予定からだけ外します。次回以降は、キーワードが一致すればまた表示されます。よろしいですか？";
 
@@ -53,25 +75,15 @@ function sortByDone(rows: EMRow[]): EMRow[] {
 }
 
 /**
- * 1 件ぶんの行。準備リストの項目行（checklist-editor.tsx）と同じ見た目・操作にしている
- * （チェック・本文・✕・∨・次回の出し方の小さいボタン）。違いは三択ではなく二択
- * （「今回だけ」は無い）だけ（ユーザー指摘により2026-10-19）。
+ * 開いたときの編集フォーム（本文・次回の出し方・キーワード）。
+ * 閉じている間は文言・バッジだけの軽い表示（元の表示方法のまま）にして、
+ * ∨ を押したときだけ編集状態にする（ユーザー指摘により2026-10-19:
+ * 閉じている間から常に編集欄になっているのは分かりにくい）。
  */
-function MessageRow({
-  r,
-  open,
-  onToggleOpen,
-  onToggleDone,
-}: {
-  r: EMRow;
-  open: boolean;
-  onToggleOpen: () => void;
-  onToggleDone: (next: boolean) => void;
-}) {
+function RowEditForm({ r }: { r: EMRow }) {
   const [body, setBody] = useState(r.body);
   const [scope, setScope] = useState<QuickScope>(toQuickScope(r.scope));
   const [keyword, setKeyword] = useState(r.keywords.join("、"));
-  const [scopePopupOpen, setScopePopupOpen] = useState(false);
   const [scopeHintOpen, setScopeHintOpen] = useState(false);
   const [pending, start] = useTransition();
 
@@ -103,121 +115,122 @@ function MessageRow({
   }
 
   return (
-    <li className="py-1.5">
-      <div className="flex items-start gap-2">
-        <input
-          type="checkbox"
-          checked={r.isDone}
-          onChange={(e) => onToggleDone(e.target.checked)}
-          className="mt-1 h-5 w-5 shrink-0 accent-[var(--teal)]"
-          aria-label="完了"
+    <div className="space-y-1.5">
+      <AutosaveIndicator show={pending} />
+      <textarea
+        rows={2}
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        onBlur={flushBody}
+        className="w-full rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground"
+        aria-label="メッセージ本文"
+      />
+      <ScopeQuickToggle
+        value={scope}
+        onChange={chooseScope}
+        hintOpen={scopeHintOpen}
+        onHintOpenChange={setScopeHintOpen}
+        scopes={MESSAGE_QUICK_SCOPES}
+      />
+      {scope === "keyword" && (
+        <KeywordSentenceField
+          compact
+          initialKeyword={keyword}
+          onCommit={commitKeyword}
+          onClear={clearKeyword}
+          pending={pending}
         />
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onBlur={flushBody}
-          rows={1}
-          placeholder="次に思い出したいこと"
-          className={`block min-w-0 flex-1 resize-none overflow-hidden rounded-md border border-transparent bg-transparent px-1 py-0.5 text-lg leading-snug [field-sizing:content] hover:border-border focus:border-border focus:bg-background ${
-            r.isDone ? "text-muted line-through" : ""
-          }`}
-        />
-        <span className="mt-0.5 flex shrink-0 flex-row-reverse flex-wrap items-center gap-0.5">
-          <form action={removeMessageFromEventAction} className="contents">
-            <input type="hidden" name="eventId" value={r.eventId} />
-            <input type="hidden" name="messageId" value={r.messageId} />
-            <ConfirmButton
-              message={REMOVE_CONFIRM_MESSAGE}
-              aria-label="この予定から外す"
-              className="shrink-0 rounded-full border border-border px-1.5 py-1 text-xs text-muted hover:border-warn hover:text-warn"
-            >
-              <X aria-hidden className="h-3.5 w-3.5" />
-            </ConfirmButton>
-          </form>
-          <button
-            type="button"
-            onClick={onToggleOpen}
-            aria-expanded={open}
-            aria-label={open ? "詳細を閉じる" : "詳細を開く"}
-            className={`shrink-0 rounded-md border px-1.5 py-1 text-sm leading-none transition-colors ${
-              open
-                ? "border-teal bg-teal-soft text-teal-dark"
-                : "border-border text-muted hover:border-teal hover:text-teal-dark"
-            }`}
-          >
-            {open ? "∧" : "∨"}
-          </button>
-          <ScopeEmojiToggle
-            value={scope}
-            onChange={chooseScope}
-            open={scopePopupOpen}
-            onOpenChange={setScopePopupOpen}
-            hintOpen={scopeHintOpen}
-            onHintOpenChange={setScopeHintOpen}
-            className="mt-0"
-            scopes={MESSAGE_QUICK_SCOPES}
-          />
-        </span>
-      </div>
-
-      {open && (
-        <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
-          <ScopeQuickToggle
-            value={scope}
-            onChange={chooseScope}
-            hintOpen={scopeHintOpen}
-            onHintOpenChange={setScopeHintOpen}
-            scopes={MESSAGE_QUICK_SCOPES}
-          />
-          {scope === "keyword" && (
-            <KeywordSentenceField
-              compact
-              initialKeyword={keyword}
-              onCommit={commitKeyword}
-              onClear={clearKeyword}
-              pending={pending}
-            />
-          )}
-        </div>
       )}
-
-      {!open && r.matchReason && (
-        <p className="ml-6 truncate text-[11px] text-muted">{r.matchReason}</p>
-      )}
-    </li>
+    </div>
   );
 }
 
 /** 予定に結びついたメッセージの一覧。1 件ずつ開いて、いつでも編集できる。 */
 export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
-  const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
+  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
   const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
   const toggle = (id: string) =>
-    setOpenKeys((s) => {
+    setOpenIds((s) => {
       const next = new Set(s);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
 
+  function toggleDone(r: EMRow, next: boolean) {
+    setDoneOverride((prev) => ({ ...prev, [r.id]: next }));
+    void toggleFutureMessageDoneAction(r.id, next);
+  }
+
   if (rows.length === 0) return null;
   const sorted = sortByDone(
     rows.map((r) => ({ ...r, isDone: doneOverride[r.id] ?? r.isDone })),
   );
   return (
-    <ul className="divide-y divide-border/70">
-      {sorted.map((r) => (
-        <MessageRow
-          key={r.id}
-          r={r}
-          open={openKeys.has(r.id)}
-          onToggleOpen={() => toggle(r.id)}
-          onToggleDone={(next) => {
-            setDoneOverride((prev) => ({ ...prev, [r.id]: next }));
-            void toggleFutureMessageDoneAction(r.id, next);
-          }}
-        />
-      ))}
+    <ul className="space-y-1">
+      {sorted.map((r) => {
+        const open = openIds.has(r.id);
+        return (
+          <li key={r.id} className="rounded-lg bg-surface px-2 py-1.5">
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={r.isDone}
+                onChange={(e) => toggleDone(r, e.target.checked)}
+                className="mt-1 h-5 w-5 shrink-0 accent-[var(--teal)]"
+                aria-label="完了"
+              />
+              <span
+                className={`min-w-0 flex-1 whitespace-pre-wrap break-words py-0.5 text-sm ${
+                  r.isDone ? "text-muted line-through" : ""
+                }`}
+              >
+                {r.body}
+              </span>
+              <button
+                type="button"
+                onClick={() => toggle(r.id)}
+                aria-label={open ? "閉じる" : "編集"}
+                className={`mt-0.5 shrink-0 rounded-md border px-2 py-1 text-sm leading-none ${
+                  open
+                    ? "border-teal bg-teal-soft text-teal-dark"
+                    : "border-border text-muted hover:border-teal hover:text-teal-dark"
+                }`}
+              >
+                {open ? "∧" : "∨"}
+              </button>
+              <form action={removeMessageFromEventAction} className="contents">
+                <input type="hidden" name="eventId" value={r.eventId} />
+                <input type="hidden" name="messageId" value={r.messageId} />
+                <ConfirmButton
+                  message={REMOVE_CONFIRM_MESSAGE}
+                  aria-label="この予定から外す"
+                  className="mt-0.5 shrink-0 rounded-full border border-border px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn"
+                >
+                  <X aria-hidden className="h-3 w-3" />
+                </ConfirmButton>
+              </form>
+            </div>
+            <div className="ml-0.5 mt-1 flex flex-wrap items-center gap-1.5">
+              <ScopeSummaryBadge r={r} />
+              {r.confirmedCount > 0 && (
+                <span className="text-[11px] text-muted">{r.confirmedCount}回更新</span>
+              )}
+            </div>
+            {!open && r.matchReason && (
+              <p className="ml-0.5 mt-0.5 text-[11px] text-muted">{r.matchReason}</p>
+            )}
+            {open && (
+              <div className="mt-1.5 space-y-1 rounded-lg bg-background/60 p-2">
+                {r.matchReason && (
+                  <p className="text-[11px] text-muted">なぜ出ているか: {r.matchReason}</p>
+                )}
+                <RowEditForm key={r.id} r={r} />
+              </div>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }

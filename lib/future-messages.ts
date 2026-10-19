@@ -559,6 +559,8 @@ export interface EventMessageRow {
   matchReason: string | null;
   confirmedCount: number;
   eventTitle: string;
+  /** 作られたきっかけの予定名（あれば）。「似た予定」のとき、何に似ているかの表示に使う。 */
+  sourceEventTitle: string | null;
   /** 予定が済んでいるか（振り返りを開けるかの判定。pendingMessageReviewWhere と同じ意味）。 */
   eventEnded: boolean;
   /**
@@ -612,6 +614,7 @@ export function toEventMessageRow(
     matchedBy: l.matchedBy as MatchedBy,
     matchReason: l.matchReason,
     confirmedCount: m.confirmedCount,
+    sourceEventTitle: m.sourceEventTitle,
     isDone: l.isDone,
   };
 }

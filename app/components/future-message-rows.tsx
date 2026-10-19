@@ -43,14 +43,15 @@ export type EMRow = {
 
 /** FutureMessage.scope は "keyword"|"similar"|"once" を取りうるが、この枠では
  * 「今回だけ」(once) は使わない（先の予定のための機能だから）ので keyword に畳む。 */
-function toQuickScope(scope: string): QuickScope {
+export function toQuickScope(scope: string): QuickScope {
   return scope === "similar" ? "similar" : "keyword";
 }
 
 /** 行を開く前の、次回の出し方の要約バッジ。「似た予定」のときは何に似ているか
  * （元の予定名）を書く。これが無いと、何に似ているのか分からず不安になる
- * （ユーザー指摘により2026-10-19）。 */
-function ScopeSummaryBadge({ r }: { r: EMRow }) {
+ * （ユーザー指摘により2026-10-19）。学習済みマニュアルページのコンパクト表示
+ * （savings/page.tsx の CompactMessageLine）からも使う。 */
+export function ScopeSummaryBadge({ r }: { r: EMRow }) {
   if (toQuickScope(r.scope) === "similar") {
     return (
       <span className="text-[11px] text-muted">

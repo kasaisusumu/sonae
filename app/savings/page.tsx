@@ -9,7 +9,7 @@ import { formatLead } from "@/lib/lead-time";
 import { getUserTemplates } from "@/lib/templates";
 import { sectionLabel } from "@/lib/sections";
 import { InfoHint } from "@/app/components/info-hint";
-import { FutureMessageRows } from "@/app/components/future-message-rows";
+import { ScopeSummaryBadge, type EMRow } from "@/app/components/future-message-rows";
 import { type SearchEntry } from "./learning-search";
 import { LearningExplorer } from "./learning-explorer";
 import { LazyLeaf } from "./lazy-leaf";
@@ -49,11 +49,46 @@ function CompactLine({ it }: { it: LeafItem }) {
   );
 }
 
-function CompactList({ sections }: { sections: LeafSectionData[] }) {
+/** 「未来の自分へ」も他の枠（準備すること・持ち物）と同じコンパクト表示にする
+ * （ラベル＋件数、本文を1行ずつ、空なら「（なし）」）。特別な見た目のカードにはしない
+ * （ユーザー指摘により2026-10-19）。「編集」を押したときだけ、他の枠と同じように
+ * ChecklistEditor 相当の編集UI（FutureMessageRows）になる（LeafBody 側）。 */
+function CompactMessageLine({ r }: { r: EMRow }) {
+  return (
+    <li className={`text-[11px] ${r.isDone ? "text-muted line-through" : ""}`}>
+      {r.body}
+      <span className="text-muted">（<ScopeSummaryBadge r={r} />）</span>
+    </li>
+  );
+}
+
+function CompactList({
+  sections,
+  messages,
+}: {
+  sections: LeafSectionData[];
+  messages: EMRow[];
+}) {
   const prog = (arr: LeafItem[]) =>
     arr.length ? ` ${arr.filter((i) => i.isDone).length}/${arr.length}` : "";
+  const msgProg = messages.length
+    ? ` ${messages.filter((m) => m.isDone).length}/${messages.length}`
+    : "";
   return (
     <div className="grid gap-2 sm:grid-cols-2">
+      {messages.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold text-teal-dark">
+            未来の自分へ
+            <span className="text-muted">{msgProg}</span>
+          </p>
+          <ul className="mt-0.5 space-y-0.5">
+            {messages.map((r) => (
+              <CompactMessageLine key={r.id} r={r} />
+            ))}
+          </ul>
+        </div>
+      )}
       {sections.map((s) => (
         <div key={s.key}>
           <p className="text-[11px] font-semibold text-teal-dark">
@@ -120,29 +155,28 @@ function EventLeaf({
           </InfoHint>
         </p>
       )}
-      {leaf.cleared ? (
+      {leaf.cleared && (
         <p className="mt-3 flex items-center gap-1 rounded-lg bg-surface-muted p-3 text-xs text-muted">
           準備リストは空（内容なしとして学習）
           <InfoHint id="savings-cleared">
             似た予定でも何も出しません。同じ名前でも、中身のある予定とは分けて覚えています。
           </InfoHint>
         </p>
-      ) : (
-        <div className="mt-3">
-          <LeafBody
-            eventId={leaf.eventId}
-            eventIds={[leaf.eventId, ...leaf.siblingEventIds]}
-            compact={<CompactList sections={sections} />}
-            sections={sections}
-          />
-        </div>
       )}
-      {leaf.messages.length > 0 && (
-        <div className="mt-3 space-y-1.5 rounded-xl bg-teal-soft p-3">
-          <p className="text-xs font-semibold text-teal-dark">💌 未来の自分へ</p>
-          <FutureMessageRows rows={leaf.messages} />
-        </div>
-      )}
+      <div className="mt-3">
+        <LeafBody
+          eventId={leaf.eventId}
+          eventIds={[leaf.eventId, ...leaf.siblingEventIds]}
+          compact={
+            <CompactList
+              sections={leaf.cleared ? [] : sections}
+              messages={leaf.messages}
+            />
+          }
+          sections={leaf.cleared ? [] : sections}
+          messages={leaf.messages}
+        />
+      </div>
     </LazyLeaf>
   );
 }

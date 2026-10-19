@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { X } from "lucide-react";
 
 export interface UsageGridRow {
   id: string;
@@ -151,7 +152,7 @@ export function UsageTimeGrid({
                 onClick={() => setOpen(null)}
                 className="rounded-lg px-2 py-1 text-muted hover:bg-surface-muted"
               >
-                ✕
+                <X aria-hidden className="h-4 w-4" />
               </button>
             </div>
             <div className="overflow-y-auto p-3">

@@ -1,5 +1,6 @@
 "use client";
 
+import { BellOff } from "lucide-react";
 import { useState } from "react";
 import { NotifyEnableButton } from "./push-controls";
 
@@ -17,7 +18,10 @@ export function NotifyOffBanner({ publicKey }: { publicKey: string | null }) {
       data-coach="notify-off-banner"
       className="rounded-2xl border border-warn/30 bg-warn-soft p-4"
     >
-      <p className="text-sm font-medium text-warn">🔕 通知がオフになっています</p>
+      <p className="flex items-center gap-1 text-sm font-medium text-warn">
+        <BellOff aria-hidden className="h-4 w-4" />
+        通知がオフになっています
+      </p>
       <p className="mt-1 text-xs text-warn/80">
         新しい予定の通知や、準備・未来の自分へのメッセージの先回りリマインドが届きません。
       </p>

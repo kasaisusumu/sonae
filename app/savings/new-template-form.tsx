@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Mic } from "lucide-react";
 import { createListTemplate } from "@/app/actions";
 
 /**
@@ -75,9 +76,10 @@ export function NewTemplateForm() {
           type="submit"
           name="tidy"
           value="1"
-          className="rounded-lg border border-foreground px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted"
+          className="inline-flex items-center gap-1 rounded-lg border border-foreground px-4 py-2 text-sm font-medium text-foreground hover:bg-surface-muted"
         >
-          🎤 AIで整えて作成
+          <Mic aria-hidden className="h-3.5 w-3.5" />
+          AIで整えて作成
         </button>
       </div>
     </form>

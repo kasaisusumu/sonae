@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { TriangleAlert } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
@@ -77,11 +78,14 @@ export default async function SettingsPage() {
                 : "未取り込み"}
             </p>
             {account.syncError && (
-              <p className="rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
-                ⚠ Google との連携が切れていて、新しい予定を取り込めていません。
-                下の「再接続」を押してください。
-                {account.syncErrorAt &&
-                  `（${formatDateTime(account.syncErrorAt)}ごろから）`}
+              <p className="flex items-start gap-1 rounded-lg bg-warn-soft px-3 py-2 text-xs text-warn">
+                <TriangleAlert aria-hidden className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Google との連携が切れていて、新しい予定を取り込めていません。
+                  下の「再接続」を押してください。
+                  {account.syncErrorAt &&
+                    `（${formatDateTime(account.syncErrorAt)}ごろから）`}
+                </span>
               </p>
             )}
             {calendars.length > 0 && (

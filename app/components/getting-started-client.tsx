@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { syncCalendar } from "@/app/actions";
@@ -223,7 +224,7 @@ export function GettingStartedClient({
                       : "border border-border bg-surface text-foreground"
                   }`}
                 >
-                  {s.done ? "✓" : i + 1}
+                  {s.done ? <Check aria-hidden className="h-3.5 w-3.5" /> : i + 1}
                 </span>
                 <span
                   className={`min-w-0 flex-1 text-sm font-medium ${

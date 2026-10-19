@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Tag, X } from "lucide-react";
 import {
   removeMessageFromEventAction,
   updateFutureMessageAction,
@@ -163,14 +164,14 @@ export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
                   aria-label="この予定から外す"
                   className="mt-0.5 shrink-0 rounded-full border border-border px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn"
                 >
-                  ✕
+                  <X aria-hidden className="h-3 w-3" />
                 </ConfirmButton>
               </form>
             </div>
             <div className="ml-0.5 mt-1 flex flex-wrap items-center gap-1.5">
               {r.keywords.length > 0 ? (
-                <span className="text-[11px] text-muted">
-                  🏷「{r.keywords.join("、")}」のとき
+                <span className="inline-flex items-center gap-0.5 text-[11px] text-muted">
+                  <Tag aria-hidden className="h-3 w-3" />「{r.keywords.join("、")}」のとき
                 </span>
               ) : (
                 <span className="text-[11px] text-muted">キーワード未設定</span>

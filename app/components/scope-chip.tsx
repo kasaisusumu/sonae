@@ -1,29 +1,31 @@
 "use client";
 
+import { Pin, Repeat, Tag, type LucideIcon } from "lucide-react";
 import type { ItemScope } from "@/lib/item-scope";
 
 /**
  * 「次回いつ出すか」の範囲チップ（項目・未来の自分へ・確定カード・学習内容で共通）。
  * 白黒基調の例外として、この 3 色だけを使う（globals.css の --scope-*）。
- * 色だけで意味を伝えず、必ず文言と記号を併記する。
- *   1 = 今回だけ（青・「📌」）
- *   2 = 似た予定（緑・「🔁」、「似た予定のとき」の意味）
- *   3 = この名前（紫・「🏷」、「この名前の予定だけ」の意味。予定名から自動でキーワードを決める）
+ * 色だけで意味を伝えず、必ず文言とアイコンを併記する。
+ *   1 = 今回だけ（青・ピン）
+ *   2 = 似た予定（緑・繰り返し、「似た予定のとき」の意味）
+ *   3 = この名前（紫・タグ、「この名前の予定だけ」の意味。予定名から自動でキーワードを決める）
  *   自動 = 範囲を指定していない従来の自動学習（無彩色）
  * クイック選択3つを一列に収めるため、2026-10-10 にラベルを短縮した
  * （意味は icon・色・詳細の説明文で補う。長い言い回しは詳細側の文章に残す）。
- * 3つのアイコンは絵文字1つだけのボタン（`ScopeEmojiToggle`）でも使うため、
- * 見分けやすい絵文字にしている（2026-10-13〜）。
+ * 3つのアイコンは記号1つだけのボタン（`ScopeEmojiToggle`）でも使うため、
+ * 見分けやすいアイコンにしている（2026-10-13〜。絵文字から lucide-react の
+ * アイコンに置き換え、2026-10-19〜）。
  */
 export const SCOPE_CHIP: Record<
   ItemScope,
-  { label: string; icon: string; tone: "event" | "genre" | "keyword" | "auto" }
+  { label: string; icon: LucideIcon | null; tone: "event" | "genre" | "keyword" | "auto" }
 > = {
-  event_only: { label: "今回だけ", icon: "📌", tone: "event" },
-  genre: { label: "この系の予定", icon: "🔁", tone: "genre" },
-  similar: { label: "似た予定", icon: "🔁", tone: "genre" },
-  keyword: { label: "この名前", icon: "🏷", tone: "keyword" },
-  auto: { label: "自動", icon: "", tone: "auto" },
+  event_only: { label: "今回だけ", icon: Pin, tone: "event" },
+  genre: { label: "この系の予定", icon: Repeat, tone: "genre" },
+  similar: { label: "似た予定", icon: Repeat, tone: "genre" },
+  keyword: { label: "この名前", icon: Tag, tone: "keyword" },
+  auto: { label: "自動", icon: null, tone: "auto" },
 };
 
 const TONE_CLASS: Record<
@@ -65,12 +67,13 @@ export function ScopeChip({
 }) {
   const meta = SCOPE_CHIP[scope] ?? SCOPE_CHIP.auto;
   const tone = TONE_CLASS[meta.tone];
+  const Icon = meta.icon;
   const cls = `inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-px text-[11px] leading-tight ${
     status === "proposed" ? tone.outline : tone.solid
   } ${onClick ? "hover:opacity-80" : ""} ${className}`;
   const body = (
     <>
-      {meta.icon && <span aria-hidden>{meta.icon}</span>}
+      {Icon && <Icon aria-hidden className="h-3 w-3 shrink-0" />}
       {status === "proposed" && scope !== "auto" && (
         <span className="rounded bg-surface px-1 text-[10px]">提案</span>
       )}

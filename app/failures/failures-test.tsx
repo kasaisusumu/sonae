@@ -1,3 +1,4 @@
+import { Check, CircleHelp, PenLine } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { createFutureMessageAction } from "@/app/actions";
 import { listFutureMessages, getPendingMessageReviews } from "@/lib/future-messages";
@@ -62,7 +63,8 @@ export async function FailuresPageTest({ userId }: { userId: string }) {
       {reviewCards.length > 0 && (
         <section id="review" className="scroll-mt-4 space-y-3">
           <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            🤔 結果を記録しよう({pendingReviews.length}件)
+            <CircleHelp aria-hidden className="h-4 w-4" />
+            結果を記録しよう({pendingReviews.length}件)
             <InfoHint id="failures-review-queue">
               終わった予定のメッセージを見直しましょう。全項目に提案が入っているので、
               直すところだけ直して確定するだけでOKです。
@@ -86,7 +88,8 @@ export async function FailuresPageTest({ userId }: { userId: string }) {
         className="rounded-2xl border border-border bg-surface p-5"
       >
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-          ✍️ メッセージを書く
+          <PenLine aria-hidden className="h-4 w-4" />
+          メッセージを書く
           <InfoHint id="failures-quick-record">
             予定が未定でも作れます。キーワードを書けば、それに一致する予定が入ったとき
             自動で知らせます。キーワードを書かなければ、自動では一致しません
@@ -118,8 +121,10 @@ export async function FailuresPageTest({ userId }: { userId: string }) {
         <h2 className="flex items-center gap-1.5 text-lg font-semibold">
           これまでの記録
           <InfoHint id="future-message-delete-vs-remove">
-            <p className="mb-3 text-sm font-semibold text-foreground">
-              削除・この予定から外す・✓ の違い
+            <p className="mb-3 flex items-center gap-1 text-sm font-semibold text-foreground">
+              削除・この予定から外す・
+              <Check aria-hidden className="h-4 w-4 shrink-0" />
+              の違い
             </p>
 
             <div className="mb-1">

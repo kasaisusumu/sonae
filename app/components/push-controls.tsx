@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   pushSupported,
@@ -90,7 +91,10 @@ export function NotifyEnableButton({
 
   if (state === "on") {
     return (
-      <p className="text-sm font-medium text-teal-dark">✓ 通知はオンです</p>
+      <p className="flex items-center gap-1 text-sm font-medium text-teal-dark">
+        <Check aria-hidden className="h-4 w-4" />
+        通知はオンです
+      </p>
     );
   }
   if (state === "unsupported") {

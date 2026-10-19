@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Mic } from "lucide-react";
 import { previewDictatedFailures, saveDictatedFailures } from "@/app/actions";
 import { formatDateOnly } from "@/lib/format";
 
@@ -112,7 +113,8 @@ export function FailureDictationInput({
         onClick={openPopup}
         className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground hover:bg-surface-muted"
       >
-        🎤 話して記録する
+        <Mic aria-hidden className="h-3.5 w-3.5" />
+        話して記録する
       </button>
 
       {open && (
@@ -124,8 +126,9 @@ export function FailureDictationInput({
             className="max-h-[85vh] w-full max-w-sm space-y-3 overflow-y-auto rounded-2xl bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-sm font-semibold text-foreground">
-              🎤 話して記録する
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <Mic aria-hidden className="h-4 w-4" />
+              話して記録する
             </h3>
 
             {phase === "input" ? (
@@ -171,7 +174,7 @@ export function FailureDictationInput({
                 {moreCount > 0 && (
                   <p className="rounded-lg bg-surface-muted px-3 py-2 text-[11px] text-muted">
                     ほかにも話した内容があるようです。まず1件目を確認してください。
-                    残りは記録したあと、もう一度「🎤 話して記録する」からどうぞ。
+                    残りは記録したあと、もう一度「話して記録する」からどうぞ。
                   </p>
                 )}
 

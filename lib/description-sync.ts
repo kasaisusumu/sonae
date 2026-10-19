@@ -88,7 +88,13 @@ export async function syncEventDescription(eventId: string): Promise<void> {
   // ※ 最終更新時刻を含めたまま比較すると、呼ぶたびに値が変わって
   //   毎回「内容が変わった」と判定され、無限に書き込みが発生してしまう。
   const contentOnly = composeDescription(event.memo, url, items, blockOpts);
-  const contentHash = hashDescription(contentOnly);
+  // 最終更新時刻は比較対象から除いているため、「最終更新」行の位置など、
+  // 項目の内容に関係ないレイアウトだけを変えた場合は contentOnly の文字列が
+  // 変わらず、既に書き込み済みの予定が再書き込みされない（ユーザー指摘により
+  // 2026-10-19に発覚）。そのレイアウト変更のたびにこの番号を上げることで、
+  // 既存の予定にも一度だけ新しいレイアウトで書き直させる。
+  const CONTENT_FORMAT_VERSION = 2;
+  const contentHash = hashDescription(`${contentOnly}\u0000fmt${CONTENT_FORMAT_VERSION}`);
   if (contentHash === event.lastWrittenContentHash) return;
 
   const description = composeDescription(event.memo, url, items, {

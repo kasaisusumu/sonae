@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Bell, Mail } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import {
   getLearningNameTree,
@@ -37,13 +38,19 @@ function Keywords({ words }: { words: string[] }) {
 
 function CompactLine({ it }: { it: LeafItem }) {
   const lead =
-    it.notifyLeadMinutes != null ? `🔔${formatLead(it.notifyLeadMinutes)}` : "";
+    it.notifyLeadMinutes != null ? formatLead(it.notifyLeadMinutes) : "";
   return (
     <li
       className={`text-[11px] ${it.isDone ? "text-muted line-through" : ""}`}
     >
       {it.title}
-      {lead && <span className="text-muted">（{lead}）</span>}
+      {lead && (
+        <span className="inline-flex items-center gap-0.5 text-muted">
+          （
+          <Bell aria-hidden className="h-2.5 w-2.5" />
+          {lead}）
+        </span>
+      )}
       {it.isUserAdded && <span className="ml-1 text-teal-dark">＋追加</span>}
     </li>
   );
@@ -139,7 +146,10 @@ function EventLeaf({
       )}
       {leaf.messages.length > 0 && (
         <div className="mt-3 space-y-1.5 rounded-xl bg-teal-soft p-3">
-          <p className="text-xs font-semibold text-teal-dark">💌 未来の自分へ</p>
+          <p className="flex items-center gap-1 text-xs font-semibold text-teal-dark">
+            <Mail aria-hidden className="h-3.5 w-3.5" />
+            未来の自分へ
+          </p>
           <FutureMessageRows rows={leaf.messages} />
         </div>
       )}

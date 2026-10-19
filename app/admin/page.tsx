@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { Check, TriangleAlert } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/session";
@@ -753,8 +754,9 @@ export default async function AdminPage({
                       <StepBadge ok={r.steps.tutorial} label="導入" />
                     </div>
                     {r.syncBroken && (
-                      <p className="mt-0.5 rounded bg-warn-soft px-1 py-0.5 text-[10px] text-warn">
-                        ⚠ 連携切れ
+                      <p className="mt-0.5 flex items-center gap-0.5 rounded bg-warn-soft px-1 py-0.5 text-[10px] text-warn">
+                        <TriangleAlert aria-hidden className="h-2.5 w-2.5" />
+                        連携切れ
                         {r.syncErrorAt && `（${fmtDateTime(r.syncErrorAt)}ごろから）`}
                       </p>
                     )}
@@ -1040,13 +1042,13 @@ export default async function AdminPage({
 function StepBadge({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span
-      className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
         ok
           ? "bg-teal-soft text-teal-dark"
           : "border border-border text-muted"
       }`}
     >
-      {ok ? "✓" : "・"} {label}
+      {ok ? <Check aria-hidden className="h-2.5 w-2.5" /> : "・"} {label}
     </span>
   );
 }

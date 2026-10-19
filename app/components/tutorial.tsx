@@ -1,6 +1,17 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import {
+  Bell,
+  Calendar,
+  ClipboardList,
+  Menu,
+  PartyPopper,
+  Smartphone,
+  Sparkles,
+  Star,
+  X,
+} from "lucide-react";
 import { markTutorialSeen, trackFeatureUse } from "@/app/actions";
 import { APP_NAME } from "@/lib/app-info";
 
@@ -28,7 +39,7 @@ const SLIDES: Slide[] = [
   {
     id: "setup",
     title: "④ 仕上げに、この2つ",
-    body: "①この画面を「ホーム画面に追加」 ②通知をオン。困ったときは左上の ☰ からいつでも。",
+    body: "①この画面を「ホーム画面に追加」 ②通知をオン。困ったときは左上のメニューからいつでも。",
   },
 ];
 
@@ -39,21 +50,26 @@ function Visual({ id }: { id: string }): ReactNode {
       return (
         <div className={`${box} space-y-1.5 text-xs`}>
           <div className="flex items-center gap-2">
-            <span className="text-base">📲</span>
+            <Smartphone aria-hidden className="h-4 w-4 text-foreground" />
             <span>この画面を「ホーム画面に追加」</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-base">🔔</span>
+            <Bell aria-hidden className="h-4 w-4 text-foreground" />
             <span>通知をオン（新しい予定・準備のリマインド）</span>
           </div>
         </div>
       );
     case "welcome":
-      return <div className="py-2 text-center text-5xl">🗒️✨</div>;
+      return (
+        <div className="flex justify-center gap-1 py-2">
+          <ClipboardList aria-hidden className="h-10 w-10 text-foreground" />
+          <Sparkles aria-hidden className="h-10 w-10 text-foreground" />
+        </div>
+      );
     case "connect":
       return (
         <div className={`${box} flex items-center gap-2 text-xs`}>
-          <span className="text-lg">📅</span>
+          <Calendar aria-hidden className="h-5 w-5 text-foreground" />
           <span>Google カレンダー</span>
           <span className="ml-auto rounded bg-teal px-2 py-0.5 text-[10px] text-white">
             連携する
@@ -68,13 +84,14 @@ function Visual({ id }: { id: string }): ReactNode {
 --- ${APP_NAME} ---
 準備リスト: https://…
 
-【未来の自分へ】
-💌 前回のギブアンドテイクを忘れない
+【過去の自分よりメッセージ】
+前回のギブアンドテイクを忘れない
 
 【持ち物】 1/3
 ☑ 充電器（1日前）
 ・モバイルバッテリー
 ・常備薬
+最終更新: 10/19 14:30
 ---`}
         </pre>
       );
@@ -89,7 +106,10 @@ function Visual({ id }: { id: string }): ReactNode {
           </div>
           <div className="flex items-center gap-2">
             <span className="flex-1">・常備薬</span>
-            <span className="text-[10px] text-teal-dark">🔔1日前</span>
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-teal-dark">
+              <Bell aria-hidden className="h-3 w-3" />
+              1日前
+            </span>
             <span className="rounded-md border border-teal/40 bg-teal-soft px-1.5 text-[10px] text-teal-dark">
               ∧
             </span>
@@ -145,7 +165,10 @@ function Visual({ id }: { id: string }): ReactNode {
     case "menu":
       return (
         <div className={`${box} text-xs`}>
-          <p className="font-semibold">☰ メニュー</p>
+          <p className="flex items-center gap-1 font-semibold">
+            <Menu aria-hidden className="h-3.5 w-3.5" />
+            メニュー
+          </p>
           <ul className="mt-1 space-y-0.5 text-[11px] text-muted">
             <li>・このページの使い方をみる</li>
             <li>・アプリのチュートリアル</li>
@@ -157,30 +180,38 @@ function Visual({ id }: { id: string }): ReactNode {
       return (
         <div className={`${box} flex items-center gap-2 text-xs`}>
           <span className="flex-1">切符を用意する</span>
-          <span className="rounded-full border border-teal/40 px-2 py-0.5 text-[10px] text-teal-dark">
-            🔔3時間前
+          <span className="inline-flex items-center gap-0.5 rounded-full border border-teal/40 px-2 py-0.5 text-[10px] text-teal-dark">
+            <Bell aria-hidden className="h-3 w-3" />
+            3時間前
           </span>
           <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] text-muted">
-            ✕
+            <X aria-hidden className="h-3 w-3" />
           </span>
         </div>
       );
     case "template":
       return (
         <div className="flex flex-wrap gap-1.5 text-[11px]">
-          <span className="rounded-md border border-dashed border-border px-2 py-1 text-muted">
-            📋 マニュアルから
+          <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-muted">
+            <ClipboardList aria-hidden className="h-3.5 w-3.5" />
+            マニュアルから
           </span>
-          <span className="rounded-md border border-dashed border-border px-2 py-1 text-muted">
-            📆 他の予定から
+          <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-muted">
+            <Calendar aria-hidden className="h-3.5 w-3.5" />
+            他の予定から
           </span>
-          <span className="rounded-md border border-dashed border-border px-2 py-1 text-muted">
-            ⭐ 名前をつけて保存
+          <span className="inline-flex items-center gap-1 rounded-md border border-dashed border-border px-2 py-1 text-muted">
+            <Star aria-hidden className="h-3.5 w-3.5" />
+            名前をつけて保存
           </span>
         </div>
       );
     case "done":
-      return <div className="py-2 text-center text-5xl">🎉</div>;
+      return (
+        <div className="flex justify-center py-2">
+          <PartyPopper aria-hidden className="h-12 w-12 text-foreground" />
+        </div>
+      );
   }
   return null;
 }

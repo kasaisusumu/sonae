@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Mail, Sprout, TriangleAlert } from "lucide-react";
 import { switchFeatureModeAction } from "@/app/actions";
 import { InfoHint } from "@/app/components/info-hint";
 import { ScopeChip } from "@/app/components/scope-chip";
@@ -111,16 +112,24 @@ export function FeatureModeToggle({ current }: { current: string }) {
                   <p className="text-[12px]">
                     ver1: 節約額ダッシュボード＋気をつけたい予定の警告
                   </p>
-                  <p className="text-[12px]">
-                    ver2: 🌱 そなえさんの成長（学習の積み上がり）＋確定待ちメッセージの案内
+                  <p className="flex items-center gap-1 text-[12px]">
+                    ver2:
+                    <Sprout aria-hidden className="h-3.5 w-3.5" />
+                    そなえさんの成長（学習の積み上がり）＋確定待ちメッセージの案内
                   </p>
                 </div>
 
                 <div>
                   <p className="mb-1 text-[11px] font-semibold text-muted">予定詳細ページ</p>
-                  <p className="text-[12px]">ver1: ⚠ 警告パネル＋考えられる失敗</p>
-                  <p className="text-[12px]">
-                    ver2: 💌 確定カード＋過去の自分よりメッセージ枠
+                  <p className="flex items-center gap-1 text-[12px]">
+                    ver1:
+                    <TriangleAlert aria-hidden className="h-3.5 w-3.5" />
+                    警告パネル＋考えられる失敗
+                  </p>
+                  <p className="flex items-center gap-1 text-[12px]">
+                    ver2:
+                    <Mail aria-hidden className="h-3.5 w-3.5" />
+                    確定カード＋過去の自分よりメッセージ枠
                   </p>
                 </div>
 

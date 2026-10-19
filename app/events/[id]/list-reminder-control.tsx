@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Bell, X } from "lucide-react";
 import { setListReminders } from "@/app/actions";
 import {
   LEAD_PRESETS,
@@ -15,7 +16,7 @@ const TIME_PRESETS = LEAD_PRESETS.filter(
 
 /**
  * 予定単位の「準備リストのリマインド」。最大5回まで。小さなボタン → ポップアップで編集。
- * ボタン表記: 1回=「🔔 リマインド：1日前」、2回以上=「🔔 リマインド(2)：1日前+」
+ * ボタン表記: 1回=「🔔リマインド：1日前」、2回以上=「🔔リマインド(2)：1日前+」
  * （件数の丸括弧は半角。数字だけを囲む丸括弧は全角ではなく半角で統一する、ユーザー指定の表記ルール）。
  */
 export function ListReminderControl({
@@ -50,7 +51,8 @@ export function ListReminderControl({
         onClick={() => setOpen(true)}
         className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground hover:bg-surface-muted"
       >
-        🔔 リマインド{countBadge}：{label}
+        <Bell aria-hidden className="h-3.5 w-3.5" />
+        リマインド{countBadge}：{label}
       </button>
 
       {open && (
@@ -62,8 +64,9 @@ export function ListReminderControl({
             className="w-full max-w-sm space-y-3 rounded-2xl bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-sm font-semibold text-foreground">
-              🔔 準備リストのリマインド
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <Bell aria-hidden className="h-4 w-4" />
+              準備リストのリマインド
             </h3>
             <p className="text-xs text-muted">
               予定の前に「準備リストを確認しましょう」を通知します。最大 {MAX_LIST_REMINDERS} 回。
@@ -107,7 +110,7 @@ export function ListReminderControl({
                       aria-label="このリマインドを削除"
                       className="shrink-0 rounded-md border border-border px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn"
                     >
-                      ✕
+                      <X aria-hidden className="h-3.5 w-3.5" />
                     </button>
                   </li>
                 ))}

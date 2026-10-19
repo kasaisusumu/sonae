@@ -5,8 +5,8 @@ import { setFailureOutcome } from "@/app/actions";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
 
 const OPTS: { v: string; label: string }[] = [
-  { v: "not_prevented", label: "😓 防げなかった" },
-  { v: "prevented", label: "🛡 防げた" },
+  { v: "not_prevented", label: "防げなかった" },
+  { v: "prevented", label: "防げた" },
   { v: "irrelevant", label: "— 今回は関係ない" },
   { v: "unset", label: "・ まだ決めない" },
 ];

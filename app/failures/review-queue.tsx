@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Check, Coffee, CircleHelp, Frown, Lightbulb, PartyPopper } from "lucide-react";
 import { deleteFailureLog, setFailureOutcome } from "@/app/actions";
 import { formatDateOnly } from "@/lib/format";
 import { ConfirmButton } from "@/app/components/confirm-button";
@@ -57,9 +58,10 @@ function PendingChoice({ log }: { log: RQLog }) {
           onClick={() =>
             submit("prevented", "「防げた」で記録しますか？（防げた件数に積み上がります）", true)
           }
-          className="rounded-lg bg-foreground px-3.5 py-1.5 text-sm font-semibold text-surface hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-lg bg-foreground px-3.5 py-1.5 text-sm font-semibold text-surface hover:opacity-90 disabled:opacity-50"
         >
-          今回は防げた 🎉
+          今回は防げた
+          <PartyPopper aria-hidden className="h-4 w-4" />
         </button>
         <button
           type="button"
@@ -67,9 +69,10 @@ function PendingChoice({ log }: { log: RQLog }) {
           onClick={() =>
             submit("not_prevented", "「防げなかった」で記録しますか？")
           }
-          className="rounded-lg border border-warn/50 bg-surface px-3.5 py-1.5 text-sm font-medium text-warn hover:bg-warn-soft disabled:opacity-50"
+          className="inline-flex items-center gap-1 rounded-lg border border-warn/50 bg-surface px-3.5 py-1.5 text-sm font-medium text-warn hover:bg-warn-soft disabled:opacity-50"
         >
-          今回もやってしまった 😢
+          今回もやってしまった
+          <Frown aria-hidden className="h-4 w-4" />
         </button>
         <button
           type="button"
@@ -113,7 +116,8 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
   return (
     <section id="review" className="scroll-mt-4 space-y-3">
       <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-        🤔 結果を記録しよう（{remaining}件）
+        <CircleHelp aria-hidden className="h-4 w-4" />
+        結果を記録しよう（{remaining}件）
         <InfoHint id="failures-review-queue">
           終わった予定、どうでしたか？ 「防げた」にしたものだけが防げた件数に積み上がります。
           押しても、このページを離れるまでは消えません。
@@ -129,10 +133,15 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
           >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {l.event
-                    ? `${l.event.title}、おつかれさまでした 🍵`
-                    : "この失敗、どうでしたか？"}
+                <h3 className="flex items-center gap-1 text-sm font-semibold text-foreground">
+                  {l.event ? (
+                    <>
+                      {l.event.title}、おつかれさまでした
+                      <Coffee aria-hidden className="h-4 w-4" />
+                    </>
+                  ) : (
+                    "この失敗、どうでしたか？"
+                  )}
                 </h3>
                 {l.category && (
                   <p className="mt-0.5 text-xs text-muted">
@@ -161,15 +170,17 @@ export function ReviewQueue({ logs }: { logs: RQLog[] }) {
                 {l.event ? ` ・ 「${l.event.title}」のとき` : ""}
               </p>
               {l.countermeasure && (
-                <p className="mt-1 text-xs text-teal-dark">
-                  💡 対策候補: {l.countermeasure}
+                <p className="mt-1 flex items-center gap-1 text-xs text-teal-dark">
+                  <Lightbulb aria-hidden className="h-3.5 w-3.5 shrink-0" />
+                  対策候補: {l.countermeasure}
                 </p>
               )}
 
               {settled ? (
                 <div className="mt-3 space-y-1.5">
-                  <p className="text-sm font-medium text-foreground">
-                    ✓ 「{OUTCOME_LABEL[l.outcome!] ?? l.outcome}」で記録しました。
+                  <p className="flex items-center gap-1 text-sm font-medium text-foreground">
+                    <Check aria-hidden className="h-4 w-4 shrink-0" />
+                    「{OUTCOME_LABEL[l.outcome!] ?? l.outcome}」で記録しました。
                   </p>
                   <RetroOutcomeSelect
                     logId={l.id}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { Mic } from "lucide-react";
 import { saveTemplateItems, tidyTemplateBulkText, trackFeatureUse } from "@/app/actions";
 import { LEAD_PRESETS, isLeadPreset } from "@/lib/lead-time";
 import { parseBulkTitles } from "@/lib/bulk";
@@ -151,11 +152,11 @@ export function TemplateEditor({
                     key={p.label}
                     value={p.minutes == null ? "none" : String(p.minutes)}
                   >
-                    🔔 {p.label}
+                    {p.label}
                   </option>
                 ))}
                 {sel === "custom" && (
-                  <option value="custom">🔔 {r.notifyLeadMinutes}分前</option>
+                  <option value="custom">{r.notifyLeadMinutes}分前</option>
                 )}
               </select>
               <button
@@ -189,7 +190,7 @@ export function TemplateEditor({
       <div className="rounded-lg border border-border bg-background p-2">
         <p className="mb-1 text-[11px] text-muted">
           メモから一括追加。スマホのマイクキーで話してもOK。
-          「🎤 AIで整えて追加」なら話し言葉のままでも整えます。
+          「AIで整えて追加」なら話し言葉のままでも整えます。
         </p>
         <textarea
           value={bulk}
@@ -211,9 +212,16 @@ export function TemplateEditor({
             type="button"
             onClick={addBulkTidy}
             disabled={!bulk.trim() || tidying}
-            className="rounded-md border border-foreground px-3 py-1 text-xs font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-foreground px-3 py-1 text-xs font-medium text-foreground hover:bg-surface-muted disabled:opacity-50"
           >
-            {tidying ? "整えています…" : "🎤 AIで整えて追加"}
+            {tidying ? (
+              "整えています…"
+            ) : (
+              <>
+                <Mic aria-hidden className="h-3 w-3" />
+                AIで整えて追加
+              </>
+            )}
           </button>
           <span className="text-[11px] text-muted">追加すると自動保存されます。</span>
         </div>

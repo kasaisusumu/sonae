@@ -3,6 +3,15 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Bell,
+  Calendar,
+  ClipboardList,
+  Image as ImageIcon,
+  NotebookPen,
+  Star,
+  X,
+} from "lucide-react";
+import {
   applyTemplateToEvent,
   clearChecklistSection,
   copyListFromEvent,
@@ -545,11 +554,13 @@ export function ChecklistEditor({
     // 保存時の実際の決定（lib/item-scope.ts の proposeScopesForSave）もこれと同じ既定値に
     // 揃えてある。以前はここだけ「似た予定」を見せつつ保存側はAIに判定させていたため、
     // 保存すると勝手に「今回だけ」に変わってしまうことがあった（この食い違いが原因のバグ）。
-    return scopeOverride[it.key] ?? ((it.scope?.scope as ItemScope) || "similar");
-  }
-  function shownStatus(it: Item): "chosen" | "proposed" {
-    if (scopeOverride[it.key]) return "chosen";
-    return it.scope?.status === "chosen" ? "chosen" : "proposed";
+    const persisted = (it.scope?.scope as ItemScope) || "similar";
+    // 「genre」はAIがカテゴリで一致判定した「似た予定」の内部表現（ユーザーが選べる3択には
+    // 無い）。クイックの3択UIでは「似た予定」として表示する（◯のような無地アイコンに
+    // 落とさない。ユーザー指摘により2026-10-19）。同様に旧仕様の「auto」も同じ扱いにする。
+    const quick: ItemScope =
+      persisted === "genre" || persisted === "auto" ? "similar" : persisted;
+    return scopeOverride[it.key] ?? quick;
   }
 
   /** 項目の範囲を選び直す（今回だけ／似た予定のとき／この名前の予定だけ、の3択）。未保存の編集を先に保存してから保存する。 */
@@ -692,8 +703,9 @@ export function ChecklistEditor({
                       {ex.title}
                     </span>
                     {ex.lead && (
-                      <span className="shrink-0 text-[11px] tabular-nums text-teal-dark">
-                        🔔{ex.lead}
+                      <span className="inline-flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-teal-dark">
+                        <Bell aria-hidden className="h-3 w-3" />
+                        {ex.lead}
                       </span>
                     )}
                     <button
@@ -712,7 +724,7 @@ export function ChecklistEditor({
                       {open ? "∧" : "∨"}
                     </button>
                     <span className="shrink-0 rounded-full border border-border px-1.5 py-0.5 text-[11px] text-muted">
-                      ✕
+                      <X aria-hidden className="h-3 w-3" />
                     </span>
                   </div>
                   {open && (
@@ -791,13 +803,15 @@ export function ChecklistEditor({
                   </span>
                 )}
                 {it.notifyLeadMinutes != null && (
-                  <span className="mt-1.5 shrink-0 text-[11px] tabular-nums text-teal-dark">
-                    🔔{formatLead(it.notifyLeadMinutes)}
+                  <span className="mt-1.5 inline-flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-teal-dark">
+                    <Bell aria-hidden className="h-3 w-3" />
+                    {formatLead(it.notifyLeadMinutes)}
                   </span>
                 )}
                 {it.images.length > 0 && (
-                  <span className="mt-1.5 shrink-0 text-[11px] tabular-nums text-muted">
-                    🖼️{it.images.length}
+                  <span className="mt-1.5 inline-flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-muted">
+                    <ImageIcon aria-hidden className="h-3 w-3" />
+                    {it.images.length}
                   </span>
                 )}
                 {/* 3つは横幅をできるだけ詰めて1かたまりに。入りきらなければ
@@ -810,7 +824,7 @@ export function ChecklistEditor({
                     aria-label="削除"
                     className="shrink-0 rounded-full border border-border px-1.5 py-1 text-xs text-muted hover:border-warn hover:text-warn"
                   >
-                    ✕
+                    <X aria-hidden className="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
@@ -847,7 +861,11 @@ export function ChecklistEditor({
               {open && (
                 <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
                   {/* 次回の出し方（範囲）。絵文字ボタンは行に常時表示済み（タップでポップアップ）。
-                      ここでは大きい3択＋キーワードを直す欄（任意）を出す。テスト版モードだけ。 */}
+                      ここでは大きい3択を出す。「この名前」を選んでいるときだけ、その下に
+                      キーワードを直す欄も出す（他の2択ではキーワードを持たないため無意味）。
+                      テスト版モードだけ。「提案」「選んだ」の違いやキーワードの説明は、
+                      3択の隣のⓘ（ScopeHintBody）にまとめている（ユーザー指摘により
+                      2026-10-19: 行ごとの説明文を減らしⓘに集約）。 */}
                   {showScopeUi && (
                     <>
                       <ScopeQuickToggle
@@ -856,19 +874,14 @@ export function ChecklistEditor({
                         hintOpen={scopeHintOpen}
                         onHintOpenChange={setScopeHintOpen}
                       />
-                      <div className="space-y-1">
-                        <p className="text-[11px] text-muted">
-                          {shownStatus(it) === "proposed"
-                            ? "AI の提案のまま適用中です。選び直すと、その内容になります。"
-                            : "選んだ内容で、次に同じ条件の予定を作ったときに扱います。"}
-                          {it.scope?.reason && `（${it.scope.reason}）`}
-                        </p>
+                      {shownScope(it) === "keyword" && (
                         <KeywordSentenceField
-                          initialKeyword={shownScope(it) === "keyword" ? (it.scope?.keyword ?? "") : ""}
+                          compact
+                          initialKeyword={it.scope?.keyword ?? ""}
                           onCommit={(kw) => chooseKeyword(it, kw)}
                           onClear={() => chooseKeyword(it, "")}
                         />
-                      </div>
+                      )}
                     </>
                   )}
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
@@ -998,15 +1011,16 @@ export function ChecklistEditor({
               <div className="absolute left-0 top-full z-50 mt-1 w-56 overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-lg">
                 {[
                   {
-                    label: "📝 メモから一括で追加",
+                    label: "メモから一括で追加",
+                    icon: NotebookPen,
                     on: () => {
                       setBulkOpen(true);
                       setBulkNote(null);
                     },
                   },
-                  { label: "📋 マニュアルから追加", on: () => setModal("apply") },
-                  { label: "📆 他の予定からコピー", on: () => setModal("copy") },
-                  { label: "⭐ 名前をつけて保存", on: () => setModal("save") },
+                  { label: "マニュアルから追加", icon: ClipboardList, on: () => setModal("apply") },
+                  { label: "他の予定からコピー", icon: Calendar, on: () => setModal("copy") },
+                  { label: "名前をつけて保存", icon: Star, on: () => setModal("save") },
                 ].map((m) => (
                   <button
                     key={m.label}
@@ -1015,8 +1029,9 @@ export function ChecklistEditor({
                       setMoreOpen(false);
                       m.on();
                     }}
-                    className="block w-full px-3 py-2 text-left text-xs text-foreground hover:bg-surface-muted"
+                    className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs text-foreground hover:bg-surface-muted"
                   >
+                    <m.icon aria-hidden className="h-3.5 w-3.5 shrink-0" />
                     {m.label}
                   </button>
                 ))}
@@ -1091,7 +1106,7 @@ export function ChecklistEditor({
         文言・メモ・追加・削除は自動保存
         <InfoHint id="checklist-autosave">
           ∨ で通知タイミング・メモ・リンク・写真。文言もメモも、手を止めたら
-          自動で保存されます。✕ で削除。
+          自動で保存されます。<X aria-hidden className="inline h-3 w-3 align-[-1px]" /> で削除。
         </InfoHint>
       </p>
 
@@ -1108,11 +1123,12 @@ export function ChecklistEditor({
           >
             {modal === "save" && (
               <>
-                <h3 className="text-sm font-semibold text-foreground">
-                  ⭐ この{kindLabel}リストを保存
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  <Star aria-hidden className="h-4 w-4" />
+                  この{kindLabel}リストを保存
                 </h3>
                 <p className="text-[11px] text-muted">
-                  名前を付けて保存すると、どの予定でも「📋 マニュアルから」で追加できます。同じ名前は上書きします。
+                  名前を付けて保存すると、どの予定でも「マニュアルから」で追加できます。同じ名前は上書きします。
                 </p>
                 <input
                   value={tplName}
@@ -1145,12 +1161,13 @@ export function ChecklistEditor({
 
             {modal === "apply" && (
               <>
-                <h3 className="text-sm font-semibold text-foreground">
-                  📋 マニュアルから追加
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  <ClipboardList aria-hidden className="h-4 w-4" />
+                  マニュアルから追加
                 </h3>
                 {templates.length === 0 ? (
                   <p className="text-xs text-muted">
-                    まだ{kindLabel}から選べるマニュアルはありません。「⭐ 名前をつけて保存」か、マニュアルページで作成できます。
+                    まだ{kindLabel}から選べるマニュアルはありません。「名前をつけて保存」か、マニュアルページで作成できます。
                   </p>
                 ) : (
                   <>
@@ -1194,8 +1211,9 @@ export function ChecklistEditor({
 
             {modal === "copy" && (
               <>
-                <h3 className="text-sm font-semibold text-foreground">
-                  📆 他の予定から{kindLabel}をコピー
+                <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                  <Calendar aria-hidden className="h-4 w-4" />
+                  他の予定から{kindLabel}をコピー
                 </h3>
                 {pastEvents.length === 0 ? (
                   <p className="text-xs text-muted">

@@ -1,3 +1,4 @@
+import { PenLine } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { createFailureLog } from "@/app/actions";
 import { formatDateOnly } from "@/lib/format";
@@ -106,7 +107,8 @@ export async function FailuresPageProduction({ userId }: { userId: string }) {
         className="rounded-2xl border border-border bg-surface p-5"
       >
         <h2 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-          ✍️ ひとこと記録する
+          <PenLine aria-hidden className="h-4 w-4" />
+          ひとこと記録する
           <InfoHint id="failures-quick-record">
             よくあるものはボタンで一発。必須は「何が起きたか」だけ。金額・日付・カテゴリは
             聞きません（予定を選べばその予定に合わせます）。
@@ -148,7 +150,7 @@ export async function FailuresPageProduction({ userId }: { userId: string }) {
 
         {logs.length === 0 ? (
           <p className="rounded-2xl bg-surface px-4 py-10 text-center text-sm text-muted">
-            まだ記録はありません。上の「✍️ ひとこと記録する」からどうぞ。
+            まだ記録はありません。上の「ひとこと記録する」からどうぞ。
           </p>
         ) : (
           <>

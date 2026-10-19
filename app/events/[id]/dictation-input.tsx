@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Mic } from "lucide-react";
 import { buildListFromDictation } from "@/app/actions";
 
 /**
@@ -42,7 +43,8 @@ export function DictationInput({ eventId }: { eventId: string }) {
         onClick={() => setOpen(true)}
         className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-foreground hover:bg-surface-muted"
       >
-        🎤 話して作る
+        <Mic aria-hidden className="h-3.5 w-3.5" />
+        話して作る
       </button>
 
       {open && (
@@ -54,8 +56,9 @@ export function DictationInput({ eventId }: { eventId: string }) {
             className="w-full max-w-sm space-y-3 rounded-2xl bg-surface p-5 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-sm font-semibold text-foreground">
-              🎤 話して作る（音声入力から自動で振り分け）
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+              <Mic aria-hidden className="h-4 w-4" />
+              話して作る（音声入力から自動で振り分け）
             </h3>
             <p className="text-[11px] text-muted">
               スマホのキーボードの<strong>マイクキー</strong>で、準備することや持ち物を

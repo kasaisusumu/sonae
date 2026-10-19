@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { after } from "next/server";
+import { Mail } from "lucide-react";
 import { getCurrentUser } from "@/lib/session";
 import { isDevLoginEnabled } from "@/lib/dev-login";
 import { getPendingMessageReviews } from "@/lib/future-messages";
@@ -151,9 +152,10 @@ export default async function HomePage({
             <Link
               href="/failures#review"
               data-coach="message-review-nudge"
-              className="block rounded-2xl border border-teal/30 bg-teal-soft px-4 py-3 text-sm text-teal-dark no-underline hover:opacity-90"
+              className="flex items-center gap-1.5 rounded-2xl border border-teal/30 bg-teal-soft px-4 py-3 text-sm text-teal-dark no-underline hover:opacity-90"
             >
-              💌 未来の自分へのメッセージ、{pendingReviews.length}件の確定待ちがあります
+              <Mail aria-hidden className="h-4 w-4 shrink-0" />
+              未来の自分へのメッセージ、{pendingReviews.length}件の確定待ちがあります
             </Link>
           )}
         </>

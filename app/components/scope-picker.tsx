@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Circle } from "lucide-react";
 import { ScopeChip, SCOPE_CHIP } from "@/app/components/scope-chip";
 import { InfoHint } from "@/app/components/info-hint";
 import type { ItemScope } from "@/lib/item-scope";
@@ -46,11 +47,22 @@ function ScopeHintBody() {
       <p className="mb-1">
         <ScopeChip scope="keyword" status="chosen" />
       </p>
-      <p className="text-[13px]">
+      <p className="mb-3 text-[13px]">
         この予定の名前から自動でキーワードを決めて、次にそのキーワードを含む予定が
         来たときだけ出す／出さないようにします。例えば「田中さんと商談」なら
         キーワード「田中さん」が決まり、次に「田中さん」を含む予定が来たときだけ
-        出ます。∨ を開くとキーワードを直せます。
+        出ます。∨ で項目の詳細を開くと「キーワード「田中さん」」のように出るので、
+        そこで直せます（空にすると、次からは自動では一致しなくなります）。
+      </p>
+
+      <p className="mb-1 mt-4 text-sm font-semibold text-foreground">
+        「提案」と「選んだ」の違い
+      </p>
+      <p className="text-[13px]">
+        初めて出てきたときは<strong className="text-foreground">提案</strong>
+        （AIや前回のルールが決めた内容）のままです。タップして選び直すと
+        <strong className="text-foreground">選んだ</strong>になり、次に同じ条件の
+        予定を作ったときも引き続きその内容で扱われます。
       </p>
     </>
   );
@@ -108,7 +120,7 @@ export function ScopeQuickToggle({
               />
             ) : (
               <span className="pointer-events-none inline-flex items-center gap-1 rounded-full border border-border bg-surface px-2 py-px text-[11px] leading-tight text-muted">
-                {meta.icon && <span aria-hidden>{meta.icon}</span>}
+                {meta.icon && <meta.icon aria-hidden className="h-3 w-3 shrink-0" />}
                 <span className="truncate">{meta.label}</span>
               </span>
             )}
@@ -174,7 +186,11 @@ export function ScopeEmojiToggle({
             : "border-border text-muted hover:border-teal hover:text-teal-dark"
         }`}
       >
-        <span aria-hidden>{current.icon || "🔘"}</span>
+        {current.icon ? (
+          <current.icon aria-hidden className="h-4 w-4" />
+        ) : (
+          <Circle aria-hidden className="h-4 w-4" />
+        )}
       </button>
       {open && (
         <span
@@ -213,9 +229,7 @@ export function ScopeEmojiToggle({
                         : "border-border text-foreground hover:border-teal/50"
                     }`}
                   >
-                    <span aria-hidden className="text-xl leading-none">
-                      {meta.icon}
-                    </span>
+                    {meta.icon && <meta.icon aria-hidden className="h-5 w-5" />}
                     <span className="text-sm font-medium leading-none">
                       {meta.label}
                     </span>
@@ -234,6 +248,7 @@ export function ScopeEmojiToggle({
  * キーワード条件を「文章」の形で設定する、任意のオプション欄（詳細を開いたときだけ出す）。
  * 「『＿＿』のとき」の空欄に書き込む形にして、生の項目名入力に見えないようにする。
  * 空にして確定すると、キーワード指定をやめる（呼び出し元の onClear）。
+ * `compact` については下の props コメント参照。
  */
 export function KeywordSentenceField({
   initialKeyword,
@@ -241,12 +256,20 @@ export function KeywordSentenceField({
   onClear,
   pending,
   placeholder = "ホテル",
+  compact = false,
 }: {
   initialKeyword: string;
   onCommit: (keyword: string) => void;
   onClear: () => void;
   pending?: boolean;
   placeholder?: string;
+  /**
+   * true: 「キーワード「＿＿」」だけの簡潔な表記にする（「次回の出し方」の
+   * 三択とセットで出す場所用。説明は呼び出し元のⓘ（ScopeHintBody）に任せる）。
+   * 既定 false: 「キーワードを直すなら「＿＿」のとき」という説明つきの表記
+   * （三択の概念が無い「未来の自分へ」等の単独使用はこちら）。
+   */
+  compact?: boolean;
 }) {
   const [value, setValue] = useState(initialKeyword);
 
@@ -261,7 +284,7 @@ export function KeywordSentenceField({
 
   return (
     <div className="flex flex-wrap items-center gap-1 text-sm text-foreground">
-      <span className="text-muted">キーワードを直すなら「</span>
+      <span className="text-muted">{compact ? "キーワード「" : "キーワードを直すなら「"}</span>
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -277,7 +300,7 @@ export function KeywordSentenceField({
         className="min-w-0 flex-1 basis-24 rounded-md border border-border bg-background px-2 py-0.5 text-sm text-foreground"
         aria-label="キーワード"
       />
-      <span className="text-muted">」のとき</span>
+      <span className="text-muted">{compact ? "」" : "」のとき"}</span>
       {pending && <span className="text-[11px] text-muted">保存中…</span>}
     </div>
   );

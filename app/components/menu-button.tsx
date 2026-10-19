@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Menu, X } from "lucide-react";
 import { logout } from "@/app/actions";
 
 const NAV: [string, string][] = [
@@ -61,9 +62,7 @@ export function MenuButton() {
         onClick={() => setOpen(true)}
         className="-ml-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-surface-muted"
       >
-        <span aria-hidden className="text-lg leading-none">
-          ☰
-        </span>
+        <Menu aria-hidden className="h-5 w-5" />
       </button>
 
       {open && (
@@ -83,7 +82,7 @@ export function MenuButton() {
                 onClick={() => setOpen(false)}
                 className="rounded-lg px-2 py-1 text-muted hover:bg-surface-muted"
               >
-                ✕
+                <X aria-hidden className="h-4 w-4" />
               </button>
             </div>
 

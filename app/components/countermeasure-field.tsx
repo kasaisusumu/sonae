@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Mic } from "lucide-react";
 import { tidyCountermeasureDictation } from "@/app/actions";
 
 /**
@@ -60,9 +61,16 @@ export function CountermeasureField({
         type="button"
         onClick={tidy}
         disabled={pending || !value.trim()}
-        className="text-[11px] text-teal-dark underline hover:text-foreground disabled:opacity-50"
+        className="inline-flex items-center gap-1 text-[11px] text-teal-dark underline hover:text-foreground disabled:opacity-50"
       >
-        {pending ? "整えています…" : "🎤 話した内容をAIで整える"}
+        {pending ? (
+          "整えています…"
+        ) : (
+          <>
+            <Mic aria-hidden className="h-3 w-3" />
+            話した内容をAIで整える
+          </>
+        )}
       </button>
     </div>
   );

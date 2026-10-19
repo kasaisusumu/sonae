@@ -6,8 +6,10 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 import { usePathname } from "next/navigation";
+import { Mail, Menu, Mic, Pin, Repeat, Tag } from "lucide-react";
 import { trackFeatureUse } from "@/app/actions";
 
 /**
@@ -19,7 +21,7 @@ import { trackFeatureUse } from "@/app/actions";
 
 type Step = {
   sel: string;
-  title: string;
+  title: ReactNode;
   body: string;
   /** trueなら ver2（テスト版モード）のときだけ出す（該当要素はver1には存在しない）。 */
   testOnly?: boolean;
@@ -35,6 +37,12 @@ type Tour = {
    * 「ページを開いた時」と「初めて項目を追加した時」の2部に分割した）。
    */
   auto?: boolean;
+  /**
+   * 指定すると、そのモード（ver1=production / ver2=test）のときだけこのツアーを対象にする。
+   * 省略時は両モード共通。/failures のように、モードごとに別コンポーネント
+   * （data-coach の対象要素）が出るページで使う（同じ path に複数ツアーを出し分ける）。
+   */
+  modeOnly?: "test" | "production";
 };
 
 const FLAG_PREFIX = "mm_coach_";
@@ -46,7 +54,11 @@ const TOURS: Tour[] = [
     steps: [
       {
         sel: '[data-coach="menu"]',
-        title: "困ったら左上の ☰",
+        title: (
+          <>
+            困ったら左上の <Menu aria-hidden className="inline h-4 w-4" />
+          </>
+        ),
         body: "使い方・チュートリアル・注意・ページ移動は、いつでもここから開けます。",
       },
     ],
@@ -83,8 +95,17 @@ const TOURS: Tour[] = [
       },
       {
         sel: '[data-coach="future-message"]',
-        title: "💌 過去の自分よりメッセージ",
+        title: (
+          <span className="inline-flex items-center gap-1">
+            <Mail aria-hidden className="h-4 w-4" />
+            過去の自分よりメッセージ
+          </span>
+        ),
         body: "いつか思い出したいことを書いておくと、次に似た予定が入ったときに知らせます。",
+        // ver1（本番版）はこの枠の代わりに「考えられる失敗」が出るため対象が無い
+        // （2026-10-19修正。以前は testOnly が無く、本番版でこの1ステップだけ
+        // 対象が見つからず無駄に待ってから飛ばされていた）。
+        testOnly: true,
       },
     ],
   },
@@ -103,8 +124,15 @@ const TOURS: Tour[] = [
       },
       {
         sel: '[data-coach="item-scope"]',
-        title: "📌🔁🏷 次回の出し方",
-        body: "この項目を次も出すかを選べます。📌今回だけ／🔁似た予定（用途が同じ予定にもAIが判断して出す）／🏷この名前（予定名からキーワードを決め、そのキーワードを含む予定にだけ出す）。タップで選び直せます。",
+        title: (
+          <span className="inline-flex items-center gap-1">
+            <Pin aria-hidden className="h-3.5 w-3.5" />
+            <Repeat aria-hidden className="h-3.5 w-3.5" />
+            <Tag aria-hidden className="h-3.5 w-3.5" />
+            次回の出し方
+          </span>
+        ),
+        body: "この項目を次も出すかを選べます。今回だけ／似た予定（用途が同じ予定にもAIが判断して出す）／この名前（予定名からキーワードを決め、そのキーワードを含む予定にだけ出す）。タップで選び直せます。",
         testOnly: true,
       },
       {
@@ -115,8 +143,12 @@ const TOURS: Tour[] = [
     ],
   },
   {
+    // ver2（テスト版）の /failures（未来の自分へ）。本番版は別コンポーネント
+    // （対象要素が異なる）なので modeOnly で出し分ける（以前はここが無く、
+    // 本番版で対象要素が見つからずツアーが空振りしていた不具合。2026-10-19修正）。
     key: "messages_v1",
     match: (p) => p === "/failures",
+    modeOnly: "test",
     steps: [
       {
         sel: '[data-coach="message-new"]',
@@ -125,13 +157,48 @@ const TOURS: Tour[] = [
       },
       {
         sel: '[data-coach="message-dictation"]',
-        title: "🎤 声でも記録できます",
+        title: (
+          <span className="inline-flex items-center gap-1">
+            <Mic aria-hidden className="h-4 w-4" />
+            声でも記録できます
+          </span>
+        ),
         body: "話すだけでAIが本文・キーワード・ジャンルをまとめます。マイクキーからどうぞ。",
       },
       {
         sel: '[data-coach="message-list"]',
         title: "登録した内容を確認・編集",
         body: "いつでも直したり、過去に移したり、削除したりできます。",
+      },
+    ],
+  },
+  {
+    // ver1（本番版）の /failures（失敗ログ）。message-new 等の test 版と対になる、
+    // fail-new 等の要素を対象にする（2026-10-19追加。この組が無かったため本番版では
+    // 空振りしていた）。
+    key: "failures_prod_v1",
+    match: (p) => p === "/failures",
+    modeOnly: "production",
+    steps: [
+      {
+        sel: '[data-coach="fail-new"]',
+        title: "ひとこと記録する",
+        body: "必須は「何が起きたか」だけ。予定を選べばその予定に、選ばなければカテゴリ全体の記録になります。",
+      },
+      {
+        sel: '[data-coach="fail-dictation"]',
+        title: (
+          <span className="inline-flex items-center gap-1">
+            <Mic aria-hidden className="h-4 w-4" />
+            声でも記録できます
+          </span>
+        ),
+        body: "話すだけでAIが内容・対策を整えます。マイクキーからどうぞ。",
+      },
+      {
+        sel: '[data-coach="fail-list"]',
+        title: "登録した内容を確認・編集",
+        body: "これからの失敗予測・過去の振り返り・予定に紐づかない記録を、分けて確認できます。",
       },
     ],
   },
@@ -162,7 +229,11 @@ const TOURS: Tour[] = [
     steps: [
       {
         sel: '[data-coach="menu"]',
-        title: "困ったら左上の ☰",
+        title: (
+          <>
+            困ったら左上の <Menu aria-hidden className="inline h-4 w-4" />
+          </>
+        ),
         body: "使い方・チュートリアル・注意・ページ移動は、いつでもここから。",
       },
       {
@@ -202,6 +273,12 @@ function filterTourForMode(t: Tour, isProductionMode: boolean): Tour {
   return { ...t, steps: t.steps.filter((s) => !s.testOnly) };
 }
 
+/** modeOnly が指定されたツアーは、該当するモードのときだけ対象にする。 */
+function matchesMode(t: Tour, isProductionMode: boolean): boolean {
+  if (!t.modeOnly) return true;
+  return t.modeOnly === (isProductionMode ? "production" : "test");
+}
+
 export function PageCoach({
   tutorialDone = false,
   isProductionMode = false,
@@ -238,7 +315,10 @@ export function PageCoach({
   // auto: false のツアーはここでは拾わない（明示的なトリガーでのみ開始）。
   useEffect(() => {
     let cancelled = false;
-    const found = TOURS.find((x) => x.auto !== false && x.match(pathname)) ?? null;
+    const found =
+      TOURS.find(
+        (x) => x.auto !== false && x.match(pathname) && matchesMode(x, isProductionMode),
+      ) ?? null;
     const t = found ? filterTourForMode(found, isProductionMode) : null;
 
     // まず今の表示をリセット（effect 内の同期 setState を避けてマイクロタスクで）
@@ -306,7 +386,10 @@ export function PageCoach({
   // このページにツアーが無ければ何もしない。
   useEffect(() => {
     const onOpen = () => {
-      const found = TOURS.find((x) => x.auto !== false && x.match(pathname)) ?? null;
+      const found =
+        TOURS.find(
+          (x) => x.auto !== false && x.match(pathname) && matchesMode(x, isProductionMode),
+        ) ?? null;
       const t = found ? filterTourForMode(found, isProductionMode) : null;
       if (!t) return;
       try {

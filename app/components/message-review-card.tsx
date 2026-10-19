@@ -1,5 +1,6 @@
 "use client";
 
+import { Coffee } from "lucide-react";
 import { useState, useTransition } from "react";
 import {
   confirmMessageReviewAction,
@@ -110,8 +111,9 @@ export function MessageReviewCard({
   return (
     <section className="space-y-3 rounded-2xl border border-border bg-surface p-5">
       <div>
-        <h2 className="text-sm font-semibold text-foreground">
-          {eventTitle}、おつかれさまでした 🍵
+        <h2 className="flex items-center gap-1 text-sm font-semibold text-foreground">
+          {eventTitle}、おつかれさまでした
+          <Coffee aria-hidden className="h-4 w-4" />
         </h2>
         <p className="mt-1 text-xs text-muted">
           次回への引き継ぎ内容を提案しました。直すところだけ直して確定してください。

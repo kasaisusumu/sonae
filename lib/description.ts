@@ -118,7 +118,7 @@ export interface BuildBlockOpts {
   /** 失敗の予想／結果（本番版）。中身のある枠だけ書き出す（無ければ見出しごと出さない）。 */
   failures?: DescFailureSections;
   /**
-   * 最終更新時刻。指定すると START の直下に「最終更新: …」を書く。
+   * 最終更新時刻。指定するとブロック末尾（END の直前）に「最終更新: …」を書く。
    * 省略時はその行自体を出さない（＝実際に書き込む内容が変わっていないかを
    * ハッシュ比較するときは渡さない。渡すと比較のたびに値が変わって無限に
    * 書き込みが発生してしまうため）。
@@ -217,7 +217,6 @@ export function buildSonaeBlock(
   ).filter((k) => !k.startsWith("@")); // "@faillog" 等の特別キーは説明欄に出さない
 
   const lines = [START];
-  if (opts.updatedAt) lines.push(`最終更新: ${formatUpdatedAt(opts.updatedAt)}`);
   lines.push(`準備リスト: ${url}`);
   if (opts.unreviewed) lines.push("", UNREVIEWED_NOTE);
 
@@ -236,6 +235,10 @@ export function buildSonaeBlock(
     lines.push(...group.map(bullet));
   }
 
+  // 最終更新時刻は末尾の行に書く（ユーザー指摘により2026-10-19。先頭だと
+  // 準備リストより上に目立ってしまい、カレンダー上で毎回ここだけ見えるのが
+  // 煩わしいとのこと）。
+  if (opts.updatedAt) lines.push(`最終更新: ${formatUpdatedAt(opts.updatedAt)}`);
   lines.push(END);
   return lines.join("\n");
 }

@@ -63,9 +63,10 @@ function ScopeHintBody({ scopes }: { scopes: QuickScope[] }) {
           <p className="mb-3 text-[13px]">
             この予定の名前から自動でキーワードを決めて、次にそのキーワードを含む予定が
             来たときだけ出す／出さないようにします。例えば「田中さんと商談」なら
-            キーワード「田中さん」が決まり、次に「田中さん」を含む予定が来たときだけ
-            出ます。∨ で項目の詳細を開くと「キーワード「田中さん」」のように出るので、
-            そこで直せます（空にすると、次からは自動では一致しなくなります）。
+            キーワード「田中さん」「商談」が決まり、次にどちらかを含む予定が来たときだけ
+            出ます。∨ で項目の詳細を開くと「キーワード「田中さん、商談」」のように出るので、
+            そこで直せます（「、」で区切ると複数指定できます。空にすると、次からは
+            自動では一致しなくなります）。
           </p>
         </>
       )}
@@ -274,9 +275,10 @@ export function KeywordSentenceField({
   onCommit,
   onClear,
   pending,
-  placeholder = "ホテル",
+  placeholder = "ホテル、出張",
   compact = false,
 }: {
+  /** 複数キーワードは「、」区切りの1つの文章として渡す（例: "ホテル、出張"）。 */
   initialKeyword: string;
   onCommit: (keyword: string) => void;
   onClear: () => void;
@@ -317,7 +319,7 @@ export function KeywordSentenceField({
         placeholder={placeholder}
         disabled={pending}
         className="min-w-0 flex-1 basis-24 rounded-md border border-border bg-background px-2 py-0.5 text-sm text-foreground"
-        aria-label="キーワード"
+        aria-label="キーワード（「、」区切りで複数指定できます）"
       />
       <span className="text-muted">{compact ? "」" : "」のとき"}</span>
       {pending && <span className="text-[11px] text-muted">保存中…</span>}

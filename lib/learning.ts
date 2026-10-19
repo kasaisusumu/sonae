@@ -9,7 +9,7 @@ import {
 } from "@/lib/signature";
 import { resolveSections, sectionLabel } from "@/lib/sections";
 import { normTitle } from "@/lib/text-norm";
-import { firstRuleKeyword } from "@/lib/item-scope";
+import { displayRuleKeywords } from "@/lib/item-scope";
 import { classifyItemPattern } from "@/lib/pattern-classify";
 import {
   LINKED_MESSAGE_STATUSES,
@@ -809,7 +809,7 @@ export async function getLearningNameTree(userId: string): Promise<{
               scope: r.scope,
               status: r.status,
               reason: r.reason,
-              keyword: r.rule ? firstRuleKeyword(r.rule.keywords) : null,
+              keyword: r.rule ? displayRuleKeywords(r.rule.keywords) : null,
             };
           })(),
           notifyLeadMinutes: i.notifyLeadMinutes,

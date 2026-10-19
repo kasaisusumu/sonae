@@ -49,3 +49,17 @@ export function extractKeywords(eventTitle: string): string[] {
   const fallback = eventTitle.trim();
   return fallback ? [fallback.slice(0, 60)] : [];
 }
+
+/**
+ * 「キーワードを直すなら」欄にユーザーが手入力した文章から、キーワードを複数取り出す
+ * （「、」「,」で区切れば複数指定できる。区切りが無ければ1語のまま）。
+ * 一致判定はOR（どれか1つ含めば一致）。
+ */
+export function splitUserKeywords(text: string): string[] {
+  const parts = text
+    .split(/[、,，]+/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => p.slice(0, 60));
+  return [...new Set(parts)].slice(0, 10);
+}

@@ -11,7 +11,12 @@
  * - 範囲の一致判定は lib/scope-match.ts に任せる（ここは保存と提案だけ）。
  */
 import { prisma } from "@/lib/prisma";
-import { looksTooSpecific, normTitle, extractKeywords } from "@/lib/text-norm";
+import {
+  looksTooSpecific,
+  normTitle,
+  extractKeywords,
+  splitUserKeywords,
+} from "@/lib/text-norm";
 import type { EventFeatureData } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
 import {
@@ -76,16 +81,18 @@ async function buildRuleData(
     sourceEventTitle: input.eventTitle,
   };
   if (scope === "keyword") {
-    // rec.keyword があるのは、ユーザーが文章で指定した単一のキーワード
-    // （setItemKeywordScope）のときだけ。それ以外（「この名前」のクイック選択・
-    // バージョン切替時の自動設定）は、予定名を分解した複数語を使う（どれか1つに
-    // 一致すればよい・ユーザー指摘により2026-10-20:「タイトルを分解してできるだけ
-    // 複数キーワードを抽出して」「ORでよかった」）。
+    // rec.keyword があるのは、ユーザーが文章で指定したキーワード
+    // （setItemKeywordScope）のときだけ。「、」「,」で区切れば複数指定できる
+    // （splitUserKeywords）。それ以外（「この名前」のクイック選択・バージョン切替時の
+    // 自動設定）は、予定名を分解した複数語を使う（どれか1つに一致すればよい・
+    // ユーザー指摘により2026-10-20:「タイトルを分解してできるだけ複数キーワードを
+    // 抽出して」「ORでよかった」）。
     if (rec.keyword) {
+      const kws = splitUserKeywords(rec.keyword);
       return {
         ...base,
         scope,
-        keywords: stringifyStrArray([rec.keyword]),
+        keywords: stringifyStrArray(kws.length > 0 ? kws : [rec.keyword]),
         genres: "[]",
         genreKeywords: "[]",
         categoryIds: "[]",
@@ -338,7 +345,7 @@ export async function proposeScopesForSave(input: {
       const priorScope = priorRule.scope as "keyword" | "similar";
       rec = {
         scope: priorScope,
-        keyword: priorScope === "keyword" ? firstRuleKeyword(priorRule.keywords) : null,
+        keyword: priorScope === "keyword" ? displayRuleKeywords(priorRule.keywords) : null,
         genre: priorRule.scope !== "keyword" ? (parseJsonArray(priorRule.genres)[0] ?? null) : null,
         reason: "前回この名前で決めた範囲のまま",
         source: "default",
@@ -413,9 +420,10 @@ export async function setItemKeywordScope(input: {
   scope: EventScopeInput;
   kind: string;
   title: string;
+  /** 「、」「,」で区切ると複数指定できる（splitUserKeywords、buildRuleData側で分割）。 */
   keyword: string;
 }): Promise<void> {
-  const keyword = input.keyword.trim().slice(0, 60);
+  const keyword = input.keyword.trim().slice(0, 600);
   if (!keyword) return;
   await saveScopeForItem(
     input.scope,
@@ -460,7 +468,7 @@ export async function loadEventScopeMap(
         scope: r.scope as ItemScope,
         status: r.status,
         reason: r.reason,
-        keyword: r.rule ? firstRuleKeyword(r.rule.keywords) : null,
+        keyword: r.rule ? displayRuleKeywords(r.rule.keywords) : null,
       },
     ]),
   );
@@ -509,8 +517,15 @@ export function describeScopeRule(rule: {
 }
 
 /** ルールの keywords（JSON文字列）の先頭1件。文章欄の初期値に使う。 */
-export function firstRuleKeyword(raw: string): string | null {
-  return parseJsonArray(raw)[0] ?? null;
+/**
+ * ルールのキーワード（JSON文字列）を、「キーワードを直すなら」欄の初期値用に
+ * 全部まとめて1つの文章にする（「、」区切り）。以前は先頭の1件だけを返していたため、
+ * 自動抽出で複数になったキーワードが画面では1つしか見えない不具合があった
+ * （ユーザー指摘により2026-10-20）。
+ */
+export function displayRuleKeywords(raw: string): string | null {
+  const arr = parseJsonArray(raw);
+  return arr.length > 0 ? arr.join("、") : null;
 }
 
 function parseJsonArray(raw: string): string[] {

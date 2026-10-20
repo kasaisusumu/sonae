@@ -88,19 +88,23 @@ export function BottomNav({
     BASE_TABS[3],
   ];
 
-  // キーボードが出ている間はバーを出さない（せり上がり防止）。
-  if (keyboardOpen) return null;
-
   return (
     <nav
       data-coach="bottom-nav"
+      aria-hidden={keyboardOpen}
       // position: fixed だと、スマホのブラウザのツールバー（アドレスバー）が
       // スクロールで自動的に隠れる/出るたびに、バーの位置が追いつくように
       // 一瞬ジャンプして見える不具合があった（ユーザー指摘により2026-10-20:
       // 「使ってる時に下のバーが上がってくる」＝キーボードではなくスクロール中）。
       // sticky にして通常のレイアウトの一部にすると、この追従ジャンプが起きない
       // （body が flex flex-col のレイアウトなので、このバーが一番下に来る）。
-      className="sticky bottom-0 z-20 border-t border-border bg-surface sm:hidden"
+      // キーボードが出ている間は、以前は return null（即消える／即出る）していたが、
+      // キーボードが閉じた瞬間に何もアニメーションせず突然現れるのが「バーが上がって
+      // 来る」ように見えていた（ユーザー指摘により2026-10-20）。transform + transition
+      // でスライドさせ、現れ方を滑らかにする。
+      className={`sticky bottom-0 z-20 border-t border-border bg-surface transition-transform duration-150 sm:hidden ${
+        keyboardOpen ? "pointer-events-none translate-y-full" : "translate-y-0"
+      }`}
     >
       <ul
         className="mx-auto flex max-w-3xl px-2 pt-1.5"

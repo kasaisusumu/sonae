@@ -260,8 +260,13 @@ async function saveScopeForItem(
   // 同じ項目（kind+normTitle+action）を持つ「他の」予定の行も連動して更新する
   // （ユーザー指摘により2026-10-20:「学習元が複数あって三択も複数保存されちゃうけど、
   // そのうちの一つの三択が変更されたら、全部連動して変更するようにして」）。
-  // event_only／auto はこの予定限定の選択で共有ルールを持たない（rule が無い）ため対象外。
-  if (rule) {
+  // event_only も対象にする: 上の archive-all で共有ルールが archive 済みになるため、
+  // 他の予定の行を素通りさせると「ルールが無い＝未決定」の自動キーワード設定
+  // （undecided 側）に落ちて勝手に「この名前」へ書き換えられてしまっていた
+  // （ユーザー指摘により2026-10-20:「『今回だけ』にしてあるやつが『この名前』に
+  // 変わった状態で提案に出てきてしまっている」）。event_only は ruleId を null にして
+  // 連動させる。auto はクイック選択に無い内部値なのでここには来ない想定。
+  if (scope === "event_only") {
     await prisma.eventChecklistScope.updateMany({
       where: {
         userId: input.userId,
@@ -271,7 +276,19 @@ async function saveScopeForItem(
         eventId: { not: input.eventId },
         status: { not: "dropped" },
       },
-      data: { scope, ruleId: rule.id, reason: rec.reason },
+      data: { scope, ruleId: null, reason: rec.reason, status: "chosen" },
+    });
+  } else if (rule) {
+    await prisma.eventChecklistScope.updateMany({
+      where: {
+        userId: input.userId,
+        kind,
+        normTitle: nt,
+        action,
+        eventId: { not: input.eventId },
+        status: { not: "dropped" },
+      },
+      data: { scope, ruleId: rule.id, reason: rec.reason, status: "chosen" },
     });
   }
 }

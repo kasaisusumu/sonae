@@ -94,7 +94,13 @@ export function BottomNav({
   return (
     <nav
       data-coach="bottom-nav"
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface sm:hidden"
+      // position: fixed だと、スマホのブラウザのツールバー（アドレスバー）が
+      // スクロールで自動的に隠れる/出るたびに、バーの位置が追いつくように
+      // 一瞬ジャンプして見える不具合があった（ユーザー指摘により2026-10-20:
+      // 「使ってる時に下のバーが上がってくる」＝キーボードではなくスクロール中）。
+      // sticky にして通常のレイアウトの一部にすると、この追従ジャンプが起きない
+      // （body が flex flex-col のレイアウトなので、このバーが一番下に来る）。
+      className="sticky bottom-0 z-20 border-t border-border bg-surface sm:hidden"
     >
       <ul
         className="mx-auto flex max-w-3xl px-2 pt-1.5"

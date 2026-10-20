@@ -171,7 +171,9 @@ export default async function RootLayout({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-8 pb-28 sm:pb-10">
+        {/* pb-28 だった下のゆとりは、下のバーが固定(fixed)で本文に重なっていた
+            名残（ユーザー指摘により2026-10-20、バーを sticky にしたため不要）。 */}
+        <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-8 pb-10">
           {children}
         </main>
 

@@ -2,7 +2,11 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normTitle } from "@/lib/text-norm";
 import { normalizeMatchText } from "@/lib/future-messages";
-import { buildChecklistForEvent, type BuiltItem } from "@/lib/suggest";
+import {
+  buildChecklistForEvent,
+  appendScopeMatchedItems,
+  type BuiltItem,
+} from "@/lib/suggest";
 import { syncEventDescription } from "@/lib/description-sync";
 import { parseLeads, stringifyLeads } from "@/lib/lead-time";
 import {
@@ -90,6 +94,11 @@ export async function generateAndSaveChecklist(
     const twinId = await findNameGroupTwinWithList(eventId);
     if (twinId) {
       await copyChecklistItems(twinId, eventId);
+      // コピー元（同名の中で listCustomized=false のうち最新の1件）には無い項目でも、
+      // キーワード／似た予定ルールに一致するものは追加する（ユーザー指摘により
+      // 2026-10-20: 同名の予定のうち別の1件だけが切り離され独自の枠を持っていた場合、
+      // その枠の項目がキーワード一致していても一切反映されなかった）。
+      await appendScopeMatchedItems(eventId);
       return;
     }
   }

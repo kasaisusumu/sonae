@@ -544,3 +544,100 @@ export async function buildChecklistForEvent(
     customSectionSeeds: recalled?.customSectionSeeds ?? [],
   };
 }
+
+/**
+ * 同名グループのコピー（lib/checklist.ts の copyChecklistItems）の直後に呼ぶ。
+ * コピー元に選ばれた1件（未編集・listCustomized=false の中で最新のもの）には無い
+ * 項目でも、キーワード／似た予定の範囲ルールに一致するものは追加する。
+ *
+ * 背景（ユーザー指摘により2026-10-20）: 同名の予定が複数あり、そのうち1件だけを
+ * ユーザーが個別に編集して切り離していた（listCustomized=true、独自の持ち物枠を
+ * 追加していた）場合、新しい同名の予定はコピー元になれる方（listCustomized=false）
+ * だけからコピーされるため、切り離された方だけにあった項目（例:
+ * 「アニベルセル持ち物」枠の「白インナー」）が、その項目用のキーワードルールが
+ * 存在していても一切反映されなかった。既存の項目は変更・削除せず、一致した項目を
+ * 追加するだけ（除外ルールはここでは扱わない。安全側の「増えるだけ」の動作）。
+ */
+export async function appendScopeMatchedItems(eventId: string): Promise<void> {
+  const event = await prisma.event.findUnique({
+    where: { id: eventId },
+    include: { category: true },
+  });
+  if (!event) return;
+
+  const scopeRules = (await loadActiveScopeRules(event.userId)).filter(
+    (r) => r.scope !== "genre",
+  );
+  if (scopeRules.length === 0) return;
+
+  const existing = await prisma.checklistItem.findMany({
+    where: { eventId },
+    select: { kind: true, title: true },
+  });
+  const present = new Set(
+    existing.map((i) => `${i.kind}:${normTitle(i.title)}`),
+  );
+
+  const feature = extractEventFeature({
+    title: event.title,
+    memo: event.memo,
+    eventDatetime: event.eventDatetime,
+    endDatetime: event.endDatetime,
+  });
+  const candidateTitles = existing.map((i) => i.title).join("\n");
+  const decisions = resolveScopeRules(scopeRules, {
+    text: `${event.title}\n${stripSonaeBlock(event.memo)}\n${candidateTitles}`,
+    categoryId: event.categoryId,
+    feature,
+  });
+
+  const toAdd = [...decisions.values()].filter(
+    (d) =>
+      d.action === "include" &&
+      !present.has(`${d.kind}:${normTitle(d.title)}`),
+  );
+  if (toAdd.length === 0) return;
+
+  await prisma.checklistItem.createMany({
+    data: toAdd.map((d, i) => ({
+      eventId: event.id,
+      kind: d.kind,
+      title: d.title.trim(),
+      sortOrder: existing.length + i,
+      isSuggested: false,
+      suggestionType: null,
+      suggestionRuleId: null,
+      suggestionValue: null,
+    })),
+  });
+
+  await Promise.all(
+    toAdd.map((d) =>
+      prisma.eventChecklistScope
+        .upsert({
+          where: {
+            eventId_kind_normTitle: {
+              eventId: event.id,
+              kind: d.kind,
+              normTitle: normTitle(d.title),
+            },
+          },
+          update: { scope: d.scope, ruleId: d.ruleId, reason: d.reason },
+          create: {
+            userId: event.userId,
+            eventId: event.id,
+            kind: d.kind,
+            normTitle: normTitle(d.title),
+            title: d.title,
+            action: "include",
+            scope: d.scope,
+            ruleId: d.ruleId,
+            reason: d.reason,
+            source: "default",
+            status: "chosen",
+          },
+        })
+        .catch(() => {}),
+    ),
+  );
+}

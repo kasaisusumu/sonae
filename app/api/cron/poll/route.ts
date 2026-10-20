@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { syncAndNotify } from "@/lib/sync";
+import { syncAndNotify, refineFallbackCategories } from "@/lib/sync";
 import { ensureWatch } from "@/lib/google";
 import { notifyPendingMessageReviews } from "@/lib/future-messages";
 import { notifyPostEventFailureChecks } from "@/lib/failures";
@@ -56,13 +56,21 @@ async function handler(req: NextRequest) {
 
   for (const { userId } of accounts) {
     try {
+      // 取り込み時のAIカテゴリ判定（学習元が無い＝ルールで決まらない予定名の
+      // とき）を同期に挟むと、その分だけ通知が遅れていた（ユーザー指摘により
+      // 2026-10-20）。webhook と同じく、取り込みは keyword だけで高速にし、
+      // カテゴリの精緻化は通知を送った後に回す。
       const result = await syncAndNotify(userId, {
         generateBudget: Math.max(0, genBudget),
+        skipAiCategory: true,
       });
       totalNew += result.newEvents.length;
       notified += result.isFirstSync ? 0 : result.newEvents.length;
       generated += result.generated;
       genBudget -= result.generated;
+      await refineFallbackCategories(userId).catch((e) =>
+        console.error("[cron/poll] カテゴリ精緻化に失敗 userId=%s", userId, e),
+      );
       if (await ensureWatch(userId)) watches++;
       const mode = await getFeatureMode(userId);
       postChecks += isFailureLogEnabled(mode)

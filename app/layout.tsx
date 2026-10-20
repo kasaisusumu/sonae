@@ -114,7 +114,11 @@ export default async function RootLayout({
 
   return (
     <html lang="ja" className={`${geistSans.variable} h-full`}>
-      <body className="min-h-full flex flex-col bg-background text-foreground">
+      {/* min-h-dvh（min-h-full だと短いページで下のバーが画面下端まで届かず
+          浮いて見えた。ユーザー指摘により2026-10-20: 「予定ページに戻るとバーが
+          浮く」。dvh は実際に表示されているビューポート高さに追従するため、
+          ツールバーの伸縮があっても画面の一番下に届く）。 */}
+      <body className="min-h-dvh flex flex-col bg-background text-foreground">
         <SwRegister />
         {isLoggedIn ? <LiveSync /> : null}
         {isLoggedIn && isProductionMode ? <PreventGoals /> : null}

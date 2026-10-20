@@ -279,6 +279,20 @@ async function copyChecklistItems(
       where: { eventId: fromEventId, status: { not: "dropped" } },
     }),
   ]);
+
+  // 「今回だけ」(event_only) は、その予定限定という意味そのものなので、
+  // 同名の別の予定へは一切引き継がない（ユーザー指摘により2026-10-20:
+  // 「『今回だけ』になってるやつ、次の提案で出てきてしまっている」）。
+  const eventOnlyKeys = new Set(
+    srcScopes
+      .filter((s) => s.scope === "event_only")
+      .map((s) => `${s.kind}:${s.normTitle}`),
+  );
+  const copyableSrc = src.filter(
+    (it) => !eventOnlyKeys.has(`${it.kind}:${normTitle(it.title)}`),
+  );
+  const copyableScopes = srcScopes.filter((s) => s.scope !== "event_only");
+
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({ where: { eventId: toEventId } }),
     // 枠（セクション）の構成と「全消し」状態もコピー元に合わせる（同名グループの整合）
@@ -290,10 +304,10 @@ async function copyChecklistItems(
         listCleared: fromEvent?.listCleared ?? false,
       },
     }),
-    ...(src.length > 0
+    ...(copyableSrc.length > 0
       ? [
           prisma.checklistItem.createMany({
-            data: src.map((it) => ({
+            data: copyableSrc.map((it) => ({
               eventId: toEventId,
               kind: it.kind,
               title: it.title,
@@ -310,12 +324,12 @@ async function copyChecklistItems(
           }),
         ]
       : []),
-    ...(srcScopes.length > 0 && fromEvent
+    ...(copyableScopes.length > 0 && fromEvent
       ? [
           // 既に toEventId 側で決まっている項目（ユーザーが選び直した等）は
           // 上書きしない（skipDuplicates。@@unique([eventId, kind, normTitle])）。
           prisma.eventChecklistScope.createMany({
-            data: srcScopes.map((s) => ({
+            data: copyableScopes.map((s) => ({
               userId: fromEvent.userId,
               eventId: toEventId,
               kind: s.kind,
@@ -625,13 +639,26 @@ async function findCustomSectionSeedsFromNameGroup(
 
   const pickedByKind = new Map<string, SeedItem[]>();
   for (const siblingId of matchingIds) {
-    const items = await prisma.checklistItem.findMany({
-      where: { eventId: siblingId, isSuggested: false },
-      orderBy: { sortOrder: "asc" },
-      select: { kind: true, title: true, notifyLeadMinutes: true },
-    });
+    const [items, scopes] = await Promise.all([
+      prisma.checklistItem.findMany({
+        where: { eventId: siblingId, isSuggested: false },
+        orderBy: { sortOrder: "asc" },
+        select: { kind: true, title: true, notifyLeadMinutes: true },
+      }),
+      prisma.eventChecklistScope.findMany({
+        where: { eventId: siblingId, scope: "event_only" },
+        select: { kind: true, normTitle: true },
+      }),
+    ]);
+    // 「今回だけ」(event_only) は、その予定限定という意味そのものなので、
+    // 他の同名予定への「切り出した枠」の引き継ぎにも含めない（ユーザー指摘により
+    // 2026-10-20:「『今回だけ』になってるやつ、次の提案で出てきてしまっている」）。
+    const eventOnlyKeys = new Set(
+      scopes.map((s) => `${s.kind}:${s.normTitle}`),
+    );
     const kindsHere = new Set(
       items
+        .filter((i) => !eventOnlyKeys.has(`${i.kind}:${normTitle(i.title)}`))
         .map((i) => i.kind)
         .filter((k) => !isBuiltinSection(k) && !alreadyCoveredKinds.has(k)),
     );
@@ -640,7 +667,11 @@ async function findCustomSectionSeedsFromNameGroup(
       pickedByKind.set(
         kind,
         items
-          .filter((i) => i.kind === kind)
+          .filter(
+            (i) =>
+              i.kind === kind &&
+              !eventOnlyKeys.has(`${i.kind}:${normTitle(i.title)}`),
+          )
           .map((i) => ({
             kind: i.kind,
             title: i.title,

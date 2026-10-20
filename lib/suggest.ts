@@ -416,12 +416,18 @@ export async function buildChecklistForEvent(
           where,
           include: { rule: true },
         });
+        // 「今回だけ」(event_only) はそもそもルールを持たない設計（buildRuleData が
+        // null を返す）なので、existing.rule が無いことをもって「使えない」と
+        // 判定してはいけない。status が chosen の event_only は常に尊重する
+        // （ユーザー指摘により2026-10-20:「『今回だけ』にしてあるやつが
+        // 『この名前』に変わった状態で提案に出てきてしまっている」）。
         const existingUsable =
           existing?.status === "chosen" &&
-          existing.rule &&
-          !existing.rule.archivedAt &&
-          (existing.rule.scope !== "keyword" ||
-            parseStrArray(existing.rule.keywords).length > 0);
+          (existing.scope === "event_only" ||
+            (existing.rule &&
+              !existing.rule.archivedAt &&
+              (existing.rule.scope !== "keyword" ||
+                parseStrArray(existing.rule.keywords).length > 0)));
         if (existingUsable) return;
         return prisma.eventChecklistScope
           .upsert({
@@ -480,12 +486,17 @@ export async function buildChecklistForEvent(
             // （ユーザー指摘により2026-10-20:「この名前」なのにキーワードが無い状態が
             // 既存予定にたくさんあった。update: {} だと古い壊れた行を直さず
             // すり抜けていた）。
+            // 「今回だけ」(event_only) はそもそもルールを持たない設計なので、
+            // existing.rule が無いことをもって「使えない」と判定してはいけない
+            // （ユーザー指摘により2026-10-20:「『今回だけ』にしてあるやつが
+            // 『この名前』に変わった状態で提案に出てきてしまっている」）。
             const existingUsable =
               existing &&
-              existing.rule &&
-              !existing.rule.archivedAt &&
-              (existing.rule.scope !== "keyword" ||
-                parseStrArray(existing.rule.keywords).length > 0);
+              (existing.scope === "event_only" ||
+                (existing.rule &&
+                  !existing.rule.archivedAt &&
+                  (existing.rule.scope !== "keyword" ||
+                    parseStrArray(existing.rule.keywords).length > 0)));
             if (existingUsable) return;
 
             await prisma.checklistScopeRule.updateMany({

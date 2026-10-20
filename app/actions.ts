@@ -258,19 +258,23 @@ export async function createManualEvent(formData: FormData): Promise<void> {
     },
   });
 
-  await generateAndSaveChecklist(event.id);
+  revalidateAppViews(event.id);
 
-  // 予定を入れて提案ができたら通知する（アプリを閉じていても届く）
-  after(() =>
-    sendPushToUser(userId, {
-      title: "準備リストができました",
-      body: `「${title}」の準備すること・持ち物を用意しました`,
+  // まず通知（生成を待たない）。準備リストの生成はバックグラウンドで進める
+  // （ユーザー指摘により2026-10-20: 予定作成後の通知が、生成が終わるまで遅れていた）。
+  after(async () => {
+    await sendPushToUser(userId, {
+      title: "予定を追加しました",
+      body: `「${title}」の準備すること・持ち物を用意します`,
       url: `/events/${event.id}`,
       tag: `event-${event.id}`,
-    }).catch(() => {}),
-  );
+    }).catch(() => {});
+    await generateAndSaveChecklist(event.id).catch((e) =>
+      console.error("[createManualEvent] 準備リスト生成に失敗 eventId=%s", event.id, e),
+    );
+    revalidateAppViews(event.id);
+  });
 
-  revalidateAppViews(event.id);
   redirect(`/events/${event.id}`);
 }
 

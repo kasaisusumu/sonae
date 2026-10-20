@@ -215,12 +215,20 @@ export async function backfillKeywordScopesOnModeSwitch(
     }),
     prisma.eventChecklistScope.findMany({
       where: { userId, action: "include", status: { not: "dropped" } },
-      select: { eventId: true, kind: true, normTitle: true },
+      select: { eventId: true, kind: true, normTitle: true, scope: true, rule: true },
     }),
   ]);
 
+  // 既に決まっている項目は対象外にする。ただし scope="keyword" なのにキーワードが
+  // 実際に無い（ルールが無い／空）行は「決まっていない」扱いにして直す対象に含める
+  // （ユーザー指摘により2026-10-20: 既存の壊れた行がここでスキップされ続けていた）。
   const decided = new Set(
-    existingScopes.map((s) => `${s.eventId}:${s.kind}:${s.normTitle}`),
+    existingScopes
+      .filter((s) => {
+        if (s.scope !== "keyword") return true;
+        return !!s.rule && parseStrArray(s.rule.keywords).length > 0;
+      })
+      .map((s) => `${s.eventId}:${s.kind}:${s.normTitle}`),
   );
 
   // items は予定日の新しい順。項目名（kind:normTitle）ごとに最初に出てきたもの
@@ -305,7 +313,13 @@ export async function backfillKeywordScopesOnModeSwitch(
           normTitle: t.normTitle,
         },
       },
-      update: {},
+      // 既存行（壊れていたので対象に含めた分）があれば、新しいルールを指すように
+      // 上書きする（ユーザー指摘により2026-10-20）。
+      update: {
+        scope: "keyword",
+        ruleId,
+        reason: "バージョン切替時に自動でキーワードを設定しました",
+      },
       create: {
         userId,
         eventId: t.eventId,

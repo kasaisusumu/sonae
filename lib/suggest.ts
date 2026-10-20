@@ -10,7 +10,7 @@ import { stripSonaeBlock } from "@/lib/description";
 import { applyScopeDecisions, resolveScopeRules } from "@/lib/scope-match";
 import { loadActiveScopeRules } from "@/lib/item-scope";
 import { normTitle, extractKeywords } from "@/lib/text-norm";
-import { stringifyStrArray } from "@/lib/future-messages";
+import { parseStrArray, stringifyStrArray } from "@/lib/future-messages";
 import { matchEventToSlotType } from "@/lib/pattern-classify";
 import { getFeatureMode, isScopeRuleEnabled } from "@/lib/feature-mode";
 import {
@@ -400,17 +400,36 @@ export async function buildChecklistForEvent(
   const includeDecisions = [...decisions.values()].filter((d) => d.action === "include");
   if (includeDecisions.length > 0) {
     await Promise.all(
-      includeDecisions.map((d) =>
-        prisma.eventChecklistScope
+      includeDecisions.map(async (d) => {
+        const where = {
+          eventId_kind_normTitle: {
+            eventId: event.id,
+            kind: d.kind,
+            normTitle: normTitle(d.title),
+          },
+        };
+        // 既存行がユーザー自身の「選んだ」決定なら上書きしない。それ以外（空の
+        // キーワードなど壊れた状態を含む）は、今回実際に一致したルールの内容で
+        // 上書きする（ユーザー指摘により2026-10-20: update: {} だと、既存の壊れた
+        // 行がそのまま残り続けていた）。
+        const existing = await prisma.eventChecklistScope.findUnique({
+          where,
+          include: { rule: true },
+        });
+        const existingUsable =
+          existing?.status === "chosen" &&
+          existing.rule &&
+          (existing.rule.scope !== "keyword" ||
+            parseStrArray(existing.rule.keywords).length > 0);
+        if (existingUsable) return;
+        return prisma.eventChecklistScope
           .upsert({
-            where: {
-              eventId_kind_normTitle: {
-                eventId: event.id,
-                kind: d.kind,
-                normTitle: normTitle(d.title),
-              },
+            where,
+            update: {
+              scope: d.scope,
+              ruleId: d.ruleId,
+              reason: d.reason,
             },
-            update: {},
             create: {
               userId: event.userId,
               eventId: event.id,
@@ -425,8 +444,8 @@ export async function buildChecklistForEvent(
               status: "chosen",
             },
           })
-          .catch(() => {}),
-      ),
+          .catch(() => {});
+      }),
     );
   }
 
@@ -447,6 +466,26 @@ export async function buildChecklistForEvent(
         undecided.map(async (it) => {
           const nt = normTitle(it.title);
           try {
+            const where = {
+              eventId_kind_normTitle: { eventId: event.id, kind: it.kind, normTitle: nt },
+            };
+            const existing = await prisma.eventChecklistScope.findUnique({
+              where,
+              include: { rule: true },
+            });
+            // 既にこの予定・この項目で「選んだ」状態（例: 似た予定を明示的に選んだ）が
+            // あり、実際に使えるルールが結びついているなら触らない。
+            // キーワードが空／ルールが無い等で実質使えていない行だけを直す
+            // （ユーザー指摘により2026-10-20:「この名前」なのにキーワードが無い状態が
+            // 既存予定にたくさんあった。update: {} だと古い壊れた行を直さず
+            // すり抜けていた）。
+            const existingUsable =
+              existing &&
+              existing.rule &&
+              (existing.rule.scope !== "keyword" ||
+                parseStrArray(existing.rule.keywords).length > 0);
+            if (existingUsable) return;
+
             await prisma.checklistScopeRule.updateMany({
               where: {
                 userId: event.userId,
@@ -472,10 +511,12 @@ export async function buildChecklistForEvent(
               },
             });
             await prisma.eventChecklistScope.upsert({
-              where: {
-                eventId_kind_normTitle: { eventId: event.id, kind: it.kind, normTitle: nt },
+              where,
+              update: {
+                scope: "keyword",
+                ruleId: rule.id,
+                reason: "この名前の予定のときに出すよう自動で設定しました",
               },
-              update: {},
               create: {
                 userId: event.userId,
                 eventId: event.id,

@@ -78,6 +78,16 @@ function consumePendingNav(): Promise<string | null> {
 export function SwRegister() {
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
+    // 長時間バックグラウンドのまま（＝再読み込みされない）PWA は、登録直後の
+    // この1回だけでは古い sw.js のまま長く取り残されうる（ユーザー指摘により
+    // 2026-10-20: 通知タップで前面には来るが古い遷移ロジックのまま、という
+    // 事例があった）。アプリが見えるようになるたびにも更新確認する。
+    const updateSw = () => {
+      navigator.serviceWorker
+        .getRegistration()
+        .then((reg) => reg?.update())
+        .catch(() => {});
+    };
     navigator.serviceWorker
       .register("/sw.js")
       .then((reg) => reg.update())
@@ -117,8 +127,12 @@ export function SwRegister() {
       }, delay);
     }
     applyPendingNav();
+    const onAppVisible = () => {
+      applyPendingNav();
+      updateSw();
+    };
     const onVisible = () => {
-      if (document.visibilityState === "visible") applyPendingNav();
+      if (document.visibilityState === "visible") onAppVisible();
     };
     // visibilitychange だけでは足りない（ユーザー指摘により2026-10-19再調査:
     // 通知タップでそのページへ飛ばない事例があった）。iOS の PWA は、ホーム画面・
@@ -126,8 +140,8 @@ export function SwRegister() {
     // ことがあるため、pageshow（bfcache からの復帰含む）・focus も合わせて
     // 「見えるようになった」の検知に使う。
     document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("pageshow", applyPendingNav);
-    window.addEventListener("focus", applyPendingNav);
+    window.addEventListener("pageshow", onAppVisible);
+    window.addEventListener("focus", onAppVisible);
 
     // 上のイベント頼みだけでは足りないケースがあった（ユーザー指摘により2026-10-20:
     // 通知タップでアプリは前面に来る（SW の client.focus() 自体は効いている）のに、
@@ -142,8 +156,8 @@ export function SwRegister() {
       cancelled = true;
       navigator.serviceWorker.removeEventListener("message", onMsg);
       document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("pageshow", applyPendingNav);
-      window.removeEventListener("focus", applyPendingNav);
+      window.removeEventListener("pageshow", onAppVisible);
+      window.removeEventListener("focus", onAppVisible);
       clearInterval(pollId);
     };
   }, []);

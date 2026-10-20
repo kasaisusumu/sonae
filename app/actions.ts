@@ -258,13 +258,14 @@ export async function createManualEvent(formData: FormData): Promise<void> {
     },
   });
 
-  await generateAndSaveChecklist(event.id);
-
-  // 予定を入れて提案ができたら通知する（アプリを閉じていても届く）
+  // 通知は作成直後に出す（生成を待たない）。準備リストの生成は、予定ページを
+  // 開いた瞬間に checklist-section.tsx の needsGeneration 側で行われる
+  // （その間は ChecklistSectionSkeleton が「準備リストを作成中…」を表示し、
+  // できた分からそのまま表示される。ユーザー指摘により2026-10-20）。
   after(() =>
     sendPushToUser(userId, {
-      title: "準備リストができました",
-      body: `「${title}」の準備すること・持ち物を用意しました`,
+      title: "予定を追加しました",
+      body: `「${title}」の準備すること・持ち物を用意します`,
       url: `/events/${event.id}`,
       tag: `event-${event.id}`,
     }).catch(() => {}),

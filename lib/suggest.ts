@@ -499,6 +499,48 @@ export async function buildChecklistForEvent(
                     parseStrArray(existing.rule.keywords).length > 0)));
             if (existingUsable) return;
 
+            // 他のどこかの予定で、この項目名が既に「今回だけ」に決まっている
+            // （＝共有ルールを作らない方針が確定している）なら、新しい予定でも
+            // 新しいキーワードルールを作らず「今回だけ」のまま引き継ぐ
+            // （ユーザー指摘により2026-10-20:「新しく予定を作ったら、過去に
+            // 『今回だけ』になってた項目が『この名前』状態として提案される」。
+            // 今回だけの項目名は毎回新しい予定名からルールを作り直してしまい、
+            // その新ルールの緩いキーワードが後の別の予定にまで広く一致していた）。
+            const eventOnlyElsewhere = await prisma.eventChecklistScope.findFirst({
+              where: {
+                userId: event.userId,
+                kind: it.kind,
+                normTitle: nt,
+                action: "include",
+                scope: "event_only",
+                status: { not: "dropped" },
+              },
+            });
+            if (eventOnlyElsewhere) {
+              await prisma.eventChecklistScope.upsert({
+                where,
+                update: {
+                  scope: "event_only",
+                  ruleId: null,
+                  reason: "他の予定で「今回だけ」に決まっているため引き継ぎました",
+                },
+                create: {
+                  userId: event.userId,
+                  eventId: event.id,
+                  kind: it.kind,
+                  normTitle: nt,
+                  title: it.title,
+                  action: "include",
+                  scope: "event_only",
+                  ruleId: null,
+                  reason: "他の予定で「今回だけ」に決まっているため引き継ぎました",
+                  source: "default",
+                  status: "chosen",
+                },
+              });
+              return;
+            }
+
             await prisma.checklistScopeRule.updateMany({
               where: {
                 userId: event.userId,

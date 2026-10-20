@@ -283,11 +283,30 @@ async function copyChecklistItems(
   // 「今回だけ」(event_only) は、その予定限定という意味そのものなので、
   // 同名の別の予定へは一切引き継がない（ユーザー指摘により2026-10-20:
   // 「『今回だけ』になってるやつ、次の提案で出てきてしまっている」）。
-  const eventOnlyKeys = new Set(
-    srcScopes
+  // コピー元（1件の双子）だけでなく、ユーザーの他のどの予定でも「今回だけ」に
+  // 決まっている項目名なら対象外にする（ユーザー指摘により2026-10-20:「新しく
+  // 予定を作ったら、過去に『今回だけ』になってた項目が『この名前』状態として
+  // 提案される」。コピー元の双子自身がその項目について何も決めていない
+  // （行が無い）場合、コピー元の行だけを見ても拾えなかった）。
+  const [fromScopeRows, otherEventOnly] = await Promise.all([
+    Promise.resolve(srcScopes),
+    fromEvent
+      ? prisma.eventChecklistScope.findMany({
+          where: {
+            userId: fromEvent.userId,
+            scope: "event_only",
+            status: { not: "dropped" },
+          },
+          select: { kind: true, normTitle: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const eventOnlyKeys = new Set([
+    ...fromScopeRows
       .filter((s) => s.scope === "event_only")
       .map((s) => `${s.kind}:${s.normTitle}`),
-  );
+    ...otherEventOnly.map((s) => `${s.kind}:${s.normTitle}`),
+  ]);
   const copyableSrc = src.filter(
     (it) => !eventOnlyKeys.has(`${it.kind}:${normTitle(it.title)}`),
   );

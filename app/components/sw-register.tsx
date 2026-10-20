@@ -129,12 +129,22 @@ export function SwRegister() {
     window.addEventListener("pageshow", applyPendingNav);
     window.addEventListener("focus", applyPendingNav);
 
+    // 上のイベント頼みだけでは足りないケースがあった（ユーザー指摘により2026-10-20:
+    // 通知タップでアプリは前面に来る（SW の client.focus() 自体は効いている）のに、
+    // 以前開いていたページのまま変わらなかった）。SW からの client.focus() は
+    // OS/ブラウザ側で前面化はするが、このタブの focus/visibilitychange/pageshow が
+    // 必ず発火するとは限らない（特に長時間バックグラウンドだった後の復帰）。
+    // イベントに頼らず、タブが開いている間は低頻度（2秒おき）で保険のポーリングも行う
+    // （見つかったときだけ画面遷移するので、何も無ければ負荷はごく小さい）。
+    const pollId = setInterval(applyPendingNav, 2000);
+
     return () => {
       cancelled = true;
       navigator.serviceWorker.removeEventListener("message", onMsg);
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("pageshow", applyPendingNav);
       window.removeEventListener("focus", applyPendingNav);
+      clearInterval(pollId);
     };
   }, []);
   return null;

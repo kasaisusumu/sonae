@@ -438,17 +438,26 @@ export async function addSeedItemsToEvent(
   });
   if (!event) return 0;
 
-  const existing = new Set(
-    event.checklistItems.map((c) => `${c.kind}:${normTitle(c.title)}`),
+  // 枠（kind）を跨いでも、全く同じ言葉の項目は重複して出さない
+  // （ユーザー指摘により2026-10-20:「枠を跨いだ全く同じ言葉の重複もないようにして」）。
+  // そのため既存項目の判定はタイトルだけ（枠は見ない）で行う。
+  const existingTitles = new Set(
+    event.checklistItems.map((c) => normTitle(c.title)),
   );
   const nextSort: Record<string, number> = {};
   for (const c of event.checklistItems) {
     nextSort[c.kind] = Math.max(nextSort[c.kind] ?? 0, c.sortOrder + 1);
   }
 
-  const fresh = seeds.filter(
-    (s) => s.title.trim() && !existing.has(`${s.kind}:${normTitle(s.title)}`),
-  );
+  const seenTitles = new Set(existingTitles);
+  const fresh = seeds.filter((s) => {
+    const t = s.title.trim();
+    if (!t) return false;
+    const nt = normTitle(t);
+    if (seenTitles.has(nt)) return false;
+    seenTitles.add(nt);
+    return true;
+  });
   if (fresh.length === 0) return 0;
 
   const data = fresh.map((s) => {

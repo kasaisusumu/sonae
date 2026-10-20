@@ -153,8 +153,16 @@ export function applyScopeDecisions<
   const out = items.filter(
     (i) => decisions.get(`${i.kind}:${normTitle(i.title)}`)?.action !== "exclude",
   );
+  // 追加は、枠（kind）を跨いでも全く同じ言葉なら出さない（ユーザー指摘により
+  // 2026-10-20:「枠を跨いだ全く同じ言葉の重複もないようにして」）。除外の判定は
+  // 項目自身の枠に紐づくままにする（上の present/filter。exclude は枠ごとの指定）。
+  const presentTitles = new Set(out.map((i) => normTitle(i.title)));
   for (const [key, d] of decisions) {
-    if (d.action === "include" && !present.has(key)) out.push(make(d));
+    if (d.action !== "include" || present.has(key)) continue;
+    const nt = normTitle(d.title);
+    if (presentTitles.has(nt)) continue;
+    presentTitles.add(nt);
+    out.push(make(d));
   }
   return out;
 }

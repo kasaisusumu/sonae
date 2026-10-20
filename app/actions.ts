@@ -10,6 +10,7 @@ import { syncEventDescription } from "@/lib/description-sync";
 import {
   getOrCreateCategory,
   resolveCategoryForEvent,
+  FALLBACK_CATEGORY,
 } from "@/lib/categories";
 import { syncAndNotify } from "@/lib/sync";
 import { sendPushToUser, isPushConfigured } from "@/lib/push";
@@ -243,10 +244,13 @@ export async function createManualEvent(formData: FormData): Promise<void> {
   const eventDatetime = parseJstDateTimeLocal(datetimeRaw);
   if (!eventDatetime) redirect("/events?error=missing");
 
-  // カテゴリ未指定なら自動判定（キーワード→AIで新カテゴリも作られる）
+  // カテゴリ未指定なら自動判定。ルールで決まらない予定名だと AI 呼び出しが
+  // 挟まり、その分だけ通知・画面遷移が遅れていた（ユーザー指摘により2026-10-20:
+  // 「通知はすぐ送るのにしてね」）。ここではキーワードだけの高速判定に留め、
+  // AI による精緻化は通知を送った後に回す（lib/sync.ts の cron 取り込みと同じ考え方）。
   const category = categoryName
     ? await getOrCreateCategory(userId, categoryName)
-    : await resolveCategoryForEvent(userId, title, memo);
+    : await resolveCategoryForEvent(userId, title, memo, false);
   const event = await prisma.event.create({
     data: {
       userId,
@@ -262,14 +266,27 @@ export async function createManualEvent(formData: FormData): Promise<void> {
   // 開いた瞬間に checklist-section.tsx の needsGeneration 側で行われる
   // （その間は ChecklistSectionSkeleton が「準備リストを作成中…」を表示し、
   // できた分からそのまま表示される。ユーザー指摘により2026-10-20）。
-  after(() =>
-    sendPushToUser(userId, {
+  after(async () => {
+    await sendPushToUser(userId, {
       title: "予定を追加しました",
       body: `「${title}」の準備すること・持ち物を用意します`,
       url: `/events/${event.id}`,
       tag: `event-${event.id}`,
-    }).catch(() => {}),
-  );
+    }).catch(() => {});
+    if (!categoryName && category.name === FALLBACK_CATEGORY) {
+      try {
+        const refined = await resolveCategoryForEvent(userId, title, memo, true);
+        if (refined.name !== FALLBACK_CATEGORY) {
+          await prisma.event.update({
+            where: { id: event.id },
+            data: { categoryId: refined.id },
+          });
+        }
+      } catch (e) {
+        console.error("[createManualEvent] カテゴリ精緻化に失敗 eventId=%s", event.id, e);
+      }
+    }
+  });
 
   revalidateAppViews(event.id);
   redirect(`/events/${event.id}`);

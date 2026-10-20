@@ -117,8 +117,13 @@ export default async function RootLayout({
       {/* min-h-dvh（min-h-full だと短いページで下のバーが画面下端まで届かず
           浮いて見えた。ユーザー指摘により2026-10-20: 「予定ページに戻るとバーが
           浮く」。dvh は実際に表示されているビューポート高さに追従するため、
-          ツールバーの伸縮があっても画面の一番下に届く）。 */}
-      <body className="min-h-dvh flex flex-col bg-background text-foreground">
+          ツールバーの伸縮があっても画面の一番下に届く）。
+          overscroll-y-none: iPhoneのホーム画面PWA（アドレスバーが無いスタンドアロン
+          表示）では、スクロールが端に達したときの「ラバーバンド」バウンスで
+          sticky/fixed の下のバーが一瞬浮いて見える既知のWebKitの挙動がある
+          （ユーザー指摘により2026-10-20、機器がiPhoneのPWAと判明）。
+          バウンス自体を無効化する。 */}
+      <body className="min-h-dvh overscroll-y-none flex flex-col bg-background text-foreground">
         <SwRegister />
         {isLoggedIn ? <LiveSync /> : null}
         {isLoggedIn && isProductionMode ? <PreventGoals /> : null}

@@ -17,6 +17,7 @@ import { hashDescription, stripSonaeBlock } from "@/lib/description";
 import { applyInboundDescription } from "@/lib/description-inbound";
 import { primeNotifiedChecklists } from "@/lib/checklist";
 import { ensureFutureMessageMatchesForEvent } from "@/lib/future-messages";
+import { syncEventDescription } from "@/lib/description-sync";
 
 export interface SyncResult {
   newEvents: {
@@ -525,8 +526,12 @@ export async function syncAndNotify(
 
   // 未来の自分へのメッセージの一致判定（取り込み時）。キーワード一致だけなので
   // AIは呼ばない（予算で絞る必要も無くなった。2026-10-19〜）。
+  // 項目が1件も無い予定（準備リスト生成の説明欄書き込みが走らない）だと、
+  // ここで一致しても説明欄に反映されないままだったため、明示的に反映する
+  // （ユーザー指摘により2026-10-20）。
   for (const ev of result.newEvents) {
     await ensureFutureMessageMatchesForEvent(ev.id).catch(() => {});
+    await syncEventDescription(ev.id).catch(() => {});
   }
 
   return { ...result, generated };

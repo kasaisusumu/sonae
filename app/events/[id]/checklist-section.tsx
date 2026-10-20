@@ -182,7 +182,11 @@ export async function ChecklistSection({
     if (isProd) {
       await ensureSuggestedFailures(event.id, event.userId);
     } else {
+      // 項目が1件もない予定だと、準備リストの生成がトリガーする説明欄の書き込み
+      // （上の needsGeneration 側）が走らず、ここでメッセージが一致しても
+      // 説明欄に反映されないままだった（ユーザー指摘により2026-10-20）。
       await ensureFutureMessageMatchesForEvent(event.id);
+      after(() => syncEventDescription(event.id));
     }
   }
 
@@ -422,7 +426,10 @@ export async function ChecklistSection({
     !reviewState.listReviewedAt &&
     !reviewState.listCustomized &&
     reviewState._count.editRecords === 0 &&
-    items.length > 0;
+    // 項目が無くても、過去の自分からのメッセージだけがある回は確認対象にする
+    // （ユーザー指摘により2026-10-20: 項目0件だと「確認しました」が出ず、
+    // 消す手段が無いまま説明欄の「未確認」表示だけが残っていた）。
+    (items.length > 0 || hasFutureMessages);
 
   return (
     <>

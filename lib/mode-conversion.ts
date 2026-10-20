@@ -231,9 +231,13 @@ export async function backfillKeywordScopesOnModeSwitch(
       .map((s) => `${s.eventId}:${s.kind}:${s.normTitle}`),
   );
 
-  // items は予定日の新しい順。項目名（kind:normTitle）ごとに最初に出てきたもの
-  // （＝最新の予定）の予定名を、その項目名の代表キーワード元として使う。
-  const representativeTitle = new Map<string, string>();
+  // 項目名（kind:normTitle）ごとに、それを持つ全ての予定名を集めておく（1つだけに
+  // 絞ると、その1件がタイプミス等で他と違う表記だった場合、正しい表記の予定群と
+  // 一致しなくなる。例: 同じ「白インナー」でも「mnアニベルセル」と誤字の
+  // 「mnアニベルゼル」が混在していると、代表を誤字側にしてしまうと正しい表記の方には
+  // 一致しなくなってしまっていた。ユーザー指摘により2026-10-20）。全予定名から
+  // 抽出したキーワードを合わせて使う（OR判定なので広げても害はない）。
+  const titlesByRuleKey = new Map<string, Set<string>>();
   const targets: {
     eventId: string;
     kind: string;
@@ -246,9 +250,8 @@ export async function backfillKeywordScopesOnModeSwitch(
     const eventKey = `${it.eventId}:${it.kind}:${nt}`;
     if (decided.has(eventKey)) continue;
     const ruleKey = `${it.kind}:${nt}`;
-    if (!representativeTitle.has(ruleKey)) {
-      representativeTitle.set(ruleKey, it.event.title);
-    }
+    if (!titlesByRuleKey.has(ruleKey)) titlesByRuleKey.set(ruleKey, new Set());
+    titlesByRuleKey.get(ruleKey)!.add(it.event.title);
     targets.push({ eventId: it.eventId, kind: it.kind, title: it.title, normTitle: nt });
   }
 
@@ -279,8 +282,8 @@ export async function backfillKeywordScopesOnModeSwitch(
       if (existingRule && existingHasKeyword) {
         ruleId = existingRule.id;
       } else {
-        const eventTitle = representativeTitle.get(ruleKey) ?? t.title;
-        const kws = extractKeywords(eventTitle);
+        const eventTitles = titlesByRuleKey.get(ruleKey) ?? new Set([t.title]);
+        const kws = [...new Set([...eventTitles].flatMap(extractKeywords))].slice(0, 20);
         if (existingRule) {
           await prisma.checklistScopeRule.update({
             where: { id: existingRule.id },

@@ -50,18 +50,6 @@ export async function syncEventDescription(eventId: string): Promise<void> {
   });
   if (!account?.writeDescriptionEnabled) return;
 
-  // 生成後まだ「確認しました」も編集もされていないか。項目が1件も無いリストは
-  // 確認する内容自体が無いので対象外にする（ユーザー指摘により2026-10-20:
-  // ver2でAIのたたき台生成をやめたため空リストが増え、説明欄には「未確認」と
-  // 出るのに、アプリ側は項目0件だと「確認しました」ボタンを出さない
-  // （app/events/[id]/checklist-section.tsx の unreviewed も同じ条件）ため、
-  // 消す手段が無いまま「未確認」表示だけが残ってしまっていた）。
-  const unreviewed =
-    !event.listReviewedAt &&
-    !event.listCustomized &&
-    event._count.editRecords === 0 &&
-    event.checklistItems.length > 0;
-
   const sections = resolveSections(
     event.sectionOrder,
     event.checklistItems.map((c) => c.kind),
@@ -78,6 +66,18 @@ export async function syncEventDescription(eventId: string): Promise<void> {
   const failures = isFailureLogEnabled(mode)
     ? await getEventDescriptionFailures(eventId)
     : undefined;
+
+  // 生成後まだ「確認しました」も編集もされていないか。項目も「過去の自分から
+  // メッセージ」も1件も無いときだけ、確認する内容自体が無いので対象外にする
+  // （ユーザー指摘により2026-10-20: 項目0件・メッセージだけの回で、説明欄には
+  // 「未確認」と出るのに、アプリ側は項目0件だと「確認しました」ボタンを出さない
+  // （app/events/[id]/checklist-section.tsx の unreviewed も同じ条件）ため、
+  // 消す手段が無いまま「未確認」表示だけが残ってしまっていた）。
+  const unreviewed =
+    !event.listReviewedAt &&
+    !event.listCustomized &&
+    event._count.editRecords === 0 &&
+    (event.checklistItems.length > 0 || Boolean(futureMessages?.length));
 
   // src=cal: 説明欄のこのリンクから開いたときだけ、直接編集の説明ポップアップを出す。
   const url = `${appBaseUrl()}/events/${eventId}?src=cal`;

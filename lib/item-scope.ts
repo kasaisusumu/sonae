@@ -256,6 +256,24 @@ async function saveScopeForItem(
     status,
   };
   await prisma.eventChecklistScope.upsert({ where, create: row, update: row });
+
+  // 同じ項目（kind+normTitle+action）を持つ「他の」予定の行も連動して更新する
+  // （ユーザー指摘により2026-10-20:「学習元が複数あって三択も複数保存されちゃうけど、
+  // そのうちの一つの三択が変更されたら、全部連動して変更するようにして」）。
+  // event_only／auto はこの予定限定の選択で共有ルールを持たない（rule が無い）ため対象外。
+  if (rule) {
+    await prisma.eventChecklistScope.updateMany({
+      where: {
+        userId: input.userId,
+        kind,
+        normTitle: nt,
+        action,
+        eventId: { not: input.eventId },
+        status: { not: "dropped" },
+      },
+      data: { scope, ruleId: rule.id, reason: rec.reason },
+    });
+  }
 }
 
 /**

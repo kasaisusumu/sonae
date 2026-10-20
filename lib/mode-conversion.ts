@@ -226,7 +226,11 @@ export async function backfillKeywordScopesOnModeSwitch(
     existingScopes
       .filter((s) => {
         if (s.scope !== "keyword") return true;
-        return !!s.rule && parseStrArray(s.rule.keywords).length > 0;
+        return (
+          !!s.rule &&
+          !s.rule.archivedAt &&
+          parseStrArray(s.rule.keywords).length > 0
+        );
       })
       .map((s) => `${s.eventId}:${s.kind}:${s.normTitle}`),
   );

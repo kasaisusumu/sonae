@@ -419,6 +419,7 @@ export async function buildChecklistForEvent(
         const existingUsable =
           existing?.status === "chosen" &&
           existing.rule &&
+          !existing.rule.archivedAt &&
           (existing.rule.scope !== "keyword" ||
             parseStrArray(existing.rule.keywords).length > 0);
         if (existingUsable) return;
@@ -482,6 +483,7 @@ export async function buildChecklistForEvent(
             const existingUsable =
               existing &&
               existing.rule &&
+              !existing.rule.archivedAt &&
               (existing.rule.scope !== "keyword" ||
                 parseStrArray(existing.rule.keywords).length > 0);
             if (existingUsable) return;

@@ -2,11 +2,7 @@ import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normTitle } from "@/lib/text-norm";
 import { normalizeMatchText } from "@/lib/future-messages";
-import {
-  buildChecklistForEvent,
-  appendScopeMatchedItems,
-  type BuiltItem,
-} from "@/lib/suggest";
+import { buildChecklistForEvent, type BuiltItem } from "@/lib/suggest";
 import { syncEventDescription } from "@/lib/description-sync";
 import { parseLeads, stringifyLeads } from "@/lib/lead-time";
 import {
@@ -94,11 +90,37 @@ export async function generateAndSaveChecklist(
     const twinId = await findNameGroupTwinWithList(eventId);
     if (twinId) {
       await copyChecklistItems(twinId, eventId);
-      // コピー元（同名の中で listCustomized=false のうち最新の1件）には無い項目でも、
-      // キーワード／似た予定ルールに一致するものは追加する（ユーザー指摘により
-      // 2026-10-20: 同名の予定のうち別の1件だけが切り離され独自の枠を持っていた場合、
-      // その枠の項目がキーワード一致していても一切反映されなかった）。
-      await appendScopeMatchedItems(eventId);
+      // コピー元（同名の中で listCustomized=false のうち最新の1件）が持たない枠
+      // （task/belonging 以外）でも、同名の「他の」予定（切り離され独自の枠を持つ方を
+      // 含む）が持っていれば、その枠をそのまま「切り出した枠」として引き継ぐ
+      // （ユーザー指摘により2026-10-20:「普通に元々学習元のように切り出した枠として
+      // 提案すればいい」。項目を他の枠に混ぜ込まず、独立した枠のまま提案する
+      // [[sonae-reused-manual-stays-own-frame]] の方針に合わせる）。
+      const ev = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { userId: true, title: true },
+      });
+      if (ev) {
+        const covered = new Set(
+          (
+            await prisma.checklistItem.findMany({
+              where: { eventId },
+              select: { kind: true },
+            })
+          ).map((i) => i.kind),
+        );
+        const seeds = await findCustomSectionSeedsFromNameGroup(
+          ev.userId,
+          ev.title,
+          eventId,
+          covered,
+        );
+        if (seeds.length > 0) {
+          await addSeedItemsToEvent(ev.userId, eventId, seeds, {
+            markReviewed: false,
+          });
+        }
+      }
       return;
     }
   }
@@ -560,6 +582,66 @@ async function findNameGroupTwinWithList(
   });
   const twin = candidates.find((c) => normalizeMatchText(c.title) === meNorm);
   return twin?.id ?? null;
+}
+
+/**
+ * 同名の「他の」予定（切り離され独自の枠を持つ方＝listCustomized=true も含む）が
+ * 持つ、まだコピー先に無いカスタム枠（task/belonging 以外）を、そのまま「切り出した
+ * 枠」として返す（ユーザー指摘により2026-10-20）。
+ *
+ * 背景: findNameGroupTwinWithList がコピー元に選ぶのは listCustomized=false の中の
+ * 最新1件だけなので、ユーザーが個別に編集して切り離した予定（例: 独自の持ち物枠を
+ * 追加した回）が持つ枠は、他の同名予定には一切引き継がれなかった。
+ * [[sonae-reused-manual-stays-own-frame]] の方針どおり、項目を既存の枠へ混ぜ込まず、
+ * 「その枠」のまま addSeedItemsToEvent 経由で独立した別枠として提案する。
+ * 枠（kind）ごとに、同名予定のうち一番新しいものの内容を代表にする
+ * （同じ枠名が複数の同名予定にまたがって編集されている場合の揺れを避けるため）。
+ */
+async function findCustomSectionSeedsFromNameGroup(
+  userId: string,
+  title: string,
+  excludeEventId: string,
+  alreadyCoveredKinds: Set<string>,
+): Promise<SeedItem[]> {
+  const meNorm = normalizeMatchText(title);
+  const siblings = await prisma.event.findMany({
+    where: { userId, id: { not: excludeEventId } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, title: true },
+  });
+  const matchingIds = siblings
+    .filter((s) => normalizeMatchText(s.title) === meNorm)
+    .map((s) => s.id);
+  if (matchingIds.length === 0) return [];
+
+  const pickedByKind = new Map<string, SeedItem[]>();
+  for (const siblingId of matchingIds) {
+    const items = await prisma.checklistItem.findMany({
+      where: { eventId: siblingId, isSuggested: false },
+      orderBy: { sortOrder: "asc" },
+      select: { kind: true, title: true, notifyLeadMinutes: true },
+    });
+    const kindsHere = new Set(
+      items
+        .map((i) => i.kind)
+        .filter((k) => !isBuiltinSection(k) && !alreadyCoveredKinds.has(k)),
+    );
+    for (const kind of kindsHere) {
+      if (pickedByKind.has(kind)) continue;
+      pickedByKind.set(
+        kind,
+        items
+          .filter((i) => i.kind === kind)
+          .map((i) => ({
+            kind: i.kind,
+            title: i.title,
+            notifyLeadMinutes: i.notifyLeadMinutes,
+            sourceTemplateId: null,
+          })),
+      );
+    }
+  }
+  return [...pickedByKind.values()].flat();
 }
 
 /**

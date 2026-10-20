@@ -19,7 +19,7 @@
  */
 import { prisma } from "@/lib/prisma";
 import { normTitle, extractKeywords } from "@/lib/text-norm";
-import { stringifyStrArray } from "@/lib/future-messages";
+import { parseStrArray, stringifyStrArray } from "@/lib/future-messages";
 
 export interface ConversionResult {
   converted: number;
@@ -260,11 +260,25 @@ export async function backfillKeywordScopesOnModeSwitch(
         },
         orderBy: { updatedAt: "desc" },
       });
-      if (existingRule) {
+      // 既存ルールは、scope="keyword" でキーワードが実際にあるときだけ使い回す。
+      // scope="genre"（本番版からの自動変換。カテゴリ学習、キーワードは持たない）
+      // などを無条件に使い回すと、EventChecklistScope.scope は "keyword" で保存される
+      // のにキーワードが空の行ができてしまう不具合があった（ユーザー指摘により
+      // 2026-10-20: 「既存予定の『この名前』にキーワードが書かれていないのがたくさんある」）。
+      const existingHasKeyword =
+        existingRule?.scope === "keyword" &&
+        parseStrArray(existingRule.keywords).length > 0;
+      if (existingRule && existingHasKeyword) {
         ruleId = existingRule.id;
       } else {
         const eventTitle = representativeTitle.get(ruleKey) ?? t.title;
         const kws = extractKeywords(eventTitle);
+        if (existingRule) {
+          await prisma.checklistScopeRule.update({
+            where: { id: existingRule.id },
+            data: { archivedAt: new Date() },
+          });
+        }
         const rule = await prisma.checklistScopeRule.create({
           data: {
             userId,

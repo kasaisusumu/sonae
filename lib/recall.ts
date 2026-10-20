@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { EventFeatureData, TimeBucket } from "@/lib/features";
 import { featureSignature } from "@/lib/signature";
 import { norm, type GeneratedItem } from "@/lib/learning";
+import { normTitle } from "@/lib/text-norm";
 
 export interface RecalledCustomSectionSeed {
   kind: string;
@@ -219,10 +220,32 @@ export async function recallBaseChecklist(
     };
   }
 
+  // 「今回だけ」(event_only) に決めた項目名は、似た予定への丸ごと再利用にも
+  // 乗せない（ユーザー指摘により2026-10-20:「今回だけってのは、その人その時間の
+  // まさに予定だけって意味だ。同名の他の予定が来ても提案しちゃならねぇ」。
+  // ここでの再利用は元の予定と名前が違う「似た予定」も対象なので、同名か
+  // どうかに関わらず、ユーザーのどの予定でも event_only に決まっている項目名は
+  // 対象外にする）。
+  const eventOnlyKeys = new Set(
+    (
+      await prisma.eventChecklistScope.findMany({
+        where: {
+          userId: event.userId,
+          scope: "event_only",
+          status: { not: "dropped" },
+        },
+        select: { kind: true, normTitle: true },
+      })
+    ).map((s) => `${s.kind}:${s.normTitle}`),
+  );
+  const bestItems = best.items.filter(
+    (i) => !eventOnlyKeys.has(`${i.kind}:${normTitle(i.title)}`),
+  );
+
   // 組み込みの2枠だけをたたき台にする。ユーザーが足した枠（買うもの等）は
   // AI 生成のもとには使わない（同名グループのコピー経路で引き継がれる）。
   const pick = (kind: "task" | "belonging"): GeneratedItem[] =>
-    best!.items
+    bestItems
       .filter((i) => i.kind === kind)
       .map((i) => ({
         title: i.title,
@@ -232,7 +255,7 @@ export async function recallBaseChecklist(
 
   const customSectionSeeds = await findVerbatimTemplateSeeds(
     event.userId,
-    best.items,
+    bestItems,
   );
 
   return {

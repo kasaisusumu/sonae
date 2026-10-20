@@ -231,14 +231,21 @@ async function copyChecklistItems(
   fromEventId: string,
   toEventId: string,
 ): Promise<void> {
-  const [src, fromEvent] = await Promise.all([
+  const [src, fromEvent, srcScopes] = await Promise.all([
     prisma.checklistItem.findMany({
       where: { eventId: fromEventId },
       orderBy: { sortOrder: "asc" },
     }),
     prisma.event.findUnique({
       where: { id: fromEventId },
-      select: { sectionOrder: true, listCleared: true },
+      select: { sectionOrder: true, listCleared: true, userId: true },
+    }),
+    // コピー元の「次回の出し方」（キーワード等）も引き継ぐ。ここで作らないと、
+    // コピーされた項目は範囲ルールの行が一切無いまま「この名前」の既定表示
+    // （checklist-editor.tsx の shownScope）になり、実際のキーワードは
+    // 出せなかった（ユーザー指摘により2026-10-20）。
+    prisma.eventChecklistScope.findMany({
+      where: { eventId: fromEventId, status: { not: "dropped" } },
     }),
   ]);
   await prisma.$transaction([
@@ -269,6 +276,28 @@ async function copyChecklistItems(
               suggestionRuleId: it.suggestionRuleId,
               suggestionValue: it.suggestionValue,
             })),
+          }),
+        ]
+      : []),
+    ...(srcScopes.length > 0 && fromEvent
+      ? [
+          // 既に toEventId 側で決まっている項目（ユーザーが選び直した等）は
+          // 上書きしない（skipDuplicates。@@unique([eventId, kind, normTitle])）。
+          prisma.eventChecklistScope.createMany({
+            data: srcScopes.map((s) => ({
+              userId: fromEvent.userId,
+              eventId: toEventId,
+              kind: s.kind,
+              normTitle: s.normTitle,
+              title: s.title,
+              action: s.action,
+              scope: s.scope,
+              ruleId: s.ruleId,
+              reason: s.reason,
+              source: s.source,
+              status: s.status,
+            })),
+            skipDuplicates: true,
           }),
         ]
       : []),

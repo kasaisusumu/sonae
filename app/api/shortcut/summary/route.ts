@@ -48,8 +48,17 @@ export async function GET(request: Request): Promise<NextResponse> {
   const now = new Date();
 
   const [nextEvent, priorityLists] = await Promise.all([
+    // 「次の予定」の条件は lib/wallpaper-render.tsx の renderWallpaper と完全に揃える
+    // （開始済みだが終了していない予定も含める）。揃っていないと、壁紙とこのAPIで
+    // 「次の予定」が食い違って見える（2026-10-24のバグレビューで発覚・修正）。
     prisma.event.findFirst({
-      where: { userId, eventDatetime: { gte: now } },
+      where: {
+        userId,
+        OR: [
+          { endDatetime: { gt: now } },
+          { endDatetime: null, eventDatetime: { gte: now } },
+        ],
+      },
       orderBy: { eventDatetime: "asc" },
       select: {
         id: true,

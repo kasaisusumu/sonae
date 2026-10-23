@@ -49,10 +49,14 @@ export async function saveLockScreenImage(
   }
 
   // 再エンコード（withMetadata() を呼ばない）でEXIF等のメタデータを落とす。
+  // .rotate() を引数無しで呼び、EXIFのOrientationタグをピクセルに焼き込んでから
+  // メタデータを落とす（2026-10-24のバグレビューで発覚・修正: sharpは.rotate()を
+  // 呼ばない限り自動で回転しないため、.rotate()を呼ばずにメタデータだけ落とすと、
+  // 縦横の向きの情報が失われ、画像が横倒し・上下逆に保存されてしまっていた）。
   // quality 90 で大きすぎる場合は 75 まで一段階だけ下げて再試行する。
-  let clean = await sharp(buffer).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+  let clean = await sharp(buffer).rotate().jpeg({ quality: 90, mozjpeg: true }).toBuffer();
   if (clean.length > LOCK_SCREEN_IMAGE_MAX_BYTES) {
-    clean = await sharp(buffer).jpeg({ quality: 75, mozjpeg: true }).toBuffer();
+    clean = await sharp(buffer).rotate().jpeg({ quality: 75, mozjpeg: true }).toBuffer();
   }
   if (clean.length > LOCK_SCREEN_IMAGE_MAX_BYTES) {
     return { ok: false, error: "too_large" };

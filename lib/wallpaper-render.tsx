@@ -145,8 +145,16 @@ function buildLeftLines(
   ) {
     if (entries.length === 0) return;
     const headerH = textHeight(headerText, LEFT_HEADER_SIZE, usableWidthPx) + (lines.length === 0 ? 0 : 18) + 8;
-    const firstH = textHeight(entries[0].text, LEFT_ITEM_SIZE, usableWidthPx);
-    if (usedPx + headerH + firstH + moreReserve > budgetPx) {
+    const first = entries[0];
+    const firstH = textHeight(first.text, LEFT_ITEM_SIZE, usableWidthPx);
+    // 1件目のコメントぶんも見出しの事前チェックに含める（ここで見逃すと、見出しだけ
+    // 出て1件目がコメントの重みで溢れて消える＝見出しだけの空枠になるバグになる。
+    // 本文側のループ（下の commentH 判定）と条件をそろえた。2026-10-24のバグ
+    // レビューで発覚・修正）。
+    const firstCommentH = first.commentText
+      ? textHeight(first.commentText, LEFT_COMMENT_SIZE, usableWidthPx - LEFT_COMMENT_INDENT)
+      : 0;
+    if (usedPx + headerH + firstH + firstCommentH + moreReserve > budgetPx) {
       omitted += entries.length;
       return;
     }
@@ -217,9 +225,14 @@ function selectRightRows(
   const shown: PriorityHomeRow[] = [];
   let usedPx = 0;
   const moreReserve = RIGHT_MORE_SIZE * LINE_HEIGHT + 10;
-  for (const r of rows) {
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
     const h = textHeight(r.title, RIGHT_TITLE_SIZE, usableWidthPx) + 14;
-    if (usedPx + h + moreReserve > budgetPx) break;
+    // 最後の1件は「ほかN件」を出す必要が無いため、その分の余白を要求しない
+    // （常に moreReserve を要求すると、本当は収まる最後の1件まで溢れさせてしまい、
+    // 不要な「ほかN件」が出てしまうバグになる。2026-10-24のバグレビューで発覚・修正）。
+    const reserve = i === rows.length - 1 ? 0 : moreReserve;
+    if (usedPx + h + reserve > budgetPx) break;
     shown.push(r);
     usedPx += h;
   }
@@ -239,9 +252,16 @@ const BOLD_STROKE: Record<string, string | number> = {
   WebkitTextStroke: "1.4px currentColor",
 };
 
+/** `renderWallpaper`の呼び出し元（壁紙API・プレビューAPI）は、アスペクト比を
+ * 決めるために背景画像を先に読む必要があるため、ここでもう一度読み直さずに
+ * そのまま渡せるようにする（2026-10-24のバグレビューで発覚・修正: 以前は
+ * 呼び出し元とここでそれぞれ別に `loadLockScreenImage` を呼んでおり、1回の
+ * リクエストでBYTEA列を2回読んでいた。ショートカットの自動実行で繰り返し
+ * 叩かれる想定のAPIのため、無駄なDB往復を増やさない）。省略時はここで読む。 */
 export async function renderWallpaper(
   userId: string,
   ratio: number,
+  preloadedBg?: { data: Buffer; width: number; height: number } | null,
 ): Promise<ImageResponse> {
   const width = OUTPUT_WIDTH;
   const height = Math.round(width * ratio);
@@ -270,7 +290,7 @@ export async function renderWallpaper(
       },
     }),
     loadPriorityHomeLists(userId),
-    loadLockScreenImage(userId),
+    preloadedBg !== undefined ? Promise.resolve(preloadedBg) : loadLockScreenImage(userId),
     loadFont(),
   ]);
 
@@ -594,7 +614,7 @@ export async function renderWallpaper(
                 overflow: "hidden",
               }}
             >
-              <PanelHeading emoji="🔥" text={`急ぎ（${priorityLists.urgent.length}）`} />
+              <PanelHeading emoji="🔥" text={`急ぎ(${priorityLists.urgent.length})`} />
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 {urgent.shown.map((r) => (
                   <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 14 }}>
@@ -629,7 +649,7 @@ export async function renderWallpaper(
                 overflow: "hidden",
               }}
             >
-              <PanelHeading emoji="🕒" text={`そのうち（${priorityLists.later.length}）`} />
+              <PanelHeading emoji="🕒" text={`そのうち(${priorityLists.later.length})`} />
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 {later.shown.map((r) => (
                   <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 14 }}>

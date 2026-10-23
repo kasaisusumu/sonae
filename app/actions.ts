@@ -67,6 +67,7 @@ import { trackEvent } from "@/lib/track";
 import {
   setItemPriority,
   renameItemPriority,
+  renameItemPriorityKind,
   type ItemPriority,
 } from "@/lib/item-priority";
 import { setMessagePriority } from "@/lib/future-messages";
@@ -958,6 +959,10 @@ export async function clearChecklistSection(formData: FormData): Promise<void> {
       where: { eventId, isSuggested: false, kind },
     }),
     prisma.checklistItemImage.deleteMany({ where: { eventId, kind } }),
+    // この枠の急ぎ/そのうちタグも一緒に消す（2026-10-24のバグレビューで発覚・修正:
+    // ここを消さないと、同じ名前の項目を後で枠に足したとき、ユーザーが今回は
+    // 一切タグを付けていないのに前回のタグが無言で「復活」して見えてしまう）。
+    prisma.checklistItemPriority.deleteMany({ where: { eventId, kind } }),
   ]);
 
   const remaining = await prisma.checklistItem.count({
@@ -1066,6 +1071,10 @@ export async function renameChecklistSection(
       },
     }),
   ]);
+  // この枠の急ぎ/そのうちタグも新しいkindへ付け替える（2026-10-24のバグレビューで
+  // 発覚・修正: ここを呼ばないと、項目自体はちゃんと新しい枠名で表示される一方、
+  // タグだけ古いkindのまま行方不明になり、見た目上タグが消えてしまっていた）。
+  await renameItemPriorityKind(eventId, from, to);
   await propagateSectionChange(eventId);
 }
 
@@ -1086,6 +1095,9 @@ export async function removeChecklistSection(
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({ where: { eventId, kind: key } }),
     prisma.checklistItemImage.deleteMany({ where: { eventId, kind: key } }),
+    // 枠ごと削除するので、その枠の急ぎ/そのうちタグも一緒に消す（clearChecklistSection
+    // と同じ理由。2026-10-24のバグレビューで発覚・修正）。
+    prisma.checklistItemPriority.deleteMany({ where: { eventId, kind: key } }),
     prisma.event.update({
       where: { id: eventId },
       data: {

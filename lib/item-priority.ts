@@ -158,8 +158,13 @@ export async function copyItemPriorityForNameGroup(
 }
 
 /**
- * 枠の改名（renameSectionKind）に合わせて、優先度の紐づけの kind も付け替える。
- * その予定（eventId）の中だけが対象。
+ * 枠の改名（renameSectionKind・renameChecklistSection）に合わせて、優先度の
+ * 紐づけの kind も付け替える。その予定（eventId）の中だけが対象。
+ *
+ * 1行ずつ update する（2026-10-24のバグレビューで発覚・修正: 以前は
+ * updateMany 1本で一括更新していたが、Postgres の UPDATE は1件でも一意制約
+ * （eventId,kind,normTitle）に触れると文全体が失敗する。衝突する行が1つでも
+ * 混ざっていると、衝突しない他の全行の付け替えまで一緒に失われていた）。
  */
 export async function renameItemPriorityKind(
   eventId: string,
@@ -167,14 +172,18 @@ export async function renameItemPriorityKind(
   newKind: string,
 ): Promise<void> {
   if (!oldKind || !newKind || oldKind === newKind) return;
-  await prisma.checklistItemPriority
-    .updateMany({
-      where: { eventId, kind: oldKind },
-      data: { kind: newKind },
-    })
-    .catch(() => {
-      /* 合流先に同名の行が既にあり一意制約に触れる場合も、優先度タグは補助的な
-         情報なので処理全体を失敗させない（古い行は kind だけ古いまま残るが、
-         該当する項目はその枠に二度と現れないため実害は無い）。 */
-    });
+  const rows = await prisma.checklistItemPriority.findMany({
+    where: { eventId, kind: oldKind },
+    select: { id: true },
+  });
+  for (const row of rows) {
+    await prisma.checklistItemPriority
+      .update({ where: { id: row.id }, data: { kind: newKind } })
+      .catch(() => {
+        /* 合流先（新しいkind側）に同名の行が既にあり一意制約に触れる場合は、
+           その1行だけ古いkindのまま残す（優先度タグは補助的な情報なので、
+           この1行のために処理全体を失敗させない。該当する項目はその枠に
+           二度と現れないため実害は無い）。他の行の付け替えは影響を受けない。 */
+      });
+  }
 }

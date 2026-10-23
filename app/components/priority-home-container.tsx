@@ -234,7 +234,7 @@ function CompletedPriorityItemsToggle({
         onClick={onToggleOpen}
         className="text-xs text-muted underline hover:text-foreground"
       >
-        {open ? "▾" : "▸"} 完了した項目を見る{rows ? `（${rows.length}件）` : ""}
+        {open ? "▾" : "▸"} 完了した項目を見る{rows ? `(${rows.length}件)` : ""}
       </button>
       {open && (
         <div className="mt-1.5">

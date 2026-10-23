@@ -71,6 +71,15 @@ export function HomePriorityRows({
     void deleteStandalonePriorityItemAction(r.toggleId);
   }
 
+  /** 追加直後、サーバーの応答（本物のidへの差し替え）をまだ待っている行か
+   * （`PriorityHomeContainer.addItem` が一時idを `tmp:` で始まる文字列にしている）。
+   * この間にチェック・削除すると、一時idに対する更新が実データに届かずDB上の行だけ
+   * 作られて取り残される不具合になるため、応答が来るまで操作できないようにする
+   * （2026-10-24のバグレビューで発覚・修正）。 */
+  function isPending(r: HomePriorityRowData): boolean {
+    return r.toggleId.startsWith("tmp:");
+  }
+
   const visibleRows = rows.filter((r) => !removed[r.key]);
 
   if (visibleRows.length === 0) {
@@ -93,14 +102,16 @@ export function HomePriorityRows({
             )}
           </>
         );
+        const pending = isPending(r);
         return (
           <li
             key={r.key}
-            className="flex items-start gap-2 rounded-lg bg-surface px-2 py-1.5"
+            className={`flex items-start gap-2 rounded-lg bg-surface px-2 py-1.5 ${pending ? "opacity-60" : ""}`}
           >
             <input
               type="checkbox"
               checked={false}
+              disabled={pending}
               onChange={(e) => {
                 if (e.target.checked) complete(r);
               }}
@@ -118,8 +129,9 @@ export function HomePriorityRows({
               <button
                 type="button"
                 onClick={() => remove(r)}
+                disabled={pending}
                 aria-label="削除"
-                className="mt-0.5 shrink-0 rounded-full border border-border px-1.5 py-1 text-xs text-muted hover:border-warn hover:text-warn"
+                className="mt-0.5 shrink-0 rounded-full border border-border px-1.5 py-1 text-xs text-muted hover:border-warn hover:text-warn disabled:pointer-events-none"
               >
                 <X aria-hidden className="h-3.5 w-3.5" />
               </button>

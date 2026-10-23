@@ -11,14 +11,31 @@ const BASE_TABS = [
   { href: "/settings", label: "設定" },
 ];
 
+// ソフトキーボードを呼ばない input type（チェックボックス・ラジオ・ファイル選択等）。
+// これらにフォーカスしても下のバーを隠さない（2026-10-24: フォーカスだけで判定する
+// ように変更した直後、急ぎ/そのうちの完了チェックボックス・復活チェックボックスに
+// タップするたびにバーが消える不具合が見つかり修正）。
+const NON_KEYBOARD_INPUT_TYPES = new Set([
+  "checkbox",
+  "radio",
+  "range",
+  "color",
+  "file",
+  "button",
+  "submit",
+  "reset",
+  "image",
+  "hidden",
+]);
+
 function isEditableElement(el: Element | null): boolean {
   if (!el) return false;
   const tag = el.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    (el as HTMLElement).isContentEditable
-  );
+  if (tag === "INPUT") {
+    const type = (el as HTMLInputElement).type || "text";
+    return !NON_KEYBOARD_INPUT_TYPES.has(type);
+  }
+  return tag === "TEXTAREA" || (el as HTMLElement).isContentEditable;
 }
 
 /**

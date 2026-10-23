@@ -21,7 +21,7 @@ export async function GET(request: Request): Promise<Response> {
   const bgRatio = bg && bg.width > 0 ? bg.height / bg.width : null;
   const ratio = resolveAspectRatio(url.searchParams.get("w"), url.searchParams.get("h"), bgRatio);
 
-  const image = await renderWallpaper(userId, ratio);
+  const image = await renderWallpaper(userId, ratio, bg);
   image.headers.set("Cache-Control", "no-store");
   return image;
 }

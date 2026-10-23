@@ -367,6 +367,21 @@ export function ChecklistEditor({
       });
       setRemovedTitles([]);
       setSaved(true);
+      // 保存できた題名を、その場で次回の改名検出の基準（originalTitle）にする。
+      // サーバーの initial（props）との再同期を待つと、再同期が来るタイミング次第で
+      // 直前の保存ぶんの originalTitle が古いまま残ることがあり、続けてもう一度
+      // 改名すると renameItemPriority が実際には既に変わった後の古い名前で呼ばれて
+      // 何も一致せず、急ぎ/そのうちタグが孤立して消えてしまう不具合があった
+      // （2026-10-24のバグレビューで発覚・修正）。
+      const savedTitleByKey = new Map(list.map((it) => [it.key, it.title]));
+      setItems((prev) =>
+        prev.map((it) => {
+          const savedTitle = savedTitleByKey.get(it.key);
+          return savedTitle !== undefined && savedTitle !== it.originalTitle
+            ? { ...it, originalTitle: savedTitle }
+            : it;
+        }),
+      );
     });
   }
 

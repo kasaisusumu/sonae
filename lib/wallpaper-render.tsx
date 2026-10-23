@@ -8,6 +8,12 @@
  * 見出し・進捗（done/total）・☑/・の記号・リード時間の書式・コメントの字下げ・
  * 💌過去の自分よりメッセージまで、lib/description.ts の同じ関数（bullet・progress・
  * checkedLast・CHECK_DONE/CHECK_TODO・oneLine）をそのまま使う。
+ *
+ * 表示件数は固定の上限ではなく、パネルの実高さに対する概算の折り返し行数から
+ * 動的に決める（ユーザー指摘「文字が書ける場所が余っているなら、そこまで全部
+ * 書くようにして」。Satoriは実際の描画結果の高さを事前に教えてくれないため、
+ * 1文字ぶんの概算幅（全角1em・半角0.55em）とパネルの実幅から折り返し行数を
+ * 見積もり、使った高さを積み上げて「ほかN件」の1行ぶんを必ず残して埋める）。
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -71,7 +77,7 @@ function compactDate(d: Date): string {
   });
 }
 
-/** 壁紙の描き下ろし時刻（JST）。上部の小さなウィジェットに「最終更新」として表示する。 */
+/** 壁紙の描き下ろし時刻（JST）。下部の余白に「最終更新」として小さく表示する。 */
 function formatUpdatedAt(d: Date): string {
   return d.toLocaleString("ja-JP", {
     timeZone: JST,
@@ -83,42 +89,92 @@ function formatUpdatedAt(d: Date): string {
   });
 }
 
+const LINE_HEIGHT = 1.25;
+
+/** 1文字の概算幅（em単位）。半角英数字・記号は0.55em、それ以外（かな・漢字・絵文字等）は1em とみなす簡易推定。 */
+function estimateLineCount(text: string, fontSizePx: number, usableWidthPx: number): number {
+  const maxEmPerLine = Math.max(1, usableWidthPx / fontSizePx);
+  let emWidth = 0;
+  for (const ch of text) {
+    emWidth += /[\x00-\xFF]/.test(ch) ? 0.55 : 1;
+  }
+  return Math.max(1, Math.ceil(emWidth / maxEmPerLine));
+}
+
+function textHeight(text: string, fontSizePx: number, usableWidthPx: number): number {
+  return fontSizePx * LINE_HEIGHT * estimateLineCount(text, fontSizePx, usableWidthPx);
+}
+
 interface LeftLine {
   kind: "header" | "item" | "comment" | "more";
   text: string;
   done?: boolean;
 }
 
-// 幅が許す限り項目を出し、空きがあるのに「ほかN件」で早期に畳まない方針（ユーザー指定）。
-// Satori側で実際の折り返し後の高さを事前計測できないため、パネルの高さに対して
-// 十分に余裕のある上限を置き、実地描画で確認しながら調整した値。
-const MAX_LEFT_ITEMS = 5;
-const MAX_RIGHT_ITEMS = 2;
+const LEFT_HEADER_SIZE = 50;
+const LEFT_ITEM_SIZE = 48;
+const LEFT_COMMENT_SIZE = 38;
+const LEFT_MORE_SIZE = 38;
+const LEFT_COMMENT_INDENT = 28;
 
 /**
  * 左半分の行を、カレンダー説明欄と同じ書式・同じ記号で組み立てる。
  * 💌過去の自分よりメッセージ（あれば）を先頭に、そのあと準備リストの各枠を続ける
  * （カレンダー説明欄の buildSonaeBlock と同じ並び。ユーザー指定で2026-10-23に追加）。
+ * `budgetPx` に収まるところまで動的に詰め、残りは「ほかN件」にまとめる
+ * （見出しを出すのは、その枠から最低1件は表示できるときだけ）。
  */
 function buildLeftLines(
   items: DescItem[],
   sections: string[],
   messages: { body: string; isDone: boolean }[],
+  usableWidthPx: number,
+  budgetPx: number,
 ): LeftLine[] {
   const lines: LeftLine[] = [];
-  let shown = 0;
+  let usedPx = 0;
   let omitted = 0;
+  const moreReserve = LEFT_MORE_SIZE * LINE_HEIGHT + 10;
 
-  if (messages.length > 0) {
-    lines.push({ kind: "header", text: "過去の自分よりメッセージ" });
-    for (const m of messages) {
-      if (shown >= MAX_LEFT_ITEMS) {
+  function addGroup(
+    headerText: string,
+    entries: { text: string; done?: boolean; commentText?: string | null }[],
+  ) {
+    if (entries.length === 0) return;
+    const headerH = textHeight(headerText, LEFT_HEADER_SIZE, usableWidthPx) + (lines.length === 0 ? 0 : 18) + 8;
+    const firstH = textHeight(entries[0].text, LEFT_ITEM_SIZE, usableWidthPx);
+    if (usedPx + headerH + firstH + moreReserve > budgetPx) {
+      omitted += entries.length;
+      return;
+    }
+    lines.push({ kind: "header", text: headerText });
+    usedPx += headerH;
+    for (const e of entries) {
+      const h = textHeight(e.text, LEFT_ITEM_SIZE, usableWidthPx);
+      const commentH = e.commentText
+        ? textHeight(e.commentText, LEFT_COMMENT_SIZE, usableWidthPx - LEFT_COMMENT_INDENT)
+        : 0;
+      if (usedPx + h + commentH + moreReserve > budgetPx) {
         omitted++;
         continue;
       }
-      lines.push({ kind: "item", text: `${m.isDone ? CHECK_DONE : CHECK_TODO} ${oneLine(m.body)}`, done: m.isDone });
-      shown++;
+      lines.push({ kind: "item", text: e.text, done: e.done });
+      usedPx += h;
+      if (e.commentText) {
+        lines.push({ kind: "comment", text: e.commentText });
+        usedPx += commentH;
+      }
     }
+  }
+
+  if (messages.length > 0) {
+    addGroup(
+      "過去の自分よりメッセージ",
+      messages.map((m) => ({
+        text: `${m.isDone ? CHECK_DONE : CHECK_TODO} ${oneLine(m.body)}`,
+        done: m.isDone,
+      })),
+    );
   }
 
   const order = sections.filter((k) => !k.startsWith("@"));
@@ -128,32 +184,44 @@ function buildLeftLines(
     seen.add(key);
     const group = items.filter((i) => (i.kind ?? "task") === key).sort(checkedLast);
     if (group.length === 0) continue;
-    const remaining = MAX_LEFT_ITEMS - shown;
-    if (remaining <= 0) {
-      omitted += group.length;
-      continue;
-    }
-    const take = group.slice(0, remaining);
-    const rest = group.length - take.length;
-    lines.push({ kind: "header", text: `${sectionLabel(key)}${progress(group)}` });
-    for (const it of take) {
-      const text = bullet(it);
-      const [main, comment] = text.split("\n");
-      lines.push({ kind: "item", text: main, done: !!it.isDone });
-      if (comment) lines.push({ kind: "comment", text: comment.trim() });
-    }
-    shown += take.length;
-    omitted += rest;
+    addGroup(
+      `${sectionLabel(key)}${progress(group)}`,
+      group.map((it) => {
+        const text = bullet(it);
+        const [main, comment] = text.split("\n");
+        return { text: main, done: !!it.isDone, commentText: comment?.trim() || null };
+      }),
+    );
   }
+
   if (omitted > 0) lines.push({ kind: "more", text: `ほか${omitted}件` });
   return lines;
 }
 
-function rightRows(rows: PriorityHomeRow[]): { shown: PriorityHomeRow[]; omitted: number } {
-  return {
-    shown: rows.slice(0, MAX_RIGHT_ITEMS),
-    omitted: Math.max(0, rows.length - MAX_RIGHT_ITEMS),
-  };
+const RIGHT_TITLE_SIZE = 43;
+const RIGHT_SUBTITLE_SIZE = 31;
+const RIGHT_MORE_SIZE = 34;
+
+/** 右側（急ぎ/そのうち）1枠ぶんの行を、パネルの実高さに収まるところまで動的に詰める。 */
+function selectRightRows(
+  rows: PriorityHomeRow[],
+  usableWidthPx: number,
+  budgetPx: number,
+): { shown: PriorityHomeRow[]; omitted: number } {
+  const shown: PriorityHomeRow[] = [];
+  let usedPx = 0;
+  const moreReserve = RIGHT_MORE_SIZE * LINE_HEIGHT + 10;
+  for (const r of rows) {
+    const subtitle = `${r.eventTitle}・${compactDate(r.eventDate)}`;
+    const h =
+      textHeight(r.title, RIGHT_TITLE_SIZE, usableWidthPx) +
+      textHeight(subtitle, RIGHT_SUBTITLE_SIZE, usableWidthPx) +
+      18;
+    if (usedPx + h + moreReserve > budgetPx) break;
+    shown.push(r);
+    usedPx += h;
+  }
+  return { shown, omitted: Math.max(0, rows.length - shown.length) };
 }
 
 const PANEL_BG = "rgba(8,10,16,0.58)";
@@ -162,6 +230,12 @@ const TEXT_MAIN = "#ffffff";
 const TEXT_SUB = "rgba(255,255,255,0.74)";
 const TEXT_DONE = "rgba(255,255,255,0.48)";
 const TEXT_FAINT = "rgba(255,255,255,0.58)";
+// このフォント（木漏れ日ゴシック）には太字の別カットが無いため、文字の縁取り
+// （-webkit-text-stroke）で疑似的に太く見せる（ユーザー指摘「文字は太字にしましょっか」、
+// 2026-10-23）。fontWeight:700 の指定もあわせて残す（Satoriのフォント選択自体は壊さない）。
+const BOLD_STROKE: Record<string, string | number> = {
+  WebkitTextStroke: "1.4px currentColor",
+};
 
 export async function renderWallpaper(
   userId: string,
@@ -201,19 +275,26 @@ export async function renderWallpaper(
   const nextEventMessages = nextEvent ? await getEventDescriptionMessages(nextEvent.id) : [];
 
   // ── レイアウト寸法 ──
-  // 上から: 時計の帯(30%) → アプリ名/最終更新のウィジェット → すき間 → 本体(左:準備リスト／右:急ぎ・そのうち) → 操作ボタンの帯(12%)
+  // 上から: 時計の帯(30%) → アプリ名のウィジェット → すき間 → 本体(左:準備リスト／右:急ぎ・そのうち) → 最終更新の小さな余白(12%)
   const topSafe = Math.round(height * 0.3);
   const bottomSafe = Math.round(height * 0.12);
   const outerPad = Math.round(width * 0.035);
   const halfGap = Math.round(width * 0.025);
 
-  const headerWidgetHeight = Math.round(height * 0.065);
+  const headerWidgetHeight = Math.round(height * 0.06);
   const headerGap = Math.round(height * 0.012);
 
   const contentHeight = height - topSafe - headerWidgetHeight - headerGap - bottomSafe;
   const halfWidth = Math.round((width - outerPad * 2 - halfGap) / 2);
   const rightGap = Math.round(contentHeight * 0.03);
   const rightBoxHeight = Math.round((contentHeight - rightGap) / 2);
+
+  // 左パネルの、タイトル・日付を除いた「項目一覧」に使える高さ・幅
+  const leftPanelPadding = 30;
+  const leftUsableWidth = halfWidth - leftPanelPadding * 2;
+  const leftTitleH = nextEvent ? textHeight(nextEvent.title, 65, leftUsableWidth) : 0;
+  const leftDateH = nextEvent ? 48 * LINE_HEIGHT + 20 : 0;
+  const leftLinesBudget = contentHeight - leftPanelPadding * 2 - leftTitleH - leftDateH;
 
   const leftLines = nextEvent
     ? buildLeftLines(
@@ -226,11 +307,19 @@ export async function renderWallpaper(
         })),
         resolveSections(nextEvent.sectionOrder, nextEvent.checklistItems.map((c) => c.kind)),
         nextEventMessages,
+        leftUsableWidth,
+        leftLinesBudget,
       )
     : [];
 
-  const urgent = rightRows(priorityLists.urgent);
-  const later = rightRows(priorityLists.later);
+  // 右パネルの、見出しを除いた「項目一覧」に使える高さ・幅
+  const rightPanelPadding = 28;
+  const rightUsableWidth = halfWidth - rightPanelPadding * 2;
+  const rightHeadingH = 52 + 20; // PanelHeading の実高さ（絵文字52px・下マージン20px）
+  const rightLinesBudget = rightBoxHeight - rightPanelPadding * 2 - rightHeadingH;
+
+  const urgent = selectRightRows(priorityLists.urgent, rightUsableWidth, rightLinesBudget);
+  const later = selectRightRows(priorityLists.later, rightUsableWidth, rightLinesBudget);
 
   const bgDataUri = bgImage
     ? `data:image/jpeg;base64,${bgImage.data.toString("base64")}`
@@ -250,7 +339,16 @@ export async function renderWallpaper(
         }}
       >
         <div style={{ fontSize: 52, lineHeight: 1, display: "flex", marginRight: 14 }}>{emoji}</div>
-        <div style={{ fontSize: 50, lineHeight: 1.25, fontWeight: 700, color: TEXT_MAIN, display: "flex" }}>
+        <div
+          style={{
+            fontSize: 50,
+            lineHeight: 1.25,
+            fontWeight: 700,
+            color: TEXT_MAIN,
+            display: "flex",
+            ...BOLD_STROKE,
+          }}
+        >
           {text}
         </div>
       </div>
@@ -290,8 +388,8 @@ export async function renderWallpaper(
 
         <div style={{ height: topSafe, width: "100%", display: "flex" }} />
 
-        {/* 新しいウィジェット: アプリ名・最終更新（ユーザー指定で2026-10-23追加）。
-            下の本体パネルを低くして作った隙間に置く。 */}
+        {/* 上部のウィジェット: アプリ名だけを大きく表示する
+            （ユーザー指摘で2026-10-23に新設。最終更新は下部の余白に戻した）。 */}
         <div
           style={{
             height: headerWidgetHeight,
@@ -307,7 +405,6 @@ export async function renderWallpaper(
               width: "100%",
               height: "100%",
               display: "flex",
-              flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
               backgroundColor: PANEL_BG,
@@ -315,11 +412,17 @@ export async function renderWallpaper(
               borderRadius: 26,
             }}
           >
-            <div style={{ fontSize: 38, lineHeight: 1.2, fontWeight: 700, color: TEXT_MAIN, display: "flex" }}>
+            <div
+              style={{
+                fontSize: 54,
+                lineHeight: 1.2,
+                fontWeight: 700,
+                color: TEXT_MAIN,
+                display: "flex",
+                ...BOLD_STROKE,
+              }}
+            >
               {APP_NAME}
-            </div>
-            <div style={{ fontSize: 24, lineHeight: 1.2, color: TEXT_FAINT, display: "flex", marginTop: 4 }}>
-              最終更新: {formatUpdatedAt(now)}
             </div>
           </div>
         </div>
@@ -347,7 +450,7 @@ export async function renderWallpaper(
               backgroundColor: PANEL_BG,
               border: PANEL_BORDER,
               borderRadius: 32,
-              padding: 30,
+              padding: leftPanelPadding,
               overflow: "hidden",
             }}
           >
@@ -361,6 +464,7 @@ export async function renderWallpaper(
                     color: TEXT_MAIN,
                     width: "100%",
                     display: "flex",
+                    ...BOLD_STROKE,
                   }}
                 >
                   {nextEvent.title}
@@ -384,14 +488,15 @@ export async function renderWallpaper(
                         <div
                           key={i}
                           style={{
-                            fontSize: 50,
-                            lineHeight: 1.25,
+                            fontSize: LEFT_HEADER_SIZE,
+                            lineHeight: LINE_HEIGHT,
                             fontWeight: 700,
                             color: TEXT_SUB,
                             width: "100%",
                             marginTop: i === 0 ? 0 : 18,
                             marginBottom: 8,
                             display: "flex",
+                            ...BOLD_STROKE,
                           }}
                         >
                           {l.text}
@@ -403,11 +508,11 @@ export async function renderWallpaper(
                         <div
                           key={i}
                           style={{
-                            fontSize: 38,
-                            lineHeight: 1.25,
+                            fontSize: LEFT_COMMENT_SIZE,
+                            lineHeight: LINE_HEIGHT,
                             color: TEXT_SUB,
                             width: "100%",
-                            paddingLeft: 28,
+                            paddingLeft: LEFT_COMMENT_INDENT,
                             display: "flex",
                           }}
                         >
@@ -420,8 +525,8 @@ export async function renderWallpaper(
                         <div
                           key={i}
                           style={{
-                            fontSize: 38,
-                            lineHeight: 1.25,
+                            fontSize: LEFT_MORE_SIZE,
+                            lineHeight: LINE_HEIGHT,
                             color: TEXT_SUB,
                             width: "100%",
                             marginTop: 10,
@@ -436,8 +541,8 @@ export async function renderWallpaper(
                       <div
                         key={i}
                         style={{
-                          fontSize: 48,
-                          lineHeight: 1.25,
+                          fontSize: LEFT_ITEM_SIZE,
+                          lineHeight: LINE_HEIGHT,
                           color: l.done ? TEXT_DONE : TEXT_MAIN,
                           width: "100%",
                           display: "flex",
@@ -480,7 +585,7 @@ export async function renderWallpaper(
                 backgroundColor: PANEL_BG,
                 border: PANEL_BORDER,
                 borderRadius: 32,
-                padding: 28,
+                padding: rightPanelPadding,
                 overflow: "hidden",
               }}
             >
@@ -488,10 +593,10 @@ export async function renderWallpaper(
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 {urgent.shown.map((r) => (
                   <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 18 }}>
-                    <div style={{ fontSize: 43, lineHeight: 1.25, color: TEXT_MAIN, width: "100%", display: "flex" }}>
+                    <div style={{ fontSize: RIGHT_TITLE_SIZE, lineHeight: LINE_HEIGHT, color: TEXT_MAIN, width: "100%", display: "flex" }}>
                       {r.title}
                     </div>
-                    <div style={{ fontSize: 31, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                    <div style={{ fontSize: RIGHT_SUBTITLE_SIZE, lineHeight: LINE_HEIGHT, color: TEXT_SUB, width: "100%", display: "flex" }}>
                       {r.eventTitle}・{compactDate(r.eventDate)}
                     </div>
                   </div>
@@ -502,7 +607,7 @@ export async function renderWallpaper(
                   </div>
                 )}
                 {urgent.omitted > 0 && (
-                  <div style={{ fontSize: 34, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                  <div style={{ fontSize: RIGHT_MORE_SIZE, lineHeight: LINE_HEIGHT, color: TEXT_SUB, width: "100%", display: "flex" }}>
                     ほか{urgent.omitted}件
                   </div>
                 )}
@@ -518,7 +623,7 @@ export async function renderWallpaper(
                 backgroundColor: PANEL_BG,
                 border: PANEL_BORDER,
                 borderRadius: 32,
-                padding: 28,
+                padding: rightPanelPadding,
                 overflow: "hidden",
               }}
             >
@@ -526,10 +631,10 @@ export async function renderWallpaper(
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 {later.shown.map((r) => (
                   <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 18 }}>
-                    <div style={{ fontSize: 43, lineHeight: 1.25, color: TEXT_MAIN, width: "100%", display: "flex" }}>
+                    <div style={{ fontSize: RIGHT_TITLE_SIZE, lineHeight: LINE_HEIGHT, color: TEXT_MAIN, width: "100%", display: "flex" }}>
                       {r.title}
                     </div>
-                    <div style={{ fontSize: 31, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                    <div style={{ fontSize: RIGHT_SUBTITLE_SIZE, lineHeight: LINE_HEIGHT, color: TEXT_SUB, width: "100%", display: "flex" }}>
                       {r.eventTitle}・{compactDate(r.eventDate)}
                     </div>
                   </div>
@@ -540,7 +645,7 @@ export async function renderWallpaper(
                   </div>
                 )}
                 {later.omitted > 0 && (
-                  <div style={{ fontSize: 34, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                  <div style={{ fontSize: RIGHT_MORE_SIZE, lineHeight: LINE_HEIGHT, color: TEXT_SUB, width: "100%", display: "flex" }}>
                     ほか{later.omitted}件
                   </div>
                 )}
@@ -549,7 +654,21 @@ export async function renderWallpaper(
           </div>
         </div>
 
-        <div style={{ height: bottomSafe, width: "100%", display: "flex" }} />
+        {/* 下部の余白に、最終更新時刻だけ小さく表示する（ユーザー指摘で元の位置に戻した）。 */}
+        <div
+          style={{
+            height: bottomSafe,
+            width: "100%",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            paddingTop: 10,
+          }}
+        >
+          <div style={{ fontSize: 24, lineHeight: 1.25, color: TEXT_FAINT, display: "flex" }}>
+            最終更新: {formatUpdatedAt(now)}
+          </div>
+        </div>
       </div>
     ),
     {

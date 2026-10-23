@@ -65,13 +65,25 @@ function compactDate(d: Date): string {
   return parts;
 }
 
+/** 壁紙の描き下ろし時刻（JST）。下部に「最終更新」として表示する。 */
+function formatUpdatedAt(d: Date): string {
+  return d.toLocaleString("ja-JP", {
+    timeZone: JST,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 interface LeftLine {
   kind: "header" | "item" | "comment" | "more";
   text: string;
   done?: boolean;
 }
 
-const MAX_LEFT_ITEMS = 9;
+const MAX_LEFT_ITEMS = 6;
 
 /** 左半分の準備リスト行を、カレンダー説明欄と同じ書式・同じ記号で組み立てる。 */
 function buildLeftLines(
@@ -109,7 +121,7 @@ function buildLeftLines(
   return lines;
 }
 
-const MAX_RIGHT_ITEMS = 4;
+const MAX_RIGHT_ITEMS = 2;
 
 function rightRows(rows: PriorityHomeRow[]): { shown: PriorityHomeRow[]; omitted: number } {
   return {
@@ -191,12 +203,13 @@ export async function renderWallpaper(
     return (
       <div
         style={{
-          fontSize: 30,
+          fontSize: 46,
+          lineHeight: 1.25,
           fontWeight: 700,
           color: TEXT_MAIN,
           width: "100%",
           display: "flex",
-          marginBottom: 10,
+          marginBottom: 14,
         }}
       >
         {text}
@@ -263,10 +276,28 @@ export async function renderWallpaper(
           >
             {nextEvent ? (
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
-                <div style={{ fontSize: 26, fontWeight: 700, color: TEXT_MAIN, width: "100%", display: "flex" }}>
-                  {nextEvent.title.slice(0, 24)}
+                <div
+                  style={{
+                    fontSize: 54,
+                    lineHeight: 1.25,
+                    fontWeight: 700,
+                    color: TEXT_MAIN,
+                    width: "100%",
+                    display: "flex",
+                  }}
+                >
+                  {nextEvent.title.slice(0, 16)}
                 </div>
-                <div style={{ fontSize: 20, color: TEXT_SUB, width: "100%", marginBottom: 14, display: "flex" }}>
+                <div
+                  style={{
+                    fontSize: 40,
+                    lineHeight: 1.25,
+                    color: TEXT_SUB,
+                    width: "100%",
+                    marginBottom: 18,
+                    display: "flex",
+                  }}
+                >
                   {compactDate(nextEvent.eventDatetime)}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
@@ -276,12 +307,13 @@ export async function renderWallpaper(
                         <div
                           key={i}
                           style={{
-                            fontSize: 21,
+                            fontSize: 42,
+                            lineHeight: 1.25,
                             fontWeight: 700,
                             color: TEXT_SUB,
                             width: "100%",
-                            marginTop: i === 0 ? 0 : 12,
-                            marginBottom: 4,
+                            marginTop: i === 0 ? 0 : 16,
+                            marginBottom: 6,
                             display: "flex",
                           }}
                         >
@@ -293,7 +325,14 @@ export async function renderWallpaper(
                       return (
                         <div
                           key={i}
-                          style={{ fontSize: 18, color: TEXT_SUB, width: "100%", paddingLeft: 24, display: "flex" }}
+                          style={{
+                            fontSize: 32,
+                            lineHeight: 1.25,
+                            color: TEXT_SUB,
+                            width: "100%",
+                            paddingLeft: 24,
+                            display: "flex",
+                          }}
                         >
                           {l.text}
                         </div>
@@ -301,7 +340,17 @@ export async function renderWallpaper(
                     }
                     if (l.kind === "more") {
                       return (
-                        <div key={i} style={{ fontSize: 18, color: TEXT_SUB, width: "100%", marginTop: 6, display: "flex" }}>
+                        <div
+                          key={i}
+                          style={{
+                            fontSize: 32,
+                            lineHeight: 1.25,
+                            color: TEXT_SUB,
+                            width: "100%",
+                            marginTop: 8,
+                            display: "flex",
+                          }}
+                        >
                           {l.text}
                         </div>
                       );
@@ -310,7 +359,8 @@ export async function renderWallpaper(
                       <div
                         key={i}
                         style={{
-                          fontSize: 22,
+                          fontSize: 40,
+                          lineHeight: 1.25,
                           color: l.done ? TEXT_DONE : TEXT_MAIN,
                           width: "100%",
                           display: "flex",
@@ -321,14 +371,16 @@ export async function renderWallpaper(
                     );
                   })}
                   {leftLines.length === 0 && (
-                    <div style={{ fontSize: 20, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                    <div style={{ fontSize: 38, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
                       準備リストはまだありません
                     </div>
                   )}
                 </div>
               </div>
             ) : (
-              <div style={{ fontSize: 22, color: TEXT_SUB, width: "100%", display: "flex" }}>次の予定はありません</div>
+              <div style={{ fontSize: 40, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                次の予定はありません
+              </div>
             )}
           </div>
 
@@ -357,18 +409,24 @@ export async function renderWallpaper(
               <PanelHeading text={`🔥 急ぎ（${priorityLists.urgent.length}）`} />
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 {urgent.shown.map((r) => (
-                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 8 }}>
-                    <div style={{ fontSize: 20, color: TEXT_MAIN, width: "100%", display: "flex" }}>{r.title.slice(0, 18)}</div>
-                    <div style={{ fontSize: 15, color: TEXT_SUB, width: "100%", display: "flex" }}>
-                      {r.eventTitle.slice(0, 16)}・{compactDate(r.eventDate)}
+                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 14 }}>
+                    <div style={{ fontSize: 36, lineHeight: 1.25, color: TEXT_MAIN, width: "100%", display: "flex" }}>
+                      {r.title.slice(0, 12)}
+                    </div>
+                    <div style={{ fontSize: 26, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                      {r.eventTitle.slice(0, 10)}・{compactDate(r.eventDate)}
                     </div>
                   </div>
                 ))}
                 {urgent.shown.length === 0 && (
-                  <div style={{ fontSize: 18, color: TEXT_SUB, width: "100%", display: "flex" }}>（なし）</div>
+                  <div style={{ fontSize: 32, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                    （なし）
+                  </div>
                 )}
                 {urgent.omitted > 0 && (
-                  <div style={{ fontSize: 16, color: TEXT_SUB, width: "100%", display: "flex" }}>ほか{urgent.omitted}件</div>
+                  <div style={{ fontSize: 28, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                    ほか{urgent.omitted}件
+                  </div>
                 )}
               </div>
             </div>
@@ -388,25 +446,51 @@ export async function renderWallpaper(
               <PanelHeading text={`🕒 そのうち（${priorityLists.later.length}）`} />
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 {later.shown.map((r) => (
-                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 8 }}>
-                    <div style={{ fontSize: 20, color: TEXT_MAIN, width: "100%", display: "flex" }}>{r.title.slice(0, 18)}</div>
-                    <div style={{ fontSize: 15, color: TEXT_SUB, width: "100%", display: "flex" }}>
-                      {r.eventTitle.slice(0, 16)}・{compactDate(r.eventDate)}
+                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 14 }}>
+                    <div style={{ fontSize: 36, lineHeight: 1.25, color: TEXT_MAIN, width: "100%", display: "flex" }}>
+                      {r.title.slice(0, 12)}
+                    </div>
+                    <div style={{ fontSize: 26, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                      {r.eventTitle.slice(0, 10)}・{compactDate(r.eventDate)}
                     </div>
                   </div>
                 ))}
                 {later.shown.length === 0 && (
-                  <div style={{ fontSize: 18, color: TEXT_SUB, width: "100%", display: "flex" }}>（なし）</div>
+                  <div style={{ fontSize: 32, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                    （なし）
+                  </div>
                 )}
                 {later.omitted > 0 && (
-                  <div style={{ fontSize: 16, color: TEXT_SUB, width: "100%", display: "flex" }}>ほか{later.omitted}件</div>
+                  <div style={{ fontSize: 28, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                    ほか{later.omitted}件
+                  </div>
                 )}
               </div>
             </div>
           </div>
         </div>
 
-        <div style={{ height: bottomSafe, width: "100%", display: "flex" }} />
+        <div
+          style={{
+            height: bottomSafe,
+            width: "100%",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            paddingTop: 10,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 24,
+              lineHeight: 1.25,
+              color: "rgba(255,255,255,0.55)",
+              display: "flex",
+            }}
+          >
+            最終更新: {formatUpdatedAt(now)}
+          </div>
+        </div>
       </div>
     ),
     {

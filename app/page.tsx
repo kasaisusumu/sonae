@@ -14,7 +14,7 @@ import { Landing } from "@/app/components/landing";
 import { NotifyOffBanner } from "@/app/components/notify-off-banner";
 import { SavingsDashboard } from "@/app/components/savings-dashboard";
 import { GrowthDashboard } from "@/app/components/growth-dashboard";
-import { HomePriorityRows } from "@/app/components/priority-home-rows";
+import { PriorityHomeContainer } from "@/app/components/priority-home-container";
 import { MessageList } from "@/app/failures/message-list";
 
 export const maxDuration = 60;
@@ -112,33 +112,19 @@ export default async function HomePage({
       {pushCount === 0 && <NotifyOffBanner publicKey={vapidPublicKey} />}
 
       {/* 「急ぎ」「そのうち」一覧。本番版・テスト版どちらでも出す（2026-10-23追加）。
-          同じ名前の項目・メッセージは1行にまとめ、直近の予定を代表として出す。 */}
-      {(priorityLists.urgent.length > 0 || priorityLists.later.length > 0) && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <section className="rounded-2xl border border-warn/30 bg-warn-soft p-4">
-            <h2 className="text-sm font-semibold text-warn">🔥 急ぎ</h2>
-            <div className="mt-2">
-              <HomePriorityRows
-                rows={priorityLists.urgent.map((r) => ({
-                  ...r,
-                  eventDate: r.eventDate.toISOString(),
-                }))}
-              />
-            </div>
-          </section>
-          <section className="rounded-2xl border border-teal/30 bg-teal-soft p-4">
-            <h2 className="text-sm font-semibold text-teal-dark">🕒 そのうち</h2>
-            <div className="mt-2">
-              <HomePriorityRows
-                rows={priorityLists.later.map((r) => ({
-                  ...r,
-                  eventDate: r.eventDate.toISOString(),
-                }))}
-              />
-            </div>
-          </section>
-        </div>
-      )}
+          同じ名前の項目・メッセージは1行にまとめ、直近の予定を代表として出す。
+          表示するかどうか・内容は PriorityHomeContainer がマウント時の値で固定する
+          （チェックした瞬間にセクションごと消えるのを防ぐ）。 */}
+      <PriorityHomeContainer
+        urgent={priorityLists.urgent.map((r) => ({
+          ...r,
+          eventDate: r.eventDate.toISOString(),
+        }))}
+        later={priorityLists.later.map((r) => ({
+          ...r,
+          eventDate: r.eventDate.toISOString(),
+        }))}
+      />
 
       {isProd ? (
         <>

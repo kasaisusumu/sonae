@@ -24,7 +24,9 @@ export interface HomePriorityRowData {
  * ホームの「急ぎ」「そのうち」一覧。チェックすると予定詳細と同じ isDone に反映される
  * （準備リスト項目は toggleChecklistItemDone、未来の自分へは toggleFutureMessageDoneAction）。
  * チェックした瞬間に行を消さない（指の下で消える・並び替わるのを避ける。ユーザー指摘の
- * 既存ルールと同じ）。完了は次にこのページを開いたときに一覧から外れる。
+ * 既存ルールと同じ）。`rows` は呼び出し元（`PriorityHomeContainer`）がページを開いた
+ * 時点でスナップショットして固定した値が渡ってくる想定（このページに居続けている間に
+ * サーバーの再検証で新しい rows が来ても、呼び出し元がそれを無視する）。
  */
 export function HomePriorityRows({ rows }: { rows: HomePriorityRowData[] }) {
   const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});

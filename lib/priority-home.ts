@@ -13,12 +13,16 @@ export type HomePriority = "urgent" | "later";
 export interface PriorityHomeRow {
   key: string;
   title: string;
-  eventId: string;
-  eventTitle: string;
-  eventDate: Date;
+  /** 予定に紐づく行だけ入る。StandalonePriorityItem（予定に紐づかない行）は null。 */
+  eventId: string | null;
+  eventTitle: string | null;
+  eventDate: Date | null;
   isPast: boolean;
   isMessage: boolean;
-  /** チェックボックス操作の対象 id。項目なら ChecklistItem.id、メッセージなら EventFutureMessage.id。 */
+  /** 予定に紐づかず、ホームから直接追加した項目か（2026-10-23追加・ユーザー指定）。 */
+  isStandalone: boolean;
+  /** チェックボックス操作の対象 id。項目なら ChecklistItem.id、メッセージなら
+   * EventFutureMessage.id、予定に紐づかない項目なら StandalonePriorityItem.id。 */
   toggleId: string;
 }
 
@@ -44,13 +48,18 @@ function pickRepresentative(candidates: Candidate[]): Candidate | null {
   return past[0] ?? null;
 }
 
+/** 予定に紐づかない項目（eventDate が無い）は先頭にまとめ、そのあと予定に紐づく行を
+ * 従来どおり（未来は近い順、過去は新しい順）に並べる。 */
 function sortRows(rows: PriorityHomeRow[]): PriorityHomeRow[] {
-  return [...rows].sort((a, b) => {
+  const standalone = rows.filter((r) => r.eventDate === null);
+  const linked = rows.filter((r) => r.eventDate !== null) as (PriorityHomeRow & { eventDate: Date })[];
+  const sortedLinked = [...linked].sort((a, b) => {
     if (a.isPast !== b.isPast) return a.isPast ? 1 : -1;
     return a.isPast
       ? b.eventDate.getTime() - a.eventDate.getTime()
       : a.eventDate.getTime() - b.eventDate.getTime();
   });
+  return [...standalone, ...sortedLinked];
 }
 
 export async function loadPriorityHomeLists(
@@ -138,6 +147,7 @@ export async function loadPriorityHomeLists(
         eventDate: rep.eventDatetime,
         isPast: rep.isPast,
         isMessage: false,
+        isStandalone: false,
         toggleId: rep.toggleId,
       });
     }
@@ -175,7 +185,28 @@ export async function loadPriorityHomeLists(
       eventDate: rep.eventDatetime,
       isPast: rep.isPast,
       isMessage: true,
+      isStandalone: false,
       toggleId: rep.toggleId,
+    });
+  }
+
+  const standaloneItems = await prisma.standalonePriorityItem.findMany({
+    where: { userId, isDone: false },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, title: true, priority: true },
+  });
+  for (const s of standaloneItems) {
+    if (s.priority !== "urgent" && s.priority !== "later") continue;
+    result[s.priority].push({
+      key: `standalone:${s.id}`,
+      title: s.title,
+      eventId: null,
+      eventTitle: null,
+      eventDate: null,
+      isPast: false,
+      isMessage: false,
+      isStandalone: true,
+      toggleId: s.id,
     });
   }
 

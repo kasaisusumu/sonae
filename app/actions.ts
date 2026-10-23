@@ -3256,3 +3256,46 @@ export async function deleteLockScreenImageAction(): Promise<void> {
   trackEvent(userId, "feature:lock-screen-image-delete");
   revalidateAppViews();
 }
+
+/**
+ * ホームの「急ぎ」「そのうち」から、予定に紐づけず直接追加する項目（2026-10-23追加・
+ * ユーザー指定）。ChecklistItemPriorityとは別物（同名の既存項目への連動は無い、
+ * 単発のメモ的な項目）。
+ */
+export async function addStandalonePriorityItemAction(
+  title: string,
+  priority: "urgent" | "later",
+): Promise<{ ok: boolean; id?: string }> {
+  const userId = await requireUserId();
+  const t = title.trim().slice(0, 120);
+  if (!t) return { ok: false };
+  const row = await prisma.standalonePriorityItem.create({
+    data: { userId, title: t, priority },
+    select: { id: true },
+  });
+  trackEvent(userId, "feature:standalone-priority-add");
+  revalidateAppViews();
+  return { ok: true, id: row.id };
+}
+
+/** チェックで完了（一覧から外れる。予定に紐づく項目と同じ「軽いチェック」の扱い）。 */
+export async function toggleStandalonePriorityItemAction(
+  id: string,
+  isDone: boolean,
+): Promise<void> {
+  const userId = await requireUserId();
+  await prisma.standalonePriorityItem.updateMany({
+    where: { id, userId },
+    data: { isDone },
+  });
+  trackEvent(userId, "feature:standalone-priority-check");
+  revalidateAppViews();
+}
+
+/** 完全な削除（元に戻せないため、呼び出し元のUIで確認ポップアップを出す）。 */
+export async function deleteStandalonePriorityItemAction(id: string): Promise<void> {
+  const userId = await requireUserId();
+  await prisma.standalonePriorityItem.deleteMany({ where: { id, userId } });
+  trackEvent(userId, "feature:standalone-priority-delete");
+  revalidateAppViews();
+}

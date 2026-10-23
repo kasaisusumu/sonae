@@ -199,10 +199,13 @@ function buildLeftLines(
 }
 
 const RIGHT_TITLE_SIZE = 43;
-const RIGHT_SUBTITLE_SIZE = 31;
 const RIGHT_MORE_SIZE = 34;
 
-/** 右側（急ぎ/そのうち）1枠ぶんの行を、パネルの実高さに収まるところまで動的に詰める。 */
+/**
+ * 右側（急ぎ/そのうち）1枠ぶんの行を、パネルの実高さに収まるところまで動的に詰める。
+ * どの予定の項目かは出さない（ユーザー指摘「その項目名の下に小さく書くやつしなくていい」
+ * 2026-10-23）。項目名だけの1行ぶんの高さで見積もる。
+ */
 function selectRightRows(
   rows: PriorityHomeRow[],
   usableWidthPx: number,
@@ -212,11 +215,7 @@ function selectRightRows(
   let usedPx = 0;
   const moreReserve = RIGHT_MORE_SIZE * LINE_HEIGHT + 10;
   for (const r of rows) {
-    const subtitle = `${r.eventTitle}・${compactDate(r.eventDate)}`;
-    const h =
-      textHeight(r.title, RIGHT_TITLE_SIZE, usableWidthPx) +
-      textHeight(subtitle, RIGHT_SUBTITLE_SIZE, usableWidthPx) +
-      18;
+    const h = textHeight(r.title, RIGHT_TITLE_SIZE, usableWidthPx) + 14;
     if (usedPx + h + moreReserve > budgetPx) break;
     shown.push(r);
     usedPx += h;
@@ -275,9 +274,11 @@ export async function renderWallpaper(
   const nextEventMessages = nextEvent ? await getEventDescriptionMessages(nextEvent.id) : [];
 
   // ── レイアウト寸法 ──
-  // 上から: 時計の帯(30%) → アプリ名のウィジェット → すき間 → 本体(左:準備リスト／右:急ぎ・そのうち) → 最終更新の小さな余白(12%)
-  const topSafe = Math.round(height * 0.3);
-  const bottomSafe = Math.round(height * 0.12);
+  // 上から: 時計の帯(28%) → アプリ名のウィジェット → すき間 → 本体(左:準備リスト／右:急ぎ・そのうち) → 最終更新+下部アイコン(懐中電灯・カメラ等)との余白(30%)
+  // 下の余白は、ロック画面下部の固定アイコン・スマートスタックと被らないよう広めに確保する
+  // （ユーザー指摘「下の四つのボタンのやつと被っちゃってる」、実機スクリーンショットで確認、2026-10-23）。
+  const topSafe = Math.round(height * 0.28);
+  const bottomSafe = Math.round(height * 0.3);
   const outerPad = Math.round(width * 0.035);
   const halfGap = Math.round(width * 0.025);
 
@@ -592,12 +593,9 @@ export async function renderWallpaper(
               <PanelHeading emoji="🔥" text={`急ぎ（${priorityLists.urgent.length}）`} />
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 {urgent.shown.map((r) => (
-                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 18 }}>
+                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 14 }}>
                     <div style={{ fontSize: RIGHT_TITLE_SIZE, lineHeight: LINE_HEIGHT, color: TEXT_MAIN, width: "100%", display: "flex" }}>
                       {r.title}
-                    </div>
-                    <div style={{ fontSize: RIGHT_SUBTITLE_SIZE, lineHeight: LINE_HEIGHT, color: TEXT_SUB, width: "100%", display: "flex" }}>
-                      {r.eventTitle}・{compactDate(r.eventDate)}
                     </div>
                   </div>
                 ))}
@@ -630,12 +628,9 @@ export async function renderWallpaper(
               <PanelHeading emoji="🕒" text={`そのうち（${priorityLists.later.length}）`} />
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 {later.shown.map((r) => (
-                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 18 }}>
+                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 14 }}>
                     <div style={{ fontSize: RIGHT_TITLE_SIZE, lineHeight: LINE_HEIGHT, color: TEXT_MAIN, width: "100%", display: "flex" }}>
                       {r.title}
-                    </div>
-                    <div style={{ fontSize: RIGHT_SUBTITLE_SIZE, lineHeight: LINE_HEIGHT, color: TEXT_SUB, width: "100%", display: "flex" }}>
-                      {r.eventTitle}・{compactDate(r.eventDate)}
                     </div>
                   </div>
                 ))}

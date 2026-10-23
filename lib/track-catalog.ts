@@ -60,6 +60,9 @@ export const FEATURE_KEYS: TrackedKey[] = [
   { key: "feature:lock-screen-image-delete", label: "設定: ロック画面の背景画像を削除" },
   { key: "feature:lock-screen-wallpaper-fetch", label: "ショートカット: ロック画面壁紙を取得" },
   { key: "feature:lock-screen-guide-open-share", label: "設定: 共有ショートカットを開く" },
+  { key: "feature:standalone-priority-add", label: "ホーム: 予定に紐づかない急ぎ/そのうち項目を追加" },
+  { key: "feature:standalone-priority-check", label: "ホーム: 予定に紐づかない項目の✓完了チェック" },
+  { key: "feature:standalone-priority-delete", label: "ホーム: 予定に紐づかない項目を削除" },
 ];
 
 /** ⓘ（InfoHint）の説明ポップアップ。開かれた回数を数える。 */

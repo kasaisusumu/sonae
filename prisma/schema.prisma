@@ -56,6 +56,7 @@ model User {
   checklistItemPriorities ChecklistItemPriority[]
   shortcutTokens     ShortcutToken[]
   lockScreenImage    LockScreenImage?
+  standalonePriorityItems StandalonePriorityItem[]
 }
 
 // 機能モード切替の操作履歴（時刻・変更前後）。設定ページの切替操作ごとに1行。
@@ -721,4 +722,20 @@ model LockScreenImage {
   height    Int
   bytes     Int
   updatedAt DateTime @updatedAt
+}
+
+/// ホームの「急ぎ」「そのうち」に、予定（Event）に紐づけず直接追加できる項目
+/// （2026-10-23追加、ユーザー指定）。ChecklistItemPriorityとは異なり、
+/// (eventId,kind,normTitle)で同名の既存項目へ連動することはない単発のメモ的な項目。
+model StandalonePriorityItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  priority  String   // "urgent" | "later"
+  isDone    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

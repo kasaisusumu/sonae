@@ -25,6 +25,10 @@
  *        app/api/shortcut/summary/route.ts の以降の全クエリ（2026-10-23追加）
  *   ⑦ ロック画面の背景画像（LockScreenImage）の分離
  *      — lib/lock-screen-image.ts の loadLockScreenImage（2026-10-23追加）
+ *   ⑧ 予定に紐づかない急ぎ/そのうち項目（StandalonePriorityItem）の分離
+ *      — lib/priority-home.ts の loadPriorityHomeLists、
+ *        app/actions.ts の toggleStandalonePriorityItemAction/
+ *        deleteStandalonePriorityItemAction（2026-10-23追加）
  *
  * 安全装置:
  *   このスクリプトは書き込みを行うため、接続先が本番 DB でないことを
@@ -397,6 +401,58 @@ async function main() {
     // 壁紙API（app/api/shortcut/wallpaper.png/route.ts）はトークンから解決した userId
     // だけで loadLockScreenImage を呼ぶため、上記と同じ where 条件がそのまま適用される
     // （⑥で検証済みのトークン解決と組み合わせて、他ユーザーの背景画像を壁紙に使われない）。
+
+    // ── ⑧ 予定に紐づかない急ぎ/そのうち項目（StandalonePriorityItem）の分離 ──
+    // lib/priority-home.ts: loadPriorityHomeLists(userId) の standaloneItems クエリと同じ where 条件
+    const standaloneA = await prisma.standalonePriorityItem.create({
+      data: { userId: userA.id, title: "分離テスト用の項目", priority: "urgent" },
+    });
+    const standaloneForB = await prisma.standalonePriorityItem.findMany({
+      where: { userId: userB.id, isDone: false },
+      select: { id: true },
+    });
+    check(
+      "⑧ userB の一覧に userA の予定に紐づかない項目が出ない",
+      standaloneForB.length === 0,
+      `${standaloneForB.length}件見えてしまっている`,
+    );
+    const standaloneForA = await prisma.standalonePriorityItem.findMany({
+      where: { userId: userA.id, isDone: false },
+      select: { id: true },
+    });
+    check(
+      "⑧ （前提確認）userA 自身の項目は取得できる",
+      standaloneForA.length === 1,
+      "テストデータの前提が崩れている可能性",
+    );
+    // app/actions.ts: toggleStandalonePriorityItemAction/deleteStandalonePriorityItemAction と
+    // 同じ、id に加えて userId も条件に入れた updateMany/deleteMany（他人の id を自分の
+    // userId で操作しても0件のままで、何も変更・削除されないこと）
+    const toggleByB = await prisma.standalonePriorityItem.updateMany({
+      where: { id: standaloneA.id, userId: userB.id },
+      data: { isDone: true },
+    });
+    check(
+      "⑧ userB が userA の項目IDを指定しても完了にできない",
+      toggleByB.count === 0,
+      `${toggleByB.count}件更新できてしまった`,
+    );
+    const deleteByB = await prisma.standalonePriorityItem.deleteMany({
+      where: { id: standaloneA.id, userId: userB.id },
+    });
+    check(
+      "⑧ userB が userA の項目IDを指定しても削除できない",
+      deleteByB.count === 0,
+      `${deleteByB.count}件削除できてしまった`,
+    );
+    const standaloneStillThere = await prisma.standalonePriorityItem.findUnique({
+      where: { id: standaloneA.id },
+    });
+    check(
+      "⑧ （前提確認）上記の他人操作のあともuserAの項目は消えずに残っている",
+      !!standaloneStillThere,
+      "テストデータの前提が崩れている可能性",
+    );
 
     console.log(
       failures === 0

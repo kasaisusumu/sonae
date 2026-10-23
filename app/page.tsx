@@ -118,11 +118,11 @@ export default async function HomePage({
       <PriorityHomeContainer
         urgent={priorityLists.urgent.map((r) => ({
           ...r,
-          eventDate: r.eventDate.toISOString(),
+          eventDate: r.eventDate ? r.eventDate.toISOString() : null,
         }))}
         later={priorityLists.later.map((r) => ({
           ...r,
-          eventDate: r.eventDate.toISOString(),
+          eventDate: r.eventDate ? r.eventDate.toISOString() : null,
         }))}
       />
 

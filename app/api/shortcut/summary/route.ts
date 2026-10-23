@@ -19,12 +19,12 @@ function eventUrl(eventId: string): string {
 }
 
 function formatPriorityLines(rows: PriorityHomeRow[]): string[] {
-  const lines = rows
-    .slice(0, MAX_LIST)
-    .map(
-      (r) =>
-        `- ${r.title}（${r.eventTitle}・${formatDateShort(r.eventDate)}${r.isPast ? "・過去" : ""}） ${eventUrl(r.eventId)}`,
-    );
+  const lines = rows.slice(0, MAX_LIST).map((r) => {
+    if (r.isStandalone || !r.eventId || !r.eventTitle || !r.eventDate) {
+      return `- ${r.title}`;
+    }
+    return `- ${r.title}（${r.eventTitle}・${formatDateShort(r.eventDate)}${r.isPast ? "・過去" : ""}） ${eventUrl(r.eventId)}`;
+  });
   if (rows.length > MAX_LIST) lines.push(`ほか${rows.length - MAX_LIST}件`);
   return lines;
 }

@@ -2,7 +2,15 @@
 
 import { useState } from "react";
 import { HomePriorityRows, type HomePriorityRowData } from "@/app/components/priority-home-rows";
-import { addStandalonePriorityItemAction } from "@/app/actions";
+import {
+  addStandalonePriorityItemAction,
+  loadCompletedPriorityItemsAction,
+  toggleStandalonePriorityItemAction,
+  toggleFutureMessageDoneAction,
+  toggleChecklistItemDone,
+  type CompletedPriorityRowData,
+} from "@/app/actions";
+import { formatDateShort } from "@/lib/format";
 
 /**
  * 「急ぎ」「そのうち」セクションの外枠。サーバーから渡された2つの一覧を、
@@ -72,6 +80,7 @@ export function PriorityHomeContainer({
           <HomePriorityRows rows={frozenUrgent} />
         </div>
         <AddPriorityItemForm onAdd={(title) => addItem("urgent", title)} />
+        <CompletedPriorityItemsToggle priority="urgent" />
       </section>
       <section className="rounded-2xl border border-teal/30 bg-teal-soft p-4">
         <h2 className="text-sm font-semibold text-teal-dark">🕒 そのうち</h2>
@@ -79,6 +88,7 @@ export function PriorityHomeContainer({
           <HomePriorityRows rows={frozenLater} />
         </div>
         <AddPriorityItemForm onAdd={(title) => addItem("later", title)} />
+        <CompletedPriorityItemsToggle priority="later" />
       </section>
     </div>
   );
@@ -116,6 +126,93 @@ function AddPriorityItemForm({ onAdd }: { onAdd: (title: string) => void }) {
       >
         ＋追加
       </button>
+    </div>
+  );
+}
+
+/**
+ * 「完了した項目を見る」（2026-10-24追加・ユーザー指定）。押すまでは何も取得しない
+ * （`loadCompletedPriorityItemsAction` は初回展開時に1回だけ呼ぶ）。チェックは
+ * 常に「オン」から始まり、外すと復活（予定に紐づく項目は toggleChecklistItemDone／
+ * toggleFutureMessageDoneAction、予定に紐づかない項目は
+ * toggleStandalonePriorityItemAction）してこの一覧から取り除く。ホームの通常一覧
+ * （`frozenUrgent`／`frozenLater`）は次にホームを開くまで更新しない既存の仕様と
+ * 同じく、復活した項目がこのページに居続けている間に通常一覧へ自動で戻ることはない。
+ */
+function CompletedPriorityItemsToggle({ priority }: { priority: "urgent" | "later" }) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<CompletedPriorityRowData[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleToggle() {
+    if (!open && rows === null) {
+      setLoading(true);
+      const res = await loadCompletedPriorityItemsAction(priority);
+      setRows(res);
+      setLoading(false);
+    }
+    setOpen((v) => !v);
+  }
+
+  function revive(r: CompletedPriorityRowData) {
+    setRows((prev) => (prev ? prev.filter((x) => x.key !== r.key) : prev));
+    if (r.isStandalone) {
+      void toggleStandalonePriorityItemAction(r.toggleId, false);
+    } else if (r.isMessage) {
+      void toggleFutureMessageDoneAction(r.toggleId, false);
+    } else {
+      void toggleChecklistItemDone(r.toggleId, false);
+    }
+  }
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={handleToggle}
+        className="text-xs text-muted underline hover:text-foreground"
+      >
+        {open ? "▾" : "▸"} 完了した項目を見る{rows ? `（${rows.length}件）` : ""}
+      </button>
+      {open && (
+        <div className="mt-1.5">
+          {loading ? (
+            <p className="text-xs text-muted">読み込み中…</p>
+          ) : rows && rows.length === 0 ? (
+            <p className="text-xs text-muted">完了した項目はありません。</p>
+          ) : (
+            <ul className="space-y-1">
+              {rows?.map((r) => (
+                <li
+                  key={r.key}
+                  className="flex items-start gap-2 rounded-lg bg-surface px-2 py-1.5"
+                >
+                  <input
+                    type="checkbox"
+                    checked
+                    onChange={() => revive(r)}
+                    aria-label="完了を取り消して復活させる"
+                    className="mt-1 h-5 w-5 shrink-0 accent-[var(--teal)]"
+                  />
+                  <span className="min-w-0 flex-1 py-0.5">
+                    <span className="block text-sm text-muted line-through">{r.title}</span>
+                    {!r.isStandalone && r.eventTitle && (
+                      <span className="block text-[11px] text-muted">
+                        {r.eventTitle}
+                        {r.eventDate ? ` ・ ${formatDateShort(r.eventDate)}` : ""}
+                        {r.isPast ? "（過去）" : ""}
+                      </span>
+                    )}
+                    {r.isStandalone && (
+                      <span className="block text-[11px] text-muted">手動で追加</span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </div>
   );
 }

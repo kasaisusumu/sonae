@@ -29,6 +29,8 @@
  *      — lib/priority-home.ts の loadPriorityHomeLists、
  *        app/actions.ts の toggleStandalonePriorityItemAction/
  *        deleteStandalonePriorityItemAction（2026-10-23追加）
+ *   ⑨ ホームの「完了した項目を見る」（loadCompletedPriorityItems）の分離
+ *      — lib/priority-home.ts の loadCompletedPriorityItems（2026-10-24追加）
  *
  * 安全装置:
  *   このスクリプトは書き込みを行うため、接続先が本番 DB でないことを
@@ -452,6 +454,40 @@ async function main() {
       "⑧ （前提確認）上記の他人操作のあともuserAの項目は消えずに残っている",
       !!standaloneStillThere,
       "テストデータの前提が崩れている可能性",
+    );
+
+    // ── ⑨ ホームの「完了した項目を見る」（loadCompletedPriorityItems）の分離 ──
+    // lib/priority-home.ts: loadCompletedPriorityItems(userId, priority) の
+    // standaloneItems クエリ・itemTags クエリと同じ where 条件
+    await prisma.standalonePriorityItem.create({
+      data: { userId: userA.id, title: "分離テスト用の完了済み項目", priority: "urgent", isDone: true },
+    });
+    const completedStandaloneForB = await prisma.standalonePriorityItem.findMany({
+      where: { userId: userB.id, isDone: true, priority: "urgent" },
+      select: { id: true },
+    });
+    check(
+      "⑨ userB の「完了した項目」にuserAの予定に紐づかない項目が出ない",
+      completedStandaloneForB.length === 0,
+      `${completedStandaloneForB.length}件見えてしまっている`,
+    );
+    const completedStandaloneForA = await prisma.standalonePriorityItem.findMany({
+      where: { userId: userA.id, isDone: true, priority: "urgent" },
+      select: { id: true },
+    });
+    check(
+      "⑨ （前提確認）userA自身の「完了した項目」は取得できる",
+      completedStandaloneForA.length === 1,
+      "テストデータの前提が崩れている可能性",
+    );
+    const completedItemTagsForB = await prisma.checklistItemPriority.findMany({
+      where: { userId: userB.id, priority: "urgent" },
+      select: { id: true },
+    });
+    check(
+      "⑨ userB の「完了した項目」クエリの元になるタグ検索にuserAのタグが出ない",
+      completedItemTagsForB.length === 0,
+      `${completedItemTagsForB.length}件見えてしまっている`,
     );
 
     console.log(

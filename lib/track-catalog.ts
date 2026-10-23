@@ -63,6 +63,7 @@ export const FEATURE_KEYS: TrackedKey[] = [
   { key: "feature:standalone-priority-add", label: "ホーム: 予定に紐づかない急ぎ/そのうち項目を追加" },
   { key: "feature:standalone-priority-check", label: "ホーム: 予定に紐づかない項目の✓完了チェック" },
   { key: "feature:standalone-priority-delete", label: "ホーム: 予定に紐づかない項目を削除" },
+  { key: "feature:home-completed-items-view", label: "ホーム: 急ぎ/そのうちの完了した項目を見る" },
 ];
 
 /** ⓘ（InfoHint）の説明ポップアップ。開かれた回数を数える。 */

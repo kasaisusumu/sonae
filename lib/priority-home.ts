@@ -35,8 +35,13 @@ interface Candidate {
   toggleId: string;
 }
 
-function pickRepresentative(candidates: Candidate[]): Candidate | null {
-  const open = candidates.filter((c) => !c.isDone);
+/** `predicate` に合う候補だけから代表を選ぶ（既定: 未完了）。§ `loadCompletedPriorityItems`
+ * では完了済みだけを対象にするため `(c) => c.isDone` を渡す。 */
+function pickRepresentative(
+  candidates: Candidate[],
+  predicate: (c: Candidate) => boolean = (c) => !c.isDone,
+): Candidate | null {
+  const open = candidates.filter(predicate);
   if (open.length === 0) return null;
   const upcoming = open
     .filter((c) => !c.isPast)
@@ -213,4 +218,147 @@ export async function loadPriorityHomeLists(
   result.urgent = sortRows(result.urgent);
   result.later = sortRows(result.later);
   return result;
+}
+
+/**
+ * ホームの「完了した項目を見る」ボタン用（2026-10-24追加）。指定した priority の、
+ * **名前グループ全体が完了済み**な行だけを返す（同じ名前の中に1つでも未完了の
+ * 候補があれば、そちらが通常の一覧（loadPriorityHomeLists）に代表として出ているため、
+ * ここには出さない。二重表示を避ける）。チェックを外す（復活させる）操作は、
+ * 通常の一覧と同じ toggleChecklistItemDone／toggleFutureMessageDoneAction／
+ * toggleStandalonePriorityItemAction をそのまま使う（別の仕組みを作らない）。
+ */
+export async function loadCompletedPriorityItems(
+  userId: string,
+  priority: HomePriority,
+): Promise<PriorityHomeRow[]> {
+  const rows: PriorityHomeRow[] = [];
+  const now = new Date();
+
+  const itemTags = await prisma.checklistItemPriority.findMany({
+    where: { userId, priority },
+    select: { eventId: true, kind: true, normTitle: true, title: true },
+  });
+  if (itemTags.length > 0) {
+    const eventIds = [...new Set(itemTags.map((t) => t.eventId))];
+    const items = await prisma.checklistItem.findMany({
+      where: { eventId: { in: eventIds }, isSuggested: false },
+      select: {
+        id: true,
+        eventId: true,
+        kind: true,
+        title: true,
+        isDone: true,
+        event: { select: { id: true, title: true, eventDatetime: true, endDatetime: true } },
+      },
+    });
+    const itemIndex = new Map<string, (typeof items)[number][]>();
+    for (const it of items) {
+      const k = `${it.eventId}:${it.kind}:${normTitle(it.title)}`;
+      const arr = itemIndex.get(k);
+      if (arr) arr.push(it);
+      else itemIndex.set(k, [it]);
+    }
+    const groups = new Map<string, { title: string; candidates: Candidate[] }>();
+    for (const t of itemTags) {
+      const matches = itemIndex.get(`${t.eventId}:${t.kind}:${t.normTitle}`);
+      if (!matches || matches.length === 0) continue;
+      const groupKey = `${t.kind}:${t.normTitle}`;
+      let g = groups.get(groupKey);
+      if (!g) {
+        g = { title: t.title, candidates: [] };
+        groups.set(groupKey, g);
+      }
+      for (const m of matches) {
+        g.candidates.push({
+          eventId: m.eventId,
+          eventTitle: m.event.title,
+          eventDatetime: m.event.eventDatetime,
+          isPast: (m.event.endDatetime ?? m.event.eventDatetime) <= now,
+          isDone: m.isDone,
+          toggleId: m.id,
+        });
+      }
+    }
+    for (const [groupKey, g] of groups) {
+      if (g.candidates.some((c) => !c.isDone)) continue;
+      const rep = pickRepresentative(g.candidates, (c) => c.isDone);
+      if (!rep) continue;
+      rows.push({
+        key: `item:${groupKey}`,
+        title: g.title,
+        eventId: rep.eventId,
+        eventTitle: rep.eventTitle,
+        eventDate: rep.eventDatetime,
+        isPast: rep.isPast,
+        isMessage: false,
+        isStandalone: false,
+        toggleId: rep.toggleId,
+      });
+    }
+  }
+
+  const links = await prisma.eventFutureMessage.findMany({
+    where: { userId, priority },
+    select: {
+      id: true,
+      isDone: true,
+      message: { select: { id: true, body: true } },
+      event: { select: { id: true, title: true, eventDatetime: true, endDatetime: true } },
+    },
+  });
+  const messageGroups = new Map<string, { title: string; candidates: Candidate[] }>();
+  for (const l of links) {
+    const groupKey = l.message.id;
+    let g = messageGroups.get(groupKey);
+    if (!g) {
+      g = { title: l.message.body, candidates: [] };
+      messageGroups.set(groupKey, g);
+    }
+    g.candidates.push({
+      eventId: l.event.id,
+      eventTitle: l.event.title,
+      eventDatetime: l.event.eventDatetime,
+      isPast: (l.event.endDatetime ?? l.event.eventDatetime) <= now,
+      isDone: l.isDone,
+      toggleId: l.id,
+    });
+  }
+  for (const [groupKey, g] of messageGroups) {
+    if (g.candidates.some((c) => !c.isDone)) continue;
+    const rep = pickRepresentative(g.candidates, (c) => c.isDone);
+    if (!rep) continue;
+    rows.push({
+      key: `message:${groupKey}`,
+      title: g.title,
+      eventId: rep.eventId,
+      eventTitle: rep.eventTitle,
+      eventDate: rep.eventDatetime,
+      isPast: rep.isPast,
+      isMessage: true,
+      isStandalone: false,
+      toggleId: rep.toggleId,
+    });
+  }
+
+  const standaloneItems = await prisma.standalonePriorityItem.findMany({
+    where: { userId, isDone: true, priority },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true, title: true },
+  });
+  for (const s of standaloneItems) {
+    rows.push({
+      key: `standalone:${s.id}`,
+      title: s.title,
+      eventId: null,
+      eventTitle: null,
+      eventDate: null,
+      isPast: false,
+      isMessage: false,
+      isStandalone: true,
+      toggleId: s.id,
+    });
+  }
+
+  return sortRows(rows);
 }

@@ -121,6 +121,9 @@ const LEFT_COMMENT_INDENT = 28;
  * 左半分の行を、カレンダー説明欄と同じ書式・同じ記号で組み立てる。
  * 💌過去の自分よりメッセージ（あれば）を先頭に、そのあと準備リストの各枠を続ける
  * （カレンダー説明欄の buildSonaeBlock と同じ並び。ユーザー指定で2026-10-23に追加）。
+ * 壁紙上の見出しだけは「過去からの助言」と表示する（カレンダー説明欄・アプリ内の
+ * 他の箇所の表記「過去の自分よりメッセージ」はそのまま。ユーザー指定で
+ * 2026-10-24に壁紙表示だけ変更した）。
  * `budgetPx` に収まるところまで動的に詰め、残りは「ほかN件」にまとめる
  * （見出しを出すのは、その枠から最低1件は表示できるときだけ）。
  */
@@ -169,7 +172,7 @@ function buildLeftLines(
 
   if (messages.length > 0) {
     addGroup(
-      "過去の自分よりメッセージ",
+      "過去からの助言",
       messages.map((m) => ({
         text: `${m.isDone ? CHECK_DONE : CHECK_TODO} ${oneLine(m.body)}`,
         done: m.isDone,
@@ -274,11 +277,12 @@ export async function renderWallpaper(
   const nextEventMessages = nextEvent ? await getEventDescriptionMessages(nextEvent.id) : [];
 
   // ── レイアウト寸法 ──
-  // 上から: 時計の帯(28%) → アプリ名のウィジェット → すき間 → 本体(左:準備リスト／右:急ぎ・そのうち) → 最終更新+下部アイコン(懐中電灯・カメラ等)との余白(30%)
-  // 下の余白は、ロック画面下部の固定アイコン・スマートスタックと被らないよう広めに確保する
-  // （ユーザー指摘「下の四つのボタンのやつと被っちゃってる」、実機スクリーンショットで確認、2026-10-23）。
+  // 上から: 時計の帯(28%) → アプリ名のウィジェット → すき間 → 本体(左:準備リスト／右:急ぎ・そのうち) → 最終更新+下部アイコン(懐中電灯・カメラ等)との余白(20%)
+  // 下の余白は、ロック画面下部の固定アイコン・スマートスタックと被らない範囲で、
+  // できるだけ本体に回す（ユーザー指摘で2026-10-23に0.12→0.30へ広げたが、実機の
+  // 次のスクリーンショットで余りすぎと指摘があり0.20へ戻した）。
   const topSafe = Math.round(height * 0.28);
-  const bottomSafe = Math.round(height * 0.3);
+  const bottomSafe = Math.round(height * 0.2);
   const outerPad = Math.round(width * 0.035);
   const halfGap = Math.round(width * 0.025);
 
@@ -294,7 +298,7 @@ export async function renderWallpaper(
   const leftPanelPadding = 30;
   const leftUsableWidth = halfWidth - leftPanelPadding * 2;
   const leftTitleH = nextEvent ? textHeight(nextEvent.title, 65, leftUsableWidth) : 0;
-  const leftDateH = nextEvent ? 48 * LINE_HEIGHT + 20 : 0;
+  const leftDateH = nextEvent ? 32 * LINE_HEIGHT + 20 : 0;
   const leftLinesBudget = contentHeight - leftPanelPadding * 2 - leftTitleH - leftDateH;
 
   const leftLines = nextEvent
@@ -472,7 +476,7 @@ export async function renderWallpaper(
                 </div>
                 <div
                   style={{
-                    fontSize: 48,
+                    fontSize: 32,
                     lineHeight: 1.22,
                     color: TEXT_SUB,
                     width: "100%",

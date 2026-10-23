@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { clearSession, getSessionUserId } from "@/lib/session";
 import { syncEventDescription } from "@/lib/description-sync";
+import { loadCompletedPriorityItems, type PriorityHomeRow } from "@/lib/priority-home";
 import {
   getOrCreateCategory,
   resolveCategoryForEvent,
@@ -3298,4 +3299,33 @@ export async function deleteStandalonePriorityItemAction(id: string): Promise<vo
   await prisma.standalonePriorityItem.deleteMany({ where: { id, userId } });
   trackEvent(userId, "feature:standalone-priority-delete");
   revalidateAppViews();
+}
+
+export interface CompletedPriorityRowData {
+  key: string;
+  title: string;
+  eventId: string | null;
+  eventTitle: string | null;
+  eventDate: string | null; // ISO
+  isPast: boolean;
+  isMessage: boolean;
+  isStandalone: boolean;
+  toggleId: string;
+}
+
+function toCompletedRowData(r: PriorityHomeRow): CompletedPriorityRowData {
+  return { ...r, eventDate: r.eventDate ? r.eventDate.toISOString() : null };
+}
+
+/**
+ * ホームの「完了した項目を見る」ボタン（2026-10-24追加・ユーザー指定）。
+ * 押されたときだけ取得する（通常の一覧には含めない。常時は読み込まない）。
+ */
+export async function loadCompletedPriorityItemsAction(
+  priority: "urgent" | "later",
+): Promise<CompletedPriorityRowData[]> {
+  const userId = await requireUserId();
+  trackEvent(userId, "feature:home-completed-items-view");
+  const rows = await loadCompletedPriorityItems(userId, priority);
+  return rows.map(toCompletedRowData);
 }

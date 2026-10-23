@@ -15,6 +15,7 @@ import { LiveSync } from "@/app/components/live-sync";
 import { Tutorial } from "@/app/components/tutorial";
 import { PageCoach } from "@/app/components/page-coach";
 import { NotifyNag } from "@/app/components/notify-nag";
+import { ReconnectNag } from "@/app/components/reconnect-nag";
 import { PreventGoals } from "@/app/components/prevent-goals";
 import { MenuButton } from "@/app/components/menu-button";
 
@@ -88,6 +89,8 @@ export default async function RootLayout({
   let tutorialDone = false;
   let hasPushSubscription = false;
   let isProductionMode = false;
+  let googleSyncError: string | null = null;
+  let hasGoogleAccount = false;
   if (uid) {
     const me = await prisma.user.findUnique({
       where: { id: uid },
@@ -95,7 +98,7 @@ export default async function RootLayout({
     });
     const mode = featureModeOf({ featureMode: me?.featureMode ?? "test" });
     isProductionMode = isFailureLogEnabled(mode);
-    const [count, pushCount] = await Promise.all([
+    const [count, pushCount, googleAccount] = await Promise.all([
       // 「結果を記録しよう」(確認コーナー) に実際に出るものと同じ条件を共有する。
       // 予定が「終わっている」= (endDatetime ?? eventDatetime) <= now。
       // 以前は eventDatetime だけで判定していたため、開始済みだが未終了の予定
@@ -104,10 +107,16 @@ export default async function RootLayout({
         ? prisma.failureLog.count({ where: reviewPendingFailureWhere(uid) })
         : Promise.resolve(0),
       prisma.pushSubscription.count({ where: { userId: uid } }),
+      prisma.userGoogleAccount.findUnique({
+        where: { userId: uid },
+        select: { syncError: true },
+      }),
     ]);
     pendingReview = count;
     tutorialDone = !!me?.tutorialSeenAt;
     hasPushSubscription = pushCount > 0;
+    hasGoogleAccount = googleAccount !== null;
+    googleSyncError = googleAccount?.syncError ?? null;
   }
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
   const failuresLabel = isProductionMode ? "失敗ログ" : "未来の自分へ";
@@ -135,6 +144,12 @@ export default async function RootLayout({
         ) : null}
         {isLoggedIn ? (
           <PageCoach tutorialDone={tutorialDone} isProductionMode={isProductionMode} />
+        ) : null}
+        {isLoggedIn ? (
+          <ReconnectNag
+            syncError={googleSyncError}
+            hasAccount={hasGoogleAccount}
+          />
         ) : null}
         {isLoggedIn ? (
           <NotifyNag

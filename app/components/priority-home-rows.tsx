@@ -28,24 +28,32 @@ export interface HomePriorityRowData {
  * ホームの「急ぎ」「そのうち」一覧。チェックすると予定詳細と同じ isDone に反映される
  * （準備リスト項目は toggleChecklistItemDone、未来の自分へは toggleFutureMessageDoneAction、
  * 予定に紐づかない項目は toggleStandalonePriorityItemAction）。
- * チェックした瞬間に行を消さない（指の下で消える・並び替わるのを避ける。ユーザー指摘の
- * 既存ルールと同じ）。`rows` は呼び出し元（`PriorityHomeContainer`）がページを開いた
- * 時点でスナップショットして固定した値が渡ってくる想定（このページに居続けている間に
- * サーバーの再検証で新しい rows が来ても、呼び出し元がそれを無視する）。
+ * チェックした瞬間にその場から消え、「完了した項目を見る」コーナー（`onComplete`経由で
+ * 呼び出し元に伝える）へすぐ移る。以前は「画面が切り替わるまで消さない」方針だったが、
+ * 「完了した項目を見る」コーナーができたことで、消えてもすぐ見返せる・チェックを
+ * 外せば戻せるため、この一覧についてはその方針を外した（ユーザー指摘「完了した項目を
+ * 見るコーナーができたから、完了した時にページを出るまでそのままにするやつ無くして
+ * いいよ。すぐ完了コーナーに行っていいよ」、2026-10-24）。
  */
-export function HomePriorityRows({ rows }: { rows: HomePriorityRowData[] }) {
-  const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
+export function HomePriorityRows({
+  rows,
+  onComplete,
+}: {
+  rows: HomePriorityRowData[];
+  onComplete: (row: HomePriorityRowData) => void;
+}) {
   const [removed, setRemoved] = useState<Record<string, boolean>>({});
 
-  function toggle(r: HomePriorityRowData, next: boolean) {
-    setDoneOverride((prev) => ({ ...prev, [r.key]: next }));
+  function complete(r: HomePriorityRowData) {
+    setRemoved((prev) => ({ ...prev, [r.key]: true }));
+    onComplete(r);
     void trackFeatureUse("feature:home-item-check");
     if (r.isStandalone) {
-      void toggleStandalonePriorityItemAction(r.toggleId, next);
+      void toggleStandalonePriorityItemAction(r.toggleId, true);
     } else if (r.isMessage) {
-      void toggleFutureMessageDoneAction(r.toggleId, next);
+      void toggleFutureMessageDoneAction(r.toggleId, true);
     } else {
-      void toggleChecklistItemDone(r.toggleId, next);
+      void toggleChecklistItemDone(r.toggleId, true);
     }
   }
 
@@ -64,14 +72,9 @@ export function HomePriorityRows({ rows }: { rows: HomePriorityRowData[] }) {
   return (
     <ul className="space-y-1">
       {visibleRows.map((r) => {
-        const done = doneOverride[r.key] ?? false;
         const body = (
           <>
-            <span
-              className={`block text-sm ${done ? "text-muted line-through" : "text-foreground"}`}
-            >
-              {r.title}
-            </span>
+            <span className="block text-sm text-foreground">{r.title}</span>
             {r.isStandalone ? (
               <span className="block text-[11px] text-muted">手動で追加</span>
             ) : (
@@ -89,8 +92,10 @@ export function HomePriorityRows({ rows }: { rows: HomePriorityRowData[] }) {
           >
             <input
               type="checkbox"
-              checked={done}
-              onChange={(e) => toggle(r, e.target.checked)}
+              checked={false}
+              onChange={(e) => {
+                if (e.target.checked) complete(r);
+              }}
               className="mt-1 h-5 w-5 shrink-0 accent-[var(--teal)]"
               aria-label="完了"
             />

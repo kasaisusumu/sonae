@@ -12,6 +12,14 @@ import {
 } from "@/app/actions";
 import { formatDateShort } from "@/lib/format";
 
+interface CompletedState {
+  open: boolean;
+  rows: CompletedPriorityRowData[] | null;
+  loading: boolean;
+}
+
+const INITIAL_COMPLETED: CompletedState = { open: false, rows: null, loading: false };
+
 /**
  * 「急ぎ」「そのうち」セクションの外枠。サーバーから渡された2つの一覧を、
  * このページを開いた時点でスナップショットして固定する。両方空でもセクション自体は
@@ -20,16 +28,19 @@ import { formatDateShort } from "@/lib/format";
  * チェックを入れると toggleChecklistItemDone 等が revalidatePath を呼ぶため、何も
  * しないとこのページに居続けている間に親（Server Component）の再レンダリングで
  * props が更新され、チェックした項目が0件になった瞬間にこのセクション自体が
- * ツリーから消えてしまう（`HomePriorityRows` 側の個別の固定だけでは、親の表示判定
- * 自体が覆ると防げない）。`useState` の初期値は初回マウント時にしか使われないため、
+ * ツリーから消えてしまう。`useState` の初期値は初回マウント時にしか使われないため、
  * 以後 props が変わってもこのスナップショットは変わらない。別ページへ移動して
- * 戻ってくる＝再マウントされたときだけ、最新の一覧（完了済みを除いたもの）で
- * 出し直される（ユーザー指摘により2026-10-23）。
+ * 戻ってくる＝再マウントされたときだけ、最新の一覧で出し直される。
  *
- * 予定に紐づかない項目をこのページから直接追加できる（ユーザー指摘「急ぎ、そのうち
- * リストは、ホームのページから予定に紐づいていなくても項目を好きに追加できるように
- * して」、2026-10-23）。追加は自動保存（保存ボタン無し）で、サーバーの応答を待たず
- * 一覧に足し、応答が来たら本物の id に差し替える。
+ * 予定に紐づかない項目をこのページから直接追加できる（ユーザー指定・2026-10-23）。
+ *
+ * 完了した項目は、チェックした瞬間にこの一覧から消え「完了した項目を見る」コーナーへ
+ * すぐ移る（`completeItem`）。「完了した項目を見る」コーナーで復活させると、その瞬間に
+ * 通常の一覧へ即座に戻る（`reviveToActive`）。以前は「チェックしてもページを出るまで
+ * 消さない」方針だったが、完了コーナーができたことで、消えてもすぐ見返せる・戻せる
+ * ため、この一覧に限りその方針を外した（ユーザー指摘「完了した項目を見るコーナーが
+ * できたから、完了した時にページを出るまでそのままにするやつ無くしていいよ。すぐ完了
+ * コーナーに行っていいよ」、2026-10-24）。
  */
 export function PriorityHomeContainer({
   urgent,
@@ -40,6 +51,8 @@ export function PriorityHomeContainer({
 }) {
   const [frozenUrgent, setFrozenUrgent] = useState(urgent);
   const [frozenLater, setFrozenLater] = useState(later);
+  const [completedUrgent, setCompletedUrgent] = useState<CompletedState>(INITIAL_COMPLETED);
+  const [completedLater, setCompletedLater] = useState<CompletedState>(INITIAL_COMPLETED);
 
   function addItem(priority: "urgent" | "later", title: string) {
     const t = title.trim();
@@ -77,28 +90,73 @@ export function PriorityHomeContainer({
     setList((prev) => (prev.some((r) => r.key === row.key) ? prev : [row, ...prev]));
   }
 
+  /** 急ぎ/そのうち一覧でチェックした瞬間に呼ばれる。その一覧からは `HomePriorityRows`
+   * 側で即座に消える（`removed`）ので、ここでは「完了した項目を見る」コーナーが
+   * 既に開いている・取得済みなら、そちらの先頭にも足す（開いていなければ何もしない。
+   * 次に開いたときにサーバーから取り直した一覧に、この完了も反映されている）。 */
+  function completeItem(priority: "urgent" | "later", row: CompletedPriorityRowData) {
+    const setCompleted = priority === "urgent" ? setCompletedUrgent : setCompletedLater;
+    setCompleted((s) => (s.rows ? { ...s, rows: [row, ...s.rows] } : s));
+  }
+
+  async function toggleCompletedOpen(priority: "urgent" | "later") {
+    const state = priority === "urgent" ? completedUrgent : completedLater;
+    const setState = priority === "urgent" ? setCompletedUrgent : setCompletedLater;
+    if (!state.open && state.rows === null) {
+      setState((s) => ({ ...s, loading: true }));
+      const res = await loadCompletedPriorityItemsAction(priority);
+      setState((s) => ({ ...s, rows: res, loading: false, open: true }));
+      return;
+    }
+    setState((s) => ({ ...s, open: !s.open }));
+  }
+
+  function reviveFromCompleted(priority: "urgent" | "later", row: CompletedPriorityRowData) {
+    const setState = priority === "urgent" ? setCompletedUrgent : setCompletedLater;
+    setState((s) => ({
+      ...s,
+      rows: s.rows ? s.rows.filter((x) => x.key !== row.key) : s.rows,
+    }));
+    reviveToActive(priority, row);
+    if (row.isStandalone) {
+      void toggleStandalonePriorityItemAction(row.toggleId, false);
+    } else if (row.isMessage) {
+      void toggleFutureMessageDoneAction(row.toggleId, false);
+    } else {
+      void toggleChecklistItemDone(row.toggleId, false);
+    }
+  }
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <section className="rounded-2xl border border-warn/30 bg-warn-soft p-4">
         <h2 className="text-sm font-semibold text-warn">🔥 急ぎ</h2>
         <div className="mt-2">
-          <HomePriorityRows rows={frozenUrgent} />
+          <HomePriorityRows
+            rows={frozenUrgent}
+            onComplete={(row) => completeItem("urgent", row)}
+          />
         </div>
         <AddPriorityItemForm onAdd={(title) => addItem("urgent", title)} />
         <CompletedPriorityItemsToggle
-          priority="urgent"
-          onRevive={(row) => reviveToActive("urgent", row)}
+          state={completedUrgent}
+          onToggleOpen={() => toggleCompletedOpen("urgent")}
+          onRevive={(row) => reviveFromCompleted("urgent", row)}
         />
       </section>
       <section className="rounded-2xl border border-teal/30 bg-teal-soft p-4">
         <h2 className="text-sm font-semibold text-teal-dark">🕒 そのうち</h2>
         <div className="mt-2">
-          <HomePriorityRows rows={frozenLater} />
+          <HomePriorityRows
+            rows={frozenLater}
+            onComplete={(row) => completeItem("later", row)}
+          />
         </div>
         <AddPriorityItemForm onAdd={(title) => addItem("later", title)} />
         <CompletedPriorityItemsToggle
-          priority="later"
-          onRevive={(row) => reviveToActive("later", row)}
+          state={completedLater}
+          onToggleOpen={() => toggleCompletedOpen("later")}
+          onRevive={(row) => reviveFromCompleted("later", row)}
         />
       </section>
     </div>
@@ -143,55 +201,32 @@ function AddPriorityItemForm({ onAdd }: { onAdd: (title: string) => void }) {
 
 /**
  * 「完了した項目を見る」（2026-10-24追加・ユーザー指定）。押すまでは何も取得しない
- * （`loadCompletedPriorityItemsAction` は初回展開時に1回だけ呼ぶ）。チェックは
- * 常に「オン」から始まり、外すと復活（予定に紐づく項目は toggleChecklistItemDone／
- * toggleFutureMessageDoneAction、予定に紐づかない項目は
- * toggleStandalonePriorityItemAction。これらが実データ（ChecklistItem／
- * EventFutureMessage／StandalonePriorityItem の isDone）を直接更新し、予定に紐づく
- * 項目はカレンダー説明欄への反映も既存の仕組みでそのまま行われる）。
- * 外した**その瞬間**に、この一覧から取り除くのと同時に、呼び出し元（親の
- * `frozenUrgent`／`frozenLater`）へも`onRevive`で伝え、通常の急ぎ/そのうち一覧に
- * 即座に戻す（ユーザー指摘「復活させたら、そのリストの中に復活して」
- * 「それを、その瞬間にやって」、2026-10-24）。
+ * （`loadCompletedPriorityItemsAction` は初回展開時に1回だけ呼ぶ）。状態は親
+ * （`PriorityHomeContainer`）が持つ（`completeItem` で急ぎ/そのうち一覧からの完了を
+ * その場で反映できるようにするため）。
+ * チェックは常に「オン」から始まり、外すと復活（予定に紐づく項目は
+ * toggleChecklistItemDone／toggleFutureMessageDoneAction、予定に紐づかない項目は
+ * toggleStandalonePriorityItemAction。これらが実データの isDone を直接更新し、
+ * 予定に紐づく項目はカレンダー説明欄への反映も既存の仕組みでそのまま行われる）。
+ * 外した**その瞬間**に、この一覧から取り除くのと同時に、通常の急ぎ/そのうち一覧にも
+ * 即座に戻す。
  */
 function CompletedPriorityItemsToggle({
-  priority,
+  state,
+  onToggleOpen,
   onRevive,
 }: {
-  priority: "urgent" | "later";
+  state: CompletedState;
+  onToggleOpen: () => void;
   onRevive: (row: CompletedPriorityRowData) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [rows, setRows] = useState<CompletedPriorityRowData[] | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function handleToggle() {
-    if (!open && rows === null) {
-      setLoading(true);
-      const res = await loadCompletedPriorityItemsAction(priority);
-      setRows(res);
-      setLoading(false);
-    }
-    setOpen((v) => !v);
-  }
-
-  function revive(r: CompletedPriorityRowData) {
-    setRows((prev) => (prev ? prev.filter((x) => x.key !== r.key) : prev));
-    onRevive(r);
-    if (r.isStandalone) {
-      void toggleStandalonePriorityItemAction(r.toggleId, false);
-    } else if (r.isMessage) {
-      void toggleFutureMessageDoneAction(r.toggleId, false);
-    } else {
-      void toggleChecklistItemDone(r.toggleId, false);
-    }
-  }
+  const { open, rows, loading } = state;
 
   return (
     <div className="mt-2">
       <button
         type="button"
-        onClick={handleToggle}
+        onClick={onToggleOpen}
         className="text-xs text-muted underline hover:text-foreground"
       >
         {open ? "▾" : "▸"} 完了した項目を見る{rows ? `（${rows.length}件）` : ""}
@@ -212,7 +247,7 @@ function CompletedPriorityItemsToggle({
                   <input
                     type="checkbox"
                     checked
-                    onChange={() => revive(r)}
+                    onChange={() => onRevive(r)}
                     aria-label="完了を取り消して復活させる"
                     className="mt-1 h-5 w-5 shrink-0 accent-[var(--teal)]"
                   />

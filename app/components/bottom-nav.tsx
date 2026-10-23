@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -23,53 +23,31 @@ function isEditableElement(el: Element | null): boolean {
 
 /**
  * スマホのキーボードが出ている間だけ true。
- * キーボードで visualViewport が縮むと、`position:fixed; bottom:0` のバーが
- * キーボードの上まで“せり上がって”画面中央に浮いてしまうため、その間は隠す。
- * URL バーの伸縮（〜100px）で誤検知しないよう、しきい値は大きめ（150px）。
+ * キーボードが出ると、`position:sticky; bottom:0` のバーがキーボードの上まで
+ * “せり上がって”画面中央に浮いてしまうため、その間は隠す。
  *
- * 2026-10〜: 入力欄にフォーカスが無いときはビューポートが縮んでいても隠さない
- * （`focusedEditable` を同時に見る）。ブラウザのアドレスバー／ツールバーの
- * 伸縮だけでも 150px を超えることがあり、それだけでバーが消えたまま戻らない
- * 不具合があった。フォーカスの有無も条件に加えることで、キーボード以外が
- * 原因の縮みでは隠さないようにし、かつ `focusout` の瞬間に即座に復帰できる
- * （ビューポートのリサイズイベントが遅れる端末があるため、フォーカス解除を
- * 復帰のトリガーとしても使う）。
+ * 2026-10〜: 以前は `visualViewport` の縮み幅（しきい値150px）と、入力欄への
+ * フォーカスの両方が true のときだけ隠す方式だった（ブラウザのアドレスバー／
+ * ツールバーの伸縮だけでも150pxを超えることがあり、縮み幅だけで判定すると
+ * キーボードと無関係にバーが消えたまま戻らない不具合があったため、フォーカスの
+ * 有無も条件に加えていた）。
  *
- * 2026-10-24: `window.innerHeight` との差分で縮みを判定していたが、iOSの
- * ホーム画面追加（PWAスタンドアロン）では `window.innerHeight` 自体が
- * キーボード表示にあわせて一緒に縮むことがあり、差分がほぼ0のまま
- * （＝`shrunk` が立たない）ために下のバーが隠れず「せり上がって」見える
- * 不具合があった（ユーザー指摘「キーボード出した時にメニューバーがその上に
- * 上がってくる」）。`window.innerHeight` を使わず、`visualViewport.height`
- * 自身の最大値（キーボードが無い状態の実測値）をベースラインとして記録し、
- * そこからの縮みだけで判定するよう変更（ベースラインは、ツールバーが戻る等で
- * 実測値がそれを上回ったら随時更新する）。
+ * 2026-10-24: それでも「キーボードを出すとバーがせり上がって見える」との指摘が
+ * あった。原因は、iOSのホーム画面追加（PWAスタンドアロン）では、キーボード表示時に
+ * `visualViewport` の `resize` イベントが実際のキーボード表示より遅れて発火する、
+ * あるいは環境によってはほぼ発火しない（`window.innerHeight` もキーボードに
+ * あわせて縮んでしまい差分で判定できない、等）ことがあり、「縮み幅」の確認を
+ * 待っている間（あるいはいつまでも）隠れずに見えてしまうため。
+ * **判定を入力欄のフォーカス有無だけに一本化した**（`visualViewport` には一切
+ * 依存しない）。このバー自体 `sm:hidden` でスマホ幅でしか出ないため、この幅で
+ * 入力欄にフォーカスが入る＝ほぼ確実にソフトキーボードが出る、という前提に立つ
+ * （Bluetoothキーボード使用時など稀にキーボードが出ないままバーだけ隠れる
+ * ケースはあるが、フォーカスを外せば即座に戻るため実害は小さいと判断した）。
+ * 以前のビューポート縮み判定で防いでいた「ブラウザのツールバーの伸縮だけで誤って
+ * 隠れる」問題も、フォーカス前提にしたことで同時に解消される。
  */
 function useKeyboardOpen(): boolean {
-  const [shrunk, setShrunk] = useState(false);
   const [focusedEditable, setFocusedEditable] = useState(false);
-  const baselineRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const vv = typeof window !== "undefined" ? window.visualViewport : null;
-    if (!vv) return;
-    const update = () => {
-      const baseline = baselineRef.current;
-      if (baseline === null || vv.height > baseline) {
-        baselineRef.current = vv.height;
-        setShrunk(false);
-        return;
-      }
-      setShrunk(baseline - vv.height > 150);
-    };
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
 
   useEffect(() => {
     const onFocusIn = (e: FocusEvent) =>
@@ -83,7 +61,7 @@ function useKeyboardOpen(): boolean {
     };
   }, []);
 
-  return shrunk && focusedEditable;
+  return focusedEditable;
 }
 
 export function BottomNav({

@@ -5,17 +5,28 @@
  *
  * 左半分の準備リストは、カレンダー説明欄に書き込んでいるもの（lib/description.ts の
  * buildSonaeBlock）の「リンク無しバージョン」を忠実に再現する（ユーザー指定）。
- * 見出し・進捗（done/total）・☑/・の記号・リード時間の書式・コメントの字下げまで、
- * lib/description.ts の同じ関数（bullet・progress・checkedLast）をそのまま使う。
+ * 見出し・進捗（done/total）・☑/・の記号・リード時間の書式・コメントの字下げ・
+ * 💌過去の自分よりメッセージまで、lib/description.ts の同じ関数（bullet・progress・
+ * checkedLast・CHECK_DONE/CHECK_TODO・oneLine）をそのまま使う。
  */
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ImageResponse } from "next/og";
 import { prisma } from "@/lib/prisma";
 import { resolveSections, sectionLabel } from "@/lib/sections";
-import { bullet, progress, checkedLast, type DescItem } from "@/lib/description";
+import {
+  bullet,
+  progress,
+  checkedLast,
+  oneLine,
+  CHECK_DONE,
+  CHECK_TODO,
+  type DescItem,
+} from "@/lib/description";
+import { getEventDescriptionMessages } from "@/lib/future-messages";
 import { loadPriorityHomeLists, type PriorityHomeRow } from "@/lib/priority-home";
 import { loadLockScreenImage } from "@/lib/lock-screen-image";
+import { APP_NAME } from "@/lib/app-info";
 import { JST } from "@/lib/format";
 
 export const OUTPUT_WIDTH = 1170;
@@ -41,20 +52,16 @@ export function resolveAspectRatio(
   return DEFAULT_RATIO;
 }
 
-let fontCache: { regular: Buffer; bold: Buffer } | null = null;
-async function loadFonts() {
+let fontCache: Buffer | null = null;
+async function loadFont(): Promise<Buffer> {
   if (fontCache) return fontCache;
-  const dir = path.join(process.cwd(), "assets", "fonts");
-  const [regular, bold] = await Promise.all([
-    fs.readFile(path.join(dir, "NotoSansJP-Regular.ttf")),
-    fs.readFile(path.join(dir, "NotoSansJP-Bold.ttf")),
-  ]);
-  fontCache = { regular, bold };
+  const file = path.join(process.cwd(), "assets", "fonts", "KomorebiGothic-P.ttf");
+  fontCache = await fs.readFile(file);
   return fontCache;
 }
 
 function compactDate(d: Date): string {
-  const parts = d.toLocaleString("ja-JP", {
+  return d.toLocaleString("ja-JP", {
     timeZone: JST,
     month: "numeric",
     day: "numeric",
@@ -62,10 +69,9 @@ function compactDate(d: Date): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-  return parts;
 }
 
-/** 壁紙の描き下ろし時刻（JST）。下部に「最終更新」として表示する。 */
+/** 壁紙の描き下ろし時刻（JST）。上部の小さなウィジェットに「最終更新」として表示する。 */
 function formatUpdatedAt(d: Date): string {
   return d.toLocaleString("ja-JP", {
     timeZone: JST,
@@ -83,17 +89,39 @@ interface LeftLine {
   done?: boolean;
 }
 
-const MAX_LEFT_ITEMS = 6;
+// 幅が許す限り項目を出し、空きがあるのに「ほかN件」で早期に畳まない方針（ユーザー指定）。
+// Satori側で実際の折り返し後の高さを事前計測できないため、パネルの高さに対して
+// 十分に余裕のある上限を置き、実地描画で確認しながら調整した値。
+const MAX_LEFT_ITEMS = 5;
+const MAX_RIGHT_ITEMS = 2;
 
-/** 左半分の準備リスト行を、カレンダー説明欄と同じ書式・同じ記号で組み立てる。 */
+/**
+ * 左半分の行を、カレンダー説明欄と同じ書式・同じ記号で組み立てる。
+ * 💌過去の自分よりメッセージ（あれば）を先頭に、そのあと準備リストの各枠を続ける
+ * （カレンダー説明欄の buildSonaeBlock と同じ並び。ユーザー指定で2026-10-23に追加）。
+ */
 function buildLeftLines(
   items: DescItem[],
   sections: string[],
+  messages: { body: string; isDone: boolean }[],
 ): LeftLine[] {
-  const order = sections.filter((k) => !k.startsWith("@"));
   const lines: LeftLine[] = [];
   let shown = 0;
   let omitted = 0;
+
+  if (messages.length > 0) {
+    lines.push({ kind: "header", text: "過去の自分よりメッセージ" });
+    for (const m of messages) {
+      if (shown >= MAX_LEFT_ITEMS) {
+        omitted++;
+        continue;
+      }
+      lines.push({ kind: "item", text: `${m.isDone ? CHECK_DONE : CHECK_TODO} ${oneLine(m.body)}`, done: m.isDone });
+      shown++;
+    }
+  }
+
+  const order = sections.filter((k) => !k.startsWith("@"));
   const seen = new Set<string>();
   for (const key of order) {
     if (seen.has(key)) continue;
@@ -121,8 +149,6 @@ function buildLeftLines(
   return lines;
 }
 
-const MAX_RIGHT_ITEMS = 2;
-
 function rightRows(rows: PriorityHomeRow[]): { shown: PriorityHomeRow[]; omitted: number } {
   return {
     shown: rows.slice(0, MAX_RIGHT_ITEMS),
@@ -130,10 +156,12 @@ function rightRows(rows: PriorityHomeRow[]): { shown: PriorityHomeRow[]; omitted
   };
 }
 
-const PANEL_BG = "rgba(10,12,18,0.55)";
+const PANEL_BG = "rgba(8,10,16,0.58)";
+const PANEL_BORDER = "1px solid rgba(255,255,255,0.14)";
 const TEXT_MAIN = "#ffffff";
-const TEXT_SUB = "rgba(255,255,255,0.72)";
-const TEXT_DONE = "rgba(255,255,255,0.5)";
+const TEXT_SUB = "rgba(255,255,255,0.74)";
+const TEXT_DONE = "rgba(255,255,255,0.48)";
+const TEXT_FAINT = "rgba(255,255,255,0.58)";
 
 export async function renderWallpaper(
   userId: string,
@@ -141,9 +169,9 @@ export async function renderWallpaper(
 ): Promise<ImageResponse> {
   const width = OUTPUT_WIDTH;
   const height = Math.round(width * ratio);
-
   const now = new Date();
-  const [nextEvent, priorityLists, bgImage, fonts] = await Promise.all([
+
+  const [nextEvent, priorityLists, bgImage, font] = await Promise.all([
     prisma.event.findFirst({
       where: {
         userId,
@@ -167,14 +195,22 @@ export async function renderWallpaper(
     }),
     loadPriorityHomeLists(userId),
     loadLockScreenImage(userId),
-    loadFonts(),
+    loadFont(),
   ]);
 
+  const nextEventMessages = nextEvent ? await getEventDescriptionMessages(nextEvent.id) : [];
+
+  // ── レイアウト寸法 ──
+  // 上から: 時計の帯(30%) → アプリ名/最終更新のウィジェット → すき間 → 本体(左:準備リスト／右:急ぎ・そのうち) → 操作ボタンの帯(12%)
   const topSafe = Math.round(height * 0.3);
   const bottomSafe = Math.round(height * 0.12);
-  const contentHeight = height - topSafe - bottomSafe;
   const outerPad = Math.round(width * 0.035);
   const halfGap = Math.round(width * 0.025);
+
+  const headerWidgetHeight = Math.round(height * 0.065);
+  const headerGap = Math.round(height * 0.012);
+
+  const contentHeight = height - topSafe - headerWidgetHeight - headerGap - bottomSafe;
   const halfWidth = Math.round((width - outerPad * 2 - halfGap) / 2);
   const rightGap = Math.round(contentHeight * 0.03);
   const rightBoxHeight = Math.round((contentHeight - rightGap) / 2);
@@ -189,6 +225,7 @@ export async function renderWallpaper(
           comment: c.comment,
         })),
         resolveSections(nextEvent.sectionOrder, nextEvent.checklistItems.map((c) => c.kind)),
+        nextEventMessages,
       )
     : [];
 
@@ -199,20 +236,23 @@ export async function renderWallpaper(
     ? `data:image/jpeg;base64,${bgImage.data.toString("base64")}`
     : null;
 
-  function PanelHeading({ text }: { text: string }) {
+  // emoji（🔥🕒）を本文と同じ行に混ぜると、Satoriの絵文字描画が行の高さ計算からはみ出し、
+  // 次の行に重なって見えることがある。emojiだけ別のflexアイテムに分けて高さを独立させる。
+  function PanelHeading({ emoji, text }: { emoji: string; text: string }) {
     return (
       <div
         style={{
-          fontSize: 46,
-          lineHeight: 1.25,
-          fontWeight: 700,
-          color: TEXT_MAIN,
-          width: "100%",
           display: "flex",
-          marginBottom: 14,
+          flexDirection: "row",
+          alignItems: "center",
+          width: "100%",
+          marginBottom: 20,
         }}
       >
-        {text}
+        <div style={{ fontSize: 52, lineHeight: 1, display: "flex", marginRight: 14 }}>{emoji}</div>
+        <div style={{ fontSize: 50, lineHeight: 1.25, fontWeight: 700, color: TEXT_MAIN, display: "flex" }}>
+          {text}
+        </div>
       </div>
     );
   }
@@ -226,8 +266,8 @@ export async function renderWallpaper(
           display: "flex",
           flexDirection: "column",
           position: "relative",
-          backgroundColor: "#151a23",
-          fontFamily: "NotoSansJP",
+          backgroundColor: "#13161f",
+          fontFamily: "KomorebiGothic",
         }}
       >
         {bgDataUri && (
@@ -250,6 +290,42 @@ export async function renderWallpaper(
 
         <div style={{ height: topSafe, width: "100%", display: "flex" }} />
 
+        {/* 新しいウィジェット: アプリ名・最終更新（ユーザー指定で2026-10-23追加）。
+            下の本体パネルを低くして作った隙間に置く。 */}
+        <div
+          style={{
+            height: headerWidgetHeight,
+            width: "100%",
+            display: "flex",
+            flexDirection: "row",
+            paddingLeft: outerPad,
+            paddingRight: outerPad,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: PANEL_BG,
+              border: PANEL_BORDER,
+              borderRadius: 26,
+            }}
+          >
+            <div style={{ fontSize: 38, lineHeight: 1.2, fontWeight: 700, color: TEXT_MAIN, display: "flex" }}>
+              {APP_NAME}
+            </div>
+            <div style={{ fontSize: 24, lineHeight: 1.2, color: TEXT_FAINT, display: "flex", marginTop: 4 }}>
+              最終更新: {formatUpdatedAt(now)}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ height: headerGap, width: "100%", display: "flex" }} />
+
         <div
           style={{
             height: contentHeight,
@@ -269,8 +345,9 @@ export async function renderWallpaper(
               display: "flex",
               flexDirection: "column",
               backgroundColor: PANEL_BG,
-              borderRadius: 28,
-              padding: 26,
+              border: PANEL_BORDER,
+              borderRadius: 32,
+              padding: 30,
               overflow: "hidden",
             }}
           >
@@ -278,23 +355,23 @@ export async function renderWallpaper(
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 <div
                   style={{
-                    fontSize: 54,
-                    lineHeight: 1.25,
+                    fontSize: 65,
+                    lineHeight: 1.22,
                     fontWeight: 700,
                     color: TEXT_MAIN,
                     width: "100%",
                     display: "flex",
                   }}
                 >
-                  {nextEvent.title.slice(0, 16)}
+                  {nextEvent.title}
                 </div>
                 <div
                   style={{
-                    fontSize: 40,
-                    lineHeight: 1.25,
+                    fontSize: 48,
+                    lineHeight: 1.22,
                     color: TEXT_SUB,
                     width: "100%",
-                    marginBottom: 18,
+                    marginBottom: 20,
                     display: "flex",
                   }}
                 >
@@ -307,13 +384,13 @@ export async function renderWallpaper(
                         <div
                           key={i}
                           style={{
-                            fontSize: 42,
+                            fontSize: 50,
                             lineHeight: 1.25,
                             fontWeight: 700,
                             color: TEXT_SUB,
                             width: "100%",
-                            marginTop: i === 0 ? 0 : 16,
-                            marginBottom: 6,
+                            marginTop: i === 0 ? 0 : 18,
+                            marginBottom: 8,
                             display: "flex",
                           }}
                         >
@@ -326,11 +403,11 @@ export async function renderWallpaper(
                         <div
                           key={i}
                           style={{
-                            fontSize: 32,
+                            fontSize: 38,
                             lineHeight: 1.25,
                             color: TEXT_SUB,
                             width: "100%",
-                            paddingLeft: 24,
+                            paddingLeft: 28,
                             display: "flex",
                           }}
                         >
@@ -343,11 +420,11 @@ export async function renderWallpaper(
                         <div
                           key={i}
                           style={{
-                            fontSize: 32,
+                            fontSize: 38,
                             lineHeight: 1.25,
                             color: TEXT_SUB,
                             width: "100%",
-                            marginTop: 8,
+                            marginTop: 10,
                             display: "flex",
                           }}
                         >
@@ -359,7 +436,7 @@ export async function renderWallpaper(
                       <div
                         key={i}
                         style={{
-                          fontSize: 40,
+                          fontSize: 48,
                           lineHeight: 1.25,
                           color: l.done ? TEXT_DONE : TEXT_MAIN,
                           width: "100%",
@@ -371,14 +448,14 @@ export async function renderWallpaper(
                     );
                   })}
                   {leftLines.length === 0 && (
-                    <div style={{ fontSize: 38, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                    <div style={{ fontSize: 46, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
                       準備リストはまだありません
                     </div>
                   )}
                 </div>
               </div>
             ) : (
-              <div style={{ fontSize: 40, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+              <div style={{ fontSize: 48, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
                 次の予定はありません
               </div>
             )}
@@ -401,30 +478,31 @@ export async function renderWallpaper(
                 display: "flex",
                 flexDirection: "column",
                 backgroundColor: PANEL_BG,
-                borderRadius: 28,
-                padding: 24,
+                border: PANEL_BORDER,
+                borderRadius: 32,
+                padding: 28,
                 overflow: "hidden",
               }}
             >
-              <PanelHeading text={`🔥 急ぎ（${priorityLists.urgent.length}）`} />
+              <PanelHeading emoji="🔥" text={`急ぎ（${priorityLists.urgent.length}）`} />
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 {urgent.shown.map((r) => (
-                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 14 }}>
-                    <div style={{ fontSize: 36, lineHeight: 1.25, color: TEXT_MAIN, width: "100%", display: "flex" }}>
-                      {r.title.slice(0, 12)}
+                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 18 }}>
+                    <div style={{ fontSize: 43, lineHeight: 1.25, color: TEXT_MAIN, width: "100%", display: "flex" }}>
+                      {r.title}
                     </div>
-                    <div style={{ fontSize: 26, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
-                      {r.eventTitle.slice(0, 10)}・{compactDate(r.eventDate)}
+                    <div style={{ fontSize: 31, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                      {r.eventTitle}・{compactDate(r.eventDate)}
                     </div>
                   </div>
                 ))}
                 {urgent.shown.length === 0 && (
-                  <div style={{ fontSize: 32, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                  <div style={{ fontSize: 38, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
                     （なし）
                   </div>
                 )}
                 {urgent.omitted > 0 && (
-                  <div style={{ fontSize: 28, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                  <div style={{ fontSize: 34, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
                     ほか{urgent.omitted}件
                   </div>
                 )}
@@ -438,30 +516,31 @@ export async function renderWallpaper(
                 display: "flex",
                 flexDirection: "column",
                 backgroundColor: PANEL_BG,
-                borderRadius: 28,
-                padding: 24,
+                border: PANEL_BORDER,
+                borderRadius: 32,
+                padding: 28,
                 overflow: "hidden",
               }}
             >
-              <PanelHeading text={`🕒 そのうち（${priorityLists.later.length}）`} />
+              <PanelHeading emoji="🕒" text={`そのうち（${priorityLists.later.length}）`} />
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 {later.shown.map((r) => (
-                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 14 }}>
-                    <div style={{ fontSize: 36, lineHeight: 1.25, color: TEXT_MAIN, width: "100%", display: "flex" }}>
-                      {r.title.slice(0, 12)}
+                  <div key={r.key} style={{ display: "flex", flexDirection: "column", width: "100%", marginBottom: 18 }}>
+                    <div style={{ fontSize: 43, lineHeight: 1.25, color: TEXT_MAIN, width: "100%", display: "flex" }}>
+                      {r.title}
                     </div>
-                    <div style={{ fontSize: 26, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
-                      {r.eventTitle.slice(0, 10)}・{compactDate(r.eventDate)}
+                    <div style={{ fontSize: 31, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                      {r.eventTitle}・{compactDate(r.eventDate)}
                     </div>
                   </div>
                 ))}
                 {later.shown.length === 0 && (
-                  <div style={{ fontSize: 32, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                  <div style={{ fontSize: 38, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
                     （なし）
                   </div>
                 )}
                 {later.omitted > 0 && (
-                  <div style={{ fontSize: 28, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
+                  <div style={{ fontSize: 34, lineHeight: 1.25, color: TEXT_SUB, width: "100%", display: "flex" }}>
                     ほか{later.omitted}件
                   </div>
                 )}
@@ -470,35 +549,15 @@ export async function renderWallpaper(
           </div>
         </div>
 
-        <div
-          style={{
-            height: bottomSafe,
-            width: "100%",
-            display: "flex",
-            alignItems: "flex-start",
-            justifyContent: "center",
-            paddingTop: 10,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 24,
-              lineHeight: 1.25,
-              color: "rgba(255,255,255,0.55)",
-              display: "flex",
-            }}
-          >
-            最終更新: {formatUpdatedAt(now)}
-          </div>
-        </div>
+        <div style={{ height: bottomSafe, width: "100%", display: "flex" }} />
       </div>
     ),
     {
       width,
       height,
       fonts: [
-        { name: "NotoSansJP", data: fonts.regular, weight: 400, style: "normal" },
-        { name: "NotoSansJP", data: fonts.bold, weight: 700, style: "normal" },
+        { name: "KomorebiGothic", data: font, weight: 400, style: "normal" },
+        { name: "KomorebiGothic", data: font, weight: 700, style: "normal" },
       ],
     },
   );

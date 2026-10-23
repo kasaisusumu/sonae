@@ -24,7 +24,7 @@ function escapeRe(s: string): string {
 }
 
 /** プレーンテキスト用: 改行を潰し、前後の空白を整える。 */
-function oneLine(s: string): string {
+export function oneLine(s: string): string {
   return s.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
 }
 

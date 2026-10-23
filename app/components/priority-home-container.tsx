@@ -4,8 +4,9 @@ import { useState } from "react";
 import { HomePriorityRows, type HomePriorityRowData } from "@/app/components/priority-home-rows";
 
 /**
- * 「急ぎ」「そのうち」セクションの外枠。サーバーから渡された2つの一覧（空なら
- * セクション自体を出さない）を、このページを開いた時点でスナップショットして固定する。
+ * 「急ぎ」「そのうち」セクションの外枠。サーバーから渡された2つの一覧を、
+ * このページを開いた時点でスナップショットして固定する。両方空でもセクション自体は
+ * 常に表示する（「今はありません」と出す。ユーザー指定・2026-10-23）。
  *
  * チェックを入れると toggleChecklistItemDone 等が revalidatePath を呼ぶため、何も
  * しないとこのページに居続けている間に親（Server Component）の再レンダリングで
@@ -25,8 +26,6 @@ export function PriorityHomeContainer({
 }) {
   const [frozenUrgent] = useState(urgent);
   const [frozenLater] = useState(later);
-
-  if (frozenUrgent.length === 0 && frozenLater.length === 0) return null;
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">

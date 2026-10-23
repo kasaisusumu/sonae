@@ -119,6 +119,45 @@ export async function renameItemPriority(
 }
 
 /**
+ * 「同名グループの波及」（`propagateListToNameGroup`／`resolveNameGroupOnEdit`）で
+ * 既存の予定（toEventId）の項目が source（fromEventId）の内容で丸ごと置き換わるとき、
+ * 優先度タグも source の内容に合わせて置き換える。
+ *
+ * これは `copyChecklistItems` の呼び出し元のうち、**既に項目を持っていた予定を
+ * 編集内容に合わせて更新し直す**経路（`propagateListToNameGroup`）だけから呼ぶこと。
+ * 「まだ項目が一つも無い新しい予定」に初めて項目を持たせる経路
+ * （`generateAndSaveChecklist`・`primeNotifiedChecklists` が同じ `copyChecklistItems`
+ * を呼ぶ別の2箇所）からは呼ばない。新しい予定は優先度タグを引き継がず未設定で
+ * 始まる、という方針（上記ファイル冒頭コメント）はこの関数を呼ばないことで守られる。
+ */
+export async function copyItemPriorityForNameGroup(
+  fromEventId: string,
+  toEventId: string,
+): Promise<void> {
+  const srcTags = await prisma.checklistItemPriority.findMany({
+    where: { eventId: fromEventId },
+    select: { userId: true, kind: true, normTitle: true, title: true, priority: true },
+  });
+  await prisma.$transaction([
+    prisma.checklistItemPriority.deleteMany({ where: { eventId: toEventId } }),
+    ...(srcTags.length > 0
+      ? [
+          prisma.checklistItemPriority.createMany({
+            data: srcTags.map((t) => ({
+              userId: t.userId,
+              eventId: toEventId,
+              kind: t.kind,
+              normTitle: t.normTitle,
+              title: t.title,
+              priority: t.priority,
+            })),
+          }),
+        ]
+      : []),
+  ]);
+}
+
+/**
  * 枠の改名（renameSectionKind）に合わせて、優先度の紐づけの kind も付け替える。
  * その予定（eventId）の中だけが対象。
  */

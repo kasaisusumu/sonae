@@ -55,6 +55,7 @@ model User {
   featureModeChanges FeatureModeChange[]
   checklistItemPriorities ChecklistItemPriority[]
   shortcutTokens     ShortcutToken[]
+  lockScreenImage    LockScreenImage?
 }
 
 // 機能モード切替の操作履歴（時刻・変更前後）。設定ページの切替操作ごとに1行。
@@ -706,4 +707,18 @@ model ShortcutToken {
   revokedAt  DateTime?
 
   @@index([userId])
+}
+
+/// ロック画面の背景画像（1ユーザー1枚、2026-10-23追加）。ショートカット用APIの壁紙
+/// 生成（GET /api/shortcut/wallpaper.png）が合成の下地に使う。サーバー側で検証・
+/// EXIF除去済みのJPEGだけを保存する（lib/lock-screen-image.ts）。
+model LockScreenImage {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mime      String // 常に "image/jpeg"（検証・再エンコード後に保存するため）
+  data      Bytes
+  width     Int
+  height    Int
+  bytes     Int
+  updatedAt DateTime @updatedAt
 }

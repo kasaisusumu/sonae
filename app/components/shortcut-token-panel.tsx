@@ -16,7 +16,18 @@ import { InfoHint } from "@/app/components/info-hint";
 export function ShortcutTokenPanel({ initial }: { initial: ShortcutTokenRow[] }) {
   const [tokens, setTokens] = useState(initial);
   const [justIssued, setJustIssued] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  async function copyToken() {
+    if (!justIssued) return;
+    try {
+      await navigator.clipboard.writeText(justIssued);
+      setCopied(true);
+    } catch {
+      /* クリップボード権限が無い環境もある。コピー自体は失敗しても致命的ではない */
+    }
+  }
 
   function issue() {
     startTransition(async () => {
@@ -68,13 +79,25 @@ export function ShortcutTokenPanel({ initial }: { initial: ShortcutTokenRow[] })
           <code className="mt-1.5 block break-all rounded bg-background px-2 py-1.5 text-xs">
             {justIssued}
           </code>
-          <button
-            type="button"
-            onClick={() => setJustIssued(null)}
-            className="mt-1.5 text-[11px] text-muted underline hover:text-foreground"
-          >
-            閉じる
-          </button>
+          <div className="mt-1.5 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={copyToken}
+              className="rounded-md border border-border px-2 py-1 text-[11px] text-foreground hover:border-teal hover:text-teal-dark"
+            >
+              {copied ? "コピーしました" : "コピー"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setJustIssued(null);
+                setCopied(false);
+              }}
+              className="text-[11px] text-muted underline hover:text-foreground"
+            >
+              閉じる
+            </button>
+          </div>
         </div>
       )}
 

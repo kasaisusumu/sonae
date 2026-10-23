@@ -23,6 +23,8 @@
  *   ⑥ ショートカット用トークン（ShortcutToken）の認証スコープ
  *      — lib/shortcut-token.ts の resolveShortcutToken、
  *        app/api/shortcut/summary/route.ts の以降の全クエリ（2026-10-23追加）
+ *   ⑦ ロック画面の背景画像（LockScreenImage）の分離
+ *      — lib/lock-screen-image.ts の loadLockScreenImage（2026-10-23追加）
  *
  * 安全装置:
  *   このスクリプトは書き込みを行うため、接続先が本番 DB でないことを
@@ -371,6 +373,30 @@ async function main() {
       nextEventForResolvedUserA?.id === eventA.id,
       "想定した userA の予定が取得できていない（where 条件がズレている可能性）",
     );
+
+    // ── ⑦ ロック画面の背景画像（LockScreenImage）の分離 ──
+    // lib/lock-screen-image.ts: loadLockScreenImage(userId) と同じ where 条件
+    await prisma.lockScreenImage.create({
+      data: {
+        userId: userA.id,
+        mime: "image/jpeg",
+        data: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+        width: 10,
+        height: 10,
+        bytes: 4,
+      },
+    });
+    const bgForB = await prisma.lockScreenImage.findUnique({ where: { userId: userB.id } });
+    check("⑦ userB からは userA の背景画像が取得できない", bgForB === null, `${JSON.stringify(bgForB)}`);
+    const bgForA = await prisma.lockScreenImage.findUnique({ where: { userId: userA.id } });
+    check(
+      "⑦ （前提確認）userA 自身の背景画像は取得できる",
+      !!bgForA && bgForA.bytes === 4,
+      "テストデータの前提が崩れている可能性",
+    );
+    // 壁紙API（app/api/shortcut/wallpaper.png/route.ts）はトークンから解決した userId
+    // だけで loadLockScreenImage を呼ぶため、上記と同じ where 条件がそのまま適用される
+    // （⑥で検証済みのトークン解決と組み合わせて、他ユーザーの背景画像を壁紙に使われない）。
 
     console.log(
       failures === 0

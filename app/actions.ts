@@ -71,6 +71,12 @@ import {
 import { setMessagePriority } from "@/lib/future-messages";
 import { generateRawShortcutToken, hashShortcutToken } from "@/lib/shortcut-token";
 import {
+  saveLockScreenImage,
+  deleteLockScreenImage,
+  loadLockScreenImageMeta,
+  type LockScreenImageMeta,
+} from "@/lib/lock-screen-image";
+import {
   isBuiltinSection,
   parseSectionOrder,
   sectionKeyFromLabel,
@@ -3215,5 +3221,38 @@ export async function revokeShortcutTokenAction(id: string): Promise<void> {
     data: { revokedAt: new Date() },
   });
   trackEvent(userId, "feature:shortcut-token-revoke");
+  revalidateAppViews();
+}
+
+/** /settings のロック画面背景画像欄の現在の状態（生データは返さない）。 */
+export async function getLockScreenImageMeta(): Promise<LockScreenImageMeta | null> {
+  const userId = await requireUserId();
+  return loadLockScreenImageMeta(userId);
+}
+
+/**
+ * ロック画面の背景画像を登録する。`image` は FormData の File（ブラウザ側で長辺2,800px・
+ * 2MB以内のJPEGに縮小済みの想定）。サーバー側でも種類・サイズ・寸法を検証し、
+ * 再エンコードしてEXIF等を除去してから保存する（lib/lock-screen-image.ts）。
+ */
+export async function saveLockScreenImageAction(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireUserId();
+  const file = formData.get("image");
+  if (!(file instanceof Blob)) return { ok: false, error: "invalid_image" };
+  const buf = Buffer.from(await file.arrayBuffer());
+  const res = await saveLockScreenImage(userId, buf);
+  if (!res.ok) return { ok: false, error: res.error };
+  trackEvent(userId, "feature:lock-screen-image-save");
+  revalidateAppViews();
+  return { ok: true };
+}
+
+/** 確認ポップアップ必須（削除は元に戻せない）。 */
+export async function deleteLockScreenImageAction(): Promise<void> {
+  const userId = await requireUserId();
+  await deleteLockScreenImage(userId);
+  trackEvent(userId, "feature:lock-screen-image-delete");
   revalidateAppViews();
 }

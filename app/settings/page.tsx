@@ -5,12 +5,15 @@ import { prisma } from "@/lib/prisma";
 import {
   disableDescriptionWrite,
   disconnectGoogle,
+  getLockScreenImageMeta,
   listShortcutTokens,
   logout,
   setCalendarId,
   submitFeedback,
 } from "@/app/actions";
 import { ShortcutTokenPanel } from "@/app/components/shortcut-token-panel";
+import { LockScreenImagePanel } from "@/app/components/lock-screen-image-panel";
+import { ShortcutWallpaperGuide } from "@/app/components/shortcut-wallpaper-guide";
 import { listCalendars, type CalendarChoice } from "@/lib/google";
 import { formatDateOnly, formatDateTime, formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
@@ -27,15 +30,17 @@ export default async function SettingsPage() {
   trackEvent(user.id, "page:/settings");
 
   const account = user.googleAccount;
-  const [feedback, shortcutTokens] = await Promise.all([
+  const [feedback, shortcutTokens, lockScreenImageMeta] = await Promise.all([
     prisma.feedback.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
     listShortcutTokens(),
+    getLockScreenImageMeta(),
   ]);
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
+  const shortcutShareUrl = process.env.SHORTCUT_SHARE_URL ?? null;
 
   let calendars: CalendarChoice[] = [];
   if (account) {
@@ -209,6 +214,16 @@ export default async function SettingsPage() {
       <section data-coach="settings-shortcut" className="rounded-2xl bg-surface p-5">
         <ShortcutTokenPanel initial={shortcutTokens} />
       </section>
+
+      <section data-coach="settings-lock-screen" className="rounded-2xl bg-surface p-5">
+        <LockScreenImagePanel hasImage={!!lockScreenImageMeta} />
+      </section>
+
+      {shortcutShareUrl && (
+        <section data-coach="settings-lock-screen-guide" className="rounded-2xl bg-surface p-5">
+          <ShortcutWallpaperGuide shareUrl={shortcutShareUrl} />
+        </section>
+      )}
 
       <section className="rounded-2xl bg-surface p-5">
         <h2 className="text-sm font-semibold text-muted">

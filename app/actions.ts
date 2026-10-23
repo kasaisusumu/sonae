@@ -64,6 +64,13 @@ import {
 import { APP_NAME } from "@/lib/app-info";
 import { trackEvent } from "@/lib/track";
 import {
+  setItemPriority,
+  renameItemPriority,
+  type ItemPriority,
+} from "@/lib/item-priority";
+import { setMessagePriority } from "@/lib/future-messages";
+import { generateRawShortcutToken, hashShortcutToken } from "@/lib/shortcut-token";
+import {
   isBuiltinSection,
   parseSectionOrder,
   sectionKeyFromLabel,
@@ -585,6 +592,14 @@ interface SaveChecklistInput {
     notifyLeadMinutes: number | null;
   }[];
   removedTitles: string[];
+  /**
+   * この保存で名前が書き換わった行（元の名前→新しい名前）。2026-10-23追加。
+   * 「急ぎ/そのうち」タグ（ChecklistItemPriority）の紐づけを、この予定の中だけで
+   * 付け替えるために使う。クライアント側（checklist-editor.tsx）は、行が最初に
+   * 読み込まれたときの元タイトルを保持し、保存時に現在のタイトルと比較して作る
+   * （新規に追加した行は対象外）。
+   */
+  renamedTitles?: { from: string; to: string }[];
 }
 
 function cleanLead(v: unknown): number | null {
@@ -602,6 +617,15 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     include: { checklistItems: true },
   });
   if (!event) return;
+
+  // 「急ぎ/そのうち」タグの紐づけを、名前が変わった行だけ・この予定の中だけで
+  // 付け替える（他の予定の項目名・他の予定の紐づけには一切触れない）。
+  for (const r of input.renamedTitles ?? []) {
+    const from = r.from.trim();
+    const to = r.to.trim();
+    if (!from || !to) continue;
+    await renameItemPriority(input.eventId, kind, from, to).catch(() => {});
+  }
 
   const cleanItems = input.items
     .map((it) => ({
@@ -1360,6 +1384,23 @@ export async function toggleFutureMessageDoneAction(
 }
 
 /**
+ * 💌未来の自分へのメッセージの「急ぎ」「そのうち」（2026-10-23追加）。項目の
+ * setChecklistItemPriorityAction と同じ位置づけ（軽いメタ情報・学習には流さない）。
+ * 同じメッセージに結びつく全ての予定の行へ連動する（lib/future-messages.ts 側）。
+ */
+export async function setMessagePriorityAction(
+  linkId: string,
+  priority: "urgent" | "later" | null,
+): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
+  const cleaned = priority === "urgent" || priority === "later" ? priority : null;
+  await setMessagePriority(userId, linkId, cleaned);
+  trackEvent(userId, "feature:message-priority-set");
+  revalidateAppViews();
+}
+
+/**
  * 音声入力（スマホのマイクキーで話した自由文）を、AI で「本文・キーワード」
  * の配列に整える（まだ保存しない）。previewDictatedFailures と同じ2段階の作法。
  */
@@ -1479,6 +1520,45 @@ export async function setItemScopeAction(input: {
     title,
     chosen: scope,
   });
+  revalidateAppViews(event.id);
+  return { ok: true };
+}
+
+/**
+ * 準備リストの項目の「急ぎ」「そのうち」を選ぶ／選び直す／もう一度押して解除する
+ * （2026-10-23追加）。「次回の出し方」の3択（setItemScopeAction）と同じ、軽い
+ * メタ情報の切り替えという位置づけなので、`markAutoManaged`/`markChecklistTouched`
+ * は呼ばない（内容そのものは変わらないため「確認済み」にはしない。実装時の判断）。
+ * 学習（recordEdit・LearnedRule・ChecklistScopeRule・EventChecklistScope）にも流さない。
+ */
+export async function setChecklistItemPriorityAction(input: {
+  eventId: string;
+  kind: string;
+  title: string;
+  priority: ItemPriority | null;
+}): Promise<{ ok: boolean }> {
+  const userId = await requireUserId();
+  const title = String(input.title ?? "").trim();
+  if (!title) return { ok: false };
+  const priority =
+    input.priority === "urgent" || input.priority === "later"
+      ? input.priority
+      : null;
+
+  const event = await prisma.event.findFirst({
+    where: { id: input.eventId, userId },
+    select: { id: true },
+  });
+  if (!event) return { ok: false };
+
+  await setItemPriority({
+    userId,
+    eventId: event.id,
+    kind: String(input.kind || "task"),
+    title,
+    priority,
+  });
+  trackEvent(userId, "feature:item-priority-set");
   revalidateAppViews(event.id);
   return { ok: true };
 }
@@ -3086,4 +3166,54 @@ export async function getFeatureModeHistory(): Promise<
     take: 5,
   });
   return rows;
+}
+
+export interface ShortcutTokenRow {
+  id: string;
+  label: string | null;
+  createdAt: Date;
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
+}
+
+/** /settings に出す、自分のショートカット用トークンの一覧（ハッシュ・生トークンは含まない）。 */
+export async function listShortcutTokens(): Promise<ShortcutTokenRow[]> {
+  const userId = await requireUserId();
+  return prisma.shortcutToken.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, label: true, createdAt: true, lastUsedAt: true, revokedAt: true },
+  });
+}
+
+/**
+ * ショートカット用トークンを新規発行する。生のトークンはこの戻り値でだけ見せ、
+ * 保存するのはハッシュだけ（lib/shortcut-token.ts）。再発行は「発行」をもう一度
+ * 押すだけ（古いトークンは別に「無効化」する）。
+ */
+export async function issueShortcutTokenAction(
+  label?: string,
+): Promise<{ id: string; token: string }> {
+  const userId = await requireUserId();
+  const raw = generateRawShortcutToken();
+  const tokenHash = hashShortcutToken(raw);
+  const cleanLabel = (label ?? "").trim().slice(0, 60) || null;
+  const row = await prisma.shortcutToken.create({
+    data: { userId, tokenHash, label: cleanLabel },
+    select: { id: true },
+  });
+  trackEvent(userId, "feature:shortcut-token-issue");
+  revalidateAppViews();
+  return { id: row.id, token: raw };
+}
+
+/** トークンを無効化する（取り消し。以後そのトークンでのAPI呼び出しは全て失敗する）。 */
+export async function revokeShortcutTokenAction(id: string): Promise<void> {
+  const userId = await requireUserId();
+  await prisma.shortcutToken.updateMany({
+    where: { id, userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  trackEvent(userId, "feature:shortcut-token-revoke");
+  revalidateAppViews();
 }

@@ -1,0 +1,98 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { resolveShortcutToken } from "@/lib/shortcut-token";
+import { loadPriorityHomeLists, type PriorityHomeRow } from "@/lib/priority-home";
+import { appBaseUrl } from "@/lib/google";
+import { formatDateShort } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
+
+const MAX_LIST = 5;
+
+/** 失敗理由を外に出さない、共通の401（トークン無し・形式不正・無効化済み・該当無し、全部同じ）。 */
+function unauthorized(): NextResponse {
+  return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+}
+
+function eventUrl(eventId: string): string {
+  return `${appBaseUrl()}/events/${eventId}`;
+}
+
+function formatPriorityLines(rows: PriorityHomeRow[]): string[] {
+  const lines = rows
+    .slice(0, MAX_LIST)
+    .map(
+      (r) =>
+        `- ${r.title}（${r.eventTitle}・${formatDateShort(r.eventDate)}${r.isPast ? "・過去" : ""}） ${eventUrl(r.eventId)}`,
+    );
+  if (rows.length > MAX_LIST) lines.push(`ほか${rows.length - MAX_LIST}件`);
+  return lines;
+}
+
+/**
+ * iPhoneショートカット用の読み取り専用API（2026-10-23追加）。
+ * `Authorization: Bearer <トークン>` で認証し、常にそのトークンの持ち主のデータだけを
+ * 返す（userId を全てのクエリに必ず入れる）。認証に失敗した理由（トークン無し／
+ * 形式不正／無効化済み／該当無し）は区別せず、常に同じ401を返す。
+ */
+export async function GET(request: Request): Promise<NextResponse> {
+  const auth = await resolveShortcutToken(request.headers.get("authorization"));
+  if (!auth) return unauthorized();
+  const { userId } = auth;
+
+  const now = new Date();
+
+  const [nextEvent, priorityLists] = await Promise.all([
+    prisma.event.findFirst({
+      where: { userId, eventDatetime: { gte: now } },
+      orderBy: { eventDatetime: "asc" },
+      select: {
+        id: true,
+        title: true,
+        eventDatetime: true,
+        checklistItems: {
+          where: { isSuggested: false, isDone: false },
+          orderBy: { sortOrder: "asc" },
+          select: { title: true },
+        },
+      },
+    }),
+    loadPriorityHomeLists(userId),
+  ]);
+
+  const lines: string[] = [];
+
+  if (nextEvent) {
+    lines.push(`次の予定: ${nextEvent.title}（${formatDateShort(nextEvent.eventDatetime)}）`);
+    lines.push(eventUrl(nextEvent.id));
+    if (nextEvent.checklistItems.length > 0) {
+      lines.push("準備リスト:");
+      for (const it of nextEvent.checklistItems.slice(0, MAX_LIST)) {
+        lines.push(`- ${it.title}`);
+      }
+      if (nextEvent.checklistItems.length > MAX_LIST) {
+        lines.push(`ほか${nextEvent.checklistItems.length - MAX_LIST}件`);
+      }
+    }
+  } else {
+    lines.push("次の予定はありません。");
+  }
+
+  lines.push("");
+  lines.push("急ぎ:");
+  lines.push(
+    ...(priorityLists.urgent.length > 0
+      ? formatPriorityLines(priorityLists.urgent)
+      : ["（なし）"]),
+  );
+
+  lines.push("");
+  lines.push("そのうち:");
+  lines.push(
+    ...(priorityLists.later.length > 0
+      ? formatPriorityLines(priorityLists.later)
+      : ["（なし）"]),
+  );
+
+  return NextResponse.json({ text: lines.join("\n") });
+}

@@ -1,0 +1,185 @@
+import { prisma } from "@/lib/prisma";
+import { normTitle } from "@/lib/text-norm";
+
+/**
+ * ホームの「急ぎ」「そのうち」一覧（2026-10-23追加）。ver1/ver2どちらでも出す。
+ * 同じ名前（項目は kind+normTitle、メッセージは FutureMessage.id）は1行にまとめ、
+ * 代表項目は「直近の未来の予定の項目」（無ければ「直近の過去の予定の項目」）。
+ * 完了済みの項目は候補から外す（代表を選ぶ前に除外。全部完了していればその行自体を出さない）。
+ */
+
+export type HomePriority = "urgent" | "later";
+
+export interface PriorityHomeRow {
+  key: string;
+  title: string;
+  eventId: string;
+  eventTitle: string;
+  eventDate: Date;
+  isPast: boolean;
+  isMessage: boolean;
+  /** チェックボックス操作の対象 id。項目なら ChecklistItem.id、メッセージなら EventFutureMessage.id。 */
+  toggleId: string;
+}
+
+interface Candidate {
+  eventId: string;
+  eventTitle: string;
+  eventDatetime: Date;
+  isPast: boolean;
+  isDone: boolean;
+  toggleId: string;
+}
+
+function pickRepresentative(candidates: Candidate[]): Candidate | null {
+  const open = candidates.filter((c) => !c.isDone);
+  if (open.length === 0) return null;
+  const upcoming = open
+    .filter((c) => !c.isPast)
+    .sort((a, b) => a.eventDatetime.getTime() - b.eventDatetime.getTime());
+  if (upcoming.length > 0) return upcoming[0];
+  const past = open
+    .filter((c) => c.isPast)
+    .sort((a, b) => b.eventDatetime.getTime() - a.eventDatetime.getTime());
+  return past[0] ?? null;
+}
+
+function sortRows(rows: PriorityHomeRow[]): PriorityHomeRow[] {
+  return [...rows].sort((a, b) => {
+    if (a.isPast !== b.isPast) return a.isPast ? 1 : -1;
+    return a.isPast
+      ? b.eventDate.getTime() - a.eventDate.getTime()
+      : a.eventDate.getTime() - b.eventDate.getTime();
+  });
+}
+
+export async function loadPriorityHomeLists(
+  userId: string,
+): Promise<Record<HomePriority, PriorityHomeRow[]>> {
+  const now = new Date();
+  const result: Record<HomePriority, PriorityHomeRow[]> = { urgent: [], later: [] };
+
+  const [itemTags, links] = await Promise.all([
+    prisma.checklistItemPriority.findMany({
+      where: { userId },
+      select: { eventId: true, kind: true, normTitle: true, title: true, priority: true },
+    }),
+    prisma.eventFutureMessage.findMany({
+      where: { userId, priority: { not: null } },
+      select: {
+        id: true,
+        isDone: true,
+        priority: true,
+        message: { select: { id: true, body: true } },
+        event: {
+          select: { id: true, title: true, eventDatetime: true, endDatetime: true },
+        },
+      },
+    }),
+  ]);
+
+  if (itemTags.length > 0) {
+    const eventIds = [...new Set(itemTags.map((t) => t.eventId))];
+    const items = await prisma.checklistItem.findMany({
+      where: { eventId: { in: eventIds }, isSuggested: false },
+      select: {
+        id: true,
+        eventId: true,
+        kind: true,
+        title: true,
+        isDone: true,
+        event: {
+          select: { id: true, title: true, eventDatetime: true, endDatetime: true },
+        },
+      },
+    });
+    const itemIndex = new Map<string, (typeof items)[number][]>();
+    for (const it of items) {
+      const k = `${it.eventId}:${it.kind}:${normTitle(it.title)}`;
+      const arr = itemIndex.get(k);
+      if (arr) arr.push(it);
+      else itemIndex.set(k, [it]);
+    }
+
+    const groups = new Map<
+      string,
+      { title: string; priority: HomePriority; candidates: Candidate[] }
+    >();
+    for (const t of itemTags) {
+      if (t.priority !== "urgent" && t.priority !== "later") continue;
+      const matches = itemIndex.get(`${t.eventId}:${t.kind}:${t.normTitle}`);
+      if (!matches || matches.length === 0) continue;
+      const groupKey = `${t.kind}:${t.normTitle}`;
+      let g = groups.get(groupKey);
+      if (!g) {
+        g = { title: t.title, priority: t.priority, candidates: [] };
+        groups.set(groupKey, g);
+      }
+      for (const m of matches) {
+        g.candidates.push({
+          eventId: m.eventId,
+          eventTitle: m.event.title,
+          eventDatetime: m.event.eventDatetime,
+          isPast: (m.event.endDatetime ?? m.event.eventDatetime) <= now,
+          isDone: m.isDone,
+          toggleId: m.id,
+        });
+      }
+    }
+
+    for (const [groupKey, g] of groups) {
+      const rep = pickRepresentative(g.candidates);
+      if (!rep) continue;
+      result[g.priority].push({
+        key: `item:${groupKey}`,
+        title: g.title,
+        eventId: rep.eventId,
+        eventTitle: rep.eventTitle,
+        eventDate: rep.eventDatetime,
+        isPast: rep.isPast,
+        isMessage: false,
+        toggleId: rep.toggleId,
+      });
+    }
+  }
+
+  const messageGroups = new Map<
+    string,
+    { title: string; priority: HomePriority; candidates: Candidate[] }
+  >();
+  for (const l of links) {
+    if (l.priority !== "urgent" && l.priority !== "later") continue;
+    const groupKey = l.message.id;
+    let g = messageGroups.get(groupKey);
+    if (!g) {
+      g = { title: l.message.body, priority: l.priority, candidates: [] };
+      messageGroups.set(groupKey, g);
+    }
+    g.candidates.push({
+      eventId: l.event.id,
+      eventTitle: l.event.title,
+      eventDatetime: l.event.eventDatetime,
+      isPast: (l.event.endDatetime ?? l.event.eventDatetime) <= now,
+      isDone: l.isDone,
+      toggleId: l.id,
+    });
+  }
+  for (const [groupKey, g] of messageGroups) {
+    const rep = pickRepresentative(g.candidates);
+    if (!rep) continue;
+    result[g.priority].push({
+      key: `message:${groupKey}`,
+      title: g.title,
+      eventId: rep.eventId,
+      eventTitle: rep.eventTitle,
+      eventDate: rep.eventDatetime,
+      isPast: rep.isPast,
+      isMessage: true,
+      toggleId: rep.toggleId,
+    });
+  }
+
+  result.urgent = sortRows(result.urgent);
+  result.later = sortRows(result.later);
+  return result;
+}

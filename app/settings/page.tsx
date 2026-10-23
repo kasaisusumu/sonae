@@ -5,10 +5,12 @@ import { prisma } from "@/lib/prisma";
 import {
   disableDescriptionWrite,
   disconnectGoogle,
+  listShortcutTokens,
   logout,
   setCalendarId,
   submitFeedback,
 } from "@/app/actions";
+import { ShortcutTokenPanel } from "@/app/components/shortcut-token-panel";
 import { listCalendars, type CalendarChoice } from "@/lib/google";
 import { formatDateOnly, formatDateTime, formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
@@ -25,11 +27,14 @@ export default async function SettingsPage() {
   trackEvent(user.id, "page:/settings");
 
   const account = user.googleAccount;
-  const feedback = await prisma.feedback.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "desc" },
-    take: 5,
-  });
+  const [feedback, shortcutTokens] = await Promise.all([
+    prisma.feedback.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+    }),
+    listShortcutTokens(),
+  ]);
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
 
   let calendars: CalendarChoice[] = [];
@@ -199,6 +204,10 @@ export default async function SettingsPage() {
             この環境では通知が未設定です。
           </p>
         )}
+      </section>
+
+      <section data-coach="settings-shortcut" className="rounded-2xl bg-surface p-5">
+        <ShortcutTokenPanel initial={shortcutTokens} />
       </section>
 
       <section className="rounded-2xl bg-surface p-5">

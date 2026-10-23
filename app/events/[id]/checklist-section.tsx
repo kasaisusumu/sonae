@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ensureChecklistForEvent, normTitle } from "@/lib/checklist";
 import { loadEventScopeMap, type EventScopeEntry } from "@/lib/item-scope";
+import { loadItemPriorityMap } from "@/lib/item-priority";
 import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
@@ -73,6 +74,7 @@ function KindBlock({
   pastEvents,
   imagesBySlot,
   scopes,
+  priorities,
   showScopeUi,
 }: {
   eventId: string;
@@ -83,6 +85,7 @@ function KindBlock({
   pastEvents: PastOpt[];
   imagesBySlot: Map<string, ItemImg[]>;
   scopes: Map<string, ScopeEntry>;
+  priorities: Map<string, "urgent" | "later">;
   /** 「次回の出し方」UI を出すか（テスト版モードだけ）。 */
   showScopeUi: boolean;
 }) {
@@ -107,6 +110,7 @@ function KindBlock({
           notifyLeadMinutes: c.notifyLeadMinutes,
           images: imagesBySlot.get(normTitle(c.title)) ?? [],
           scope: scopes.get(`${kind}:${normTitle(c.title)}`) ?? null,
+          priority: priorities.get(`${kind}:${normTitle(c.title)}`) ?? null,
         }))}
       />
     </div>
@@ -351,6 +355,7 @@ export async function ChecklistSection({
           confirmedCount: m.confirmedCount,
           eventEnded: m.eventEnded,
           isDone: m.isDone,
+          priority: m.priority,
         }),
       )}
     />
@@ -421,6 +426,8 @@ export async function ChecklistSection({
   const scopeMap = isProd
     ? new Map<string, ScopeEntry>()
     : await loadEventScopeMap(event.userId, event.id);
+  // 「急ぎ」「そのうち」タグ。ver1/ver2どちらでも出す（本番版・テスト版共通）。
+  const priorityMap = await loadItemPriorityMap(event.id);
   const unreviewed =
     !!reviewState &&
     !reviewState.listReviewedAt &&
@@ -532,6 +539,7 @@ export async function ChecklistSection({
                   }
                   imagesBySlot={imagesByKind.get(key) ?? EMPTY_IMG_MAP}
                   scopes={scopeMap}
+                  priorities={priorityMap}
                   showScopeUi={!isProd}
                 />
               ),

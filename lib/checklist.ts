@@ -10,6 +10,7 @@ import {
   parseSectionOrder,
   stringifySectionOrder,
 } from "@/lib/sections";
+import { renameItemPriorityKind } from "@/lib/item-priority";
 
 export interface DraftItem {
   title: string;
@@ -600,6 +601,7 @@ export async function renameSectionKind(
       data: { sectionOrder: stringifySectionOrder(nextOrder) },
     }),
   ]);
+  await renameItemPriorityKind(eventId, oldKind, newKind);
 }
 
 /** 同名・未編集の予定が既にリストを持っていれば、そのイベント id を返す。 */

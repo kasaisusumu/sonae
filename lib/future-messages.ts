@@ -569,6 +569,8 @@ export interface EventMessageRow {
    * 二度と提案されなくなる、という意味ではない）。
    */
   isDone: boolean;
+  /** 「急ぎ」「そのうち」タグ。2026-10-23追加。 */
+  priority: "urgent" | "later" | null;
 }
 
 export interface EventInfoForMessage {
@@ -593,6 +595,7 @@ export function toEventMessageRow(
     matchedBy: string;
     matchReason: string | null;
     isDone: boolean;
+    priority: string | null;
     message: Parameters<typeof toRow>[0];
   },
   ev: EventInfoForMessage,
@@ -616,6 +619,7 @@ export function toEventMessageRow(
     confirmedCount: m.confirmedCount,
     sourceEventTitle: m.sourceEventTitle,
     isDone: l.isDone,
+    priority: l.priority === "urgent" || l.priority === "later" ? l.priority : null,
   };
 }
 
@@ -639,6 +643,28 @@ export async function toggleEventFutureMessageDone(
     select: { eventId: true },
   });
   return link?.eventId ?? null;
+}
+
+/**
+ * 💌未来の自分へのメッセージの「急ぎ」「そのうち」タグ（2026-10-23追加）。
+ * `lib/item-priority.ts` の項目版と同じ考え方だが、こちらは `EventFutureMessage` の
+ * 列に直接持つ（同じ `FutureMessage` に結びつく全ての行へ連動して書き込む。
+ * 予定の新旧は見ない）。`null` を渡すと解除する。
+ */
+export async function setMessagePriority(
+  userId: string,
+  linkId: string,
+  priority: "urgent" | "later" | null,
+): Promise<void> {
+  const link = await prisma.eventFutureMessage.findFirst({
+    where: { id: linkId, userId },
+    select: { messageId: true },
+  });
+  if (!link) return;
+  await prisma.eventFutureMessage.updateMany({
+    where: { userId, messageId: link.messageId },
+    data: { priority },
+  });
 }
 
 export async function getMessagesForEvent(

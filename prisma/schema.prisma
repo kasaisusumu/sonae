@@ -53,6 +53,8 @@ model User {
   eventChecklistScopes EventChecklistScope[]
   aiUsageEvents      AiUsageEvent[]
   featureModeChanges FeatureModeChange[]
+  checklistItemPriorities ChecklistItemPriority[]
+  shortcutTokens     ShortcutToken[]
 }
 
 // 機能モード切替の操作履歴（時刻・変更前後）。設定ページの切替操作ごとに1行。
@@ -206,6 +208,7 @@ model Event {
   futureMessageLinks EventFutureMessage[]
   messageProposalRecords MessageProposalRecord[]
   eventChecklistScopes EventChecklistScope[]
+  checklistItemPriorities ChecklistItemPriority[]
 
   @@index([userId, recurringEventId])
   // 招待・共有された予定は Google 側で複数ユーザーの予定に同じ googleEventId が
@@ -561,6 +564,10 @@ model EventFutureMessage {
   // 準備リストの項目と同じ「チェックで完了」。予定後の確定（status）とは別物
   // （振り返りの確定フローに割り込まない、ユーザー自身のチェックオフだけの軽い状態）。
   isDone      Boolean   @default(false)
+  // "urgent"（急ぎ）| "later"（そのうち）| null（未設定）。2026-10-23追加。
+  // 同じ FutureMessage に結びつく全ての EventFutureMessage へ連動して書き込む
+  // （lib/future-messages.ts の setMessagePriority。saveScopeForItem の連動方式と同じ考え方）。
+  priority    String?
   notifiedAt       DateTime? // 一致時のプッシュ（1予定1回）
   reviewNotifiedAt DateTime? // 予定後の確定うながしプッシュ（1予定1回）
   // 振り返りカードのAI提案のキャッシュ（2026-10-13〜）。ページ表示のたびにAIを呼び直さず、
@@ -661,5 +668,42 @@ model EventChecklistScope {
   updatedAt DateTime @updatedAt
 
   @@unique([eventId, kind, normTitle])
+  @@index([userId])
+}
+
+/// 準備リストの項目の「急ぎ」「そのうち」タグ（2026-10-23追加）。ChecklistItem には
+/// 持たせない（saveChecklist が保存のたびに項目行を作り直し id が変わるため）。
+/// ChecklistItemImage と同じ考え方で (eventId, kind, normTitle) に紐づく。
+/// priority: "urgent"（急ぎ）| "later"（そのうち）。行が無い = どちらも選んでいない
+/// （解除は行の削除で表現する。null 値は使わない）。
+model ChecklistItemPriority {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  kind      String
+  normTitle String
+  title     String   // 表示用（大文字小文字そのまま）。ホーム一覧の代表項目名に使う。
+  priority  String   // "urgent" | "later"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, kind, normTitle])
+  @@index([userId])
+}
+
+/// ショートカット用APIの認証トークン（2026-10-23追加）。生のトークンは発行時にしか
+/// 見せず、保存するのはハッシュだけ（lib/shortcut-token.ts の hashShortcutToken）。
+model ShortcutToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  label      String?   // 任意のメモ（複数発行時に見分ける用）
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
   @@index([userId])
 }

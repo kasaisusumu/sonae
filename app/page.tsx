@@ -5,6 +5,7 @@ import { isDevLoginEnabled } from "@/lib/dev-login";
 import { listFutureMessages } from "@/lib/future-messages";
 import { getUpcomingWarnings } from "@/lib/failures";
 import { primeNotifiedChecklists } from "@/lib/checklist";
+import { loadPriorityHomeLists } from "@/lib/priority-home";
 import { trackEvent } from "@/lib/track";
 import { prisma } from "@/lib/prisma";
 import { featureModeOf, isFailureLogEnabled } from "@/lib/feature-mode";
@@ -13,6 +14,7 @@ import { Landing } from "@/app/components/landing";
 import { NotifyOffBanner } from "@/app/components/notify-off-banner";
 import { SavingsDashboard } from "@/app/components/savings-dashboard";
 import { GrowthDashboard } from "@/app/components/growth-dashboard";
+import { HomePriorityRows } from "@/app/components/priority-home-rows";
 import { MessageList } from "@/app/failures/message-list";
 
 export const maxDuration = 60;
@@ -90,10 +92,11 @@ export default async function HomePage({
   const mode = featureModeOf(user);
   const isProd = isFailureLogEnabled(mode);
 
-  const [warnings, pushCount, futureMessages] = await Promise.all([
+  const [warnings, pushCount, futureMessages, priorityLists] = await Promise.all([
     isProd ? getUpcomingWarnings(user.id) : Promise.resolve([]),
     prisma.pushSubscription.count({ where: { userId: user.id } }),
     isProd ? Promise.resolve([]) : listFutureMessages(user.id),
+    loadPriorityHomeLists(user.id),
   ]);
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
 
@@ -107,6 +110,35 @@ export default async function HomePage({
 
       {/* はじめかたが済んだあとに通知だけオフへ戻った人にも気づかせる、常時表示の警告。 */}
       {pushCount === 0 && <NotifyOffBanner publicKey={vapidPublicKey} />}
+
+      {/* 「急ぎ」「そのうち」一覧。本番版・テスト版どちらでも出す（2026-10-23追加）。
+          同じ名前の項目・メッセージは1行にまとめ、直近の予定を代表として出す。 */}
+      {(priorityLists.urgent.length > 0 || priorityLists.later.length > 0) && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <section className="rounded-2xl border border-warn/30 bg-warn-soft p-4">
+            <h2 className="text-sm font-semibold text-warn">🔥 急ぎ</h2>
+            <div className="mt-2">
+              <HomePriorityRows
+                rows={priorityLists.urgent.map((r) => ({
+                  ...r,
+                  eventDate: r.eventDate.toISOString(),
+                }))}
+              />
+            </div>
+          </section>
+          <section className="rounded-2xl border border-teal/30 bg-teal-soft p-4">
+            <h2 className="text-sm font-semibold text-teal-dark">🕒 そのうち</h2>
+            <div className="mt-2">
+              <HomePriorityRows
+                rows={priorityLists.later.map((r) => ({
+                  ...r,
+                  eventDate: r.eventDate.toISOString(),
+                }))}
+              />
+            </div>
+          </section>
+        </div>
+      )}
 
       {isProd ? (
         <>

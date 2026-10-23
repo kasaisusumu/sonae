@@ -51,6 +51,11 @@ export const FEATURE_KEYS: TrackedKey[] = [
   { key: "feature:future-message-remove", label: "予定詳細: 未来の自分へ行の✕この予定から外す" },
   { key: "feature:mode-switch-test", label: "設定: 機能モードをテスト版に切替" },
   { key: "feature:mode-switch-production", label: "設定: 機能モードを本番版に切替" },
+  { key: "feature:item-priority-set", label: "準備リスト: 急ぎ/そのうちタグを選ぶ" },
+  { key: "feature:message-priority-set", label: "未来の自分へ: 急ぎ/そのうちタグを選ぶ" },
+  { key: "feature:home-item-check", label: "ホーム: 急ぎ/そのうち一覧の✓完了チェック" },
+  { key: "feature:shortcut-token-issue", label: "設定: ショートカット用トークンを発行" },
+  { key: "feature:shortcut-token-revoke", label: "設定: ショートカット用トークンを無効化" },
 ];
 
 /** ⓘ（InfoHint）の説明ポップアップ。開かれた回数を数える。 */
@@ -74,6 +79,7 @@ export const INFOHINT_KEYS: TrackedKey[] = [
   { key: "infohint:future-message-done-vs-remove", label: "予定詳細: 未来の自分への✓と✕の違い" },
   { key: "infohint:future-message-delete-vs-remove", label: "未来の自分へ: 削除と外すの違い" },
   { key: "infohint:scope-quick-toggle", label: "次回の出し方: 説明（ⓘ）" },
+  { key: "infohint:settings-shortcut-token", label: "設定: ショートカット用トークンの説明" },
 ];
 
 /**

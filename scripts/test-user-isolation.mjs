@@ -18,6 +18,11 @@
  *      — lib/recall.ts の recallBaseChecklist
  *   ④ 準備リストの範囲つきルール（ChecklistScopeRule）の取得
  *      — lib/item-scope.ts の loadActiveScopeRules
+ *   ⑤ 「急ぎ」「そのうち」ホーム一覧（ChecklistItemPriority / EventFutureMessage.priority）
+ *      — lib/priority-home.ts の loadPriorityHomeLists（2026-10-23追加）
+ *   ⑥ ショートカット用トークン（ShortcutToken）の認証スコープ
+ *      — lib/shortcut-token.ts の resolveShortcutToken、
+ *        app/api/shortcut/summary/route.ts の以降の全クエリ（2026-10-23追加）
  *
  * 安全装置:
  *   このスクリプトは書き込みを行うため、接続先が本番 DB でないことを
@@ -38,6 +43,7 @@
 
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { randomBytes, createHash } from "node:crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -251,6 +257,119 @@ async function main() {
       "④ （前提確認）userA 自身のルールは取得できる",
       rulesForA.length === 1,
       "テストデータの前提が崩れている可能性",
+    );
+
+    // ── ⑤ 「急ぎ」「そのうち」ホーム一覧（ChecklistItemPriority / EventFutureMessage.priority） ──
+    await prisma.checklistItemPriority.create({
+      data: {
+        userId: userA.id,
+        eventId: eventA.id,
+        kind: "task",
+        normTitle: "ぱすぽーとをかくにんする",
+        title: "パスポートを確認する",
+        priority: "urgent",
+      },
+    });
+    // lib/priority-home.ts: loadPriorityHomeLists(userId) の1つめのクエリと同じ where 条件
+    const priorityTagsForB = await prisma.checklistItemPriority.findMany({
+      where: { userId: userB.id },
+      select: { id: true },
+    });
+    check(
+      "⑤ userB の「急ぎ/そのうち」一覧に userA のタグが出ない",
+      priorityTagsForB.length === 0,
+      `${priorityTagsForB.length}件見えてしまっている`,
+    );
+    const priorityTagsForA = await prisma.checklistItemPriority.findMany({
+      where: { userId: userA.id },
+      select: { id: true },
+    });
+    check(
+      "⑤ （前提確認）userA 自身のタグは取得できる",
+      priorityTagsForA.length === 1,
+      "テストデータの前提が崩れている可能性",
+    );
+
+    const futureMsgA = await prisma.futureMessage.create({
+      data: {
+        userId: userA.id,
+        body: "急ぎの確認事項（分離テスト用）",
+        keywords: "[]",
+        genres: "[]",
+        genreKeywords: "[]",
+        categoryIds: "[]",
+      },
+    });
+    await prisma.eventFutureMessage.create({
+      data: {
+        userId: userA.id,
+        eventId: eventA.id,
+        messageId: futureMsgA.id,
+        status: "shown",
+        matchedBy: "manual",
+        priority: "later",
+      },
+    });
+    // 同じく loadPriorityHomeLists(userId) の2つめのクエリと同じ where 条件
+    const priorityLinksForB = await prisma.eventFutureMessage.findMany({
+      where: { userId: userB.id, priority: { not: null } },
+      select: { id: true },
+    });
+    check(
+      "⑤ userB の「急ぎ/そのうち」一覧に userA のメッセージが出ない",
+      priorityLinksForB.length === 0,
+      `${priorityLinksForB.length}件見えてしまっている`,
+    );
+
+    // ── ⑥ ショートカット用トークン（ShortcutToken）の認証スコープ ──
+    const rawTokenA = `smm_${randomBytes(24).toString("base64url")}`;
+    const tokenHashA = createHash("sha256").update(rawTokenA, "utf8").digest("hex");
+    await prisma.shortcutToken.create({
+      data: { userId: userA.id, tokenHash: tokenHashA, label: "分離テスト用" },
+    });
+    // lib/shortcut-token.ts: resolveShortcutToken と同じ、ハッシュの完全一致引き
+    const resolvedByHash = await prisma.shortcutToken.findUnique({
+      where: { tokenHash: tokenHashA },
+      select: { userId: true, revokedAt: true },
+    });
+    check(
+      "⑥ userA のトークンが userA 自身に解決される",
+      !!resolvedByHash && !resolvedByHash.revokedAt && resolvedByHash.userId === userA.id,
+      "トークンの解決結果が想定と異なる",
+    );
+    // 無効化すると、どの道解決してはいけない（app/api/shortcut/summary/route.ts の401扱い）
+    await prisma.shortcutToken.updateMany({
+      where: { tokenHash: tokenHashA },
+      data: { revokedAt: new Date() },
+    });
+    const resolvedAfterRevoke = await prisma.shortcutToken.findUnique({
+      where: { tokenHash: tokenHashA },
+      select: { revokedAt: true },
+    });
+    check(
+      "⑥ 無効化したトークンは revokedAt が立ち、以後認証に使えない扱いになる",
+      !!resolvedAfterRevoke?.revokedAt,
+      "無効化後も revokedAt が null のままになっている",
+    );
+    // 存在しないトークン（他人の生トークンを当てた想定）は何も解決しない
+    const resolvedForUnknown = await prisma.shortcutToken.findUnique({
+      where: { tokenHash: createHash("sha256").update("not-a-real-token").digest("hex") },
+      select: { userId: true },
+    });
+    check(
+      "⑥ 存在しないトークンのハッシュは何も解決しない",
+      resolvedForUnknown === null,
+      "存在しないはずのトークンが解決されてしまっている",
+    );
+    // route.ts 以降のクエリ（次の予定・準備リスト）は、解決した userId だけでスコープする
+    const nextEventForResolvedUserA = await prisma.event.findFirst({
+      where: { userId: userA.id, eventDatetime: { gte: new Date(0) } },
+      select: { id: true },
+    });
+    check(
+      "⑥ トークンから解決した userId で次の予定を引くと userA 自身の予定だけが対象になる",
+      nextEventForResolvedUserA?.id === eventA.id,
+      "想定した userA の予定が取得できていない（where 条件がズレている可能性）",
     );
 
     console.log(

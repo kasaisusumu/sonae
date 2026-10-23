@@ -90,11 +90,16 @@ export function PriorityHomeContainer({
     setList((prev) => (prev.some((r) => r.key === row.key) ? prev : [row, ...prev]));
   }
 
-  /** 急ぎ/そのうち一覧でチェックした瞬間に呼ばれる。その一覧からは `HomePriorityRows`
-   * 側で即座に消える（`removed`）ので、ここでは「完了した項目を見る」コーナーが
-   * 既に開いている・取得済みなら、そちらの先頭にも足す（開いていなければ何もしない。
-   * 次に開いたときにサーバーから取り直した一覧に、この完了も反映されている）。 */
+  /** 急ぎ/そのうち一覧でチェックした瞬間に呼ばれる。`frozenUrgent`/`frozenLater`
+   * からこの行を実際に取り除く（子の`HomePriorityRows`側でローカルに隠すだけだと、
+   * 同じ`key`の行が後で「完了した項目を見る」から復活して戻ってきたときに、その
+   * ローカルの隠し状態のせいで再び表示されなくなるバグになる。2026-10-24修正）。
+   * あわせて、「完了した項目を見る」コーナーが既に開いている・取得済みなら、
+   * そちらの先頭にも足す（開いていなければ何もしない。次に開いたときにサーバーから
+   * 取り直した一覧に、この完了も反映されている）。 */
   function completeItem(priority: "urgent" | "later", row: CompletedPriorityRowData) {
+    const setList = priority === "urgent" ? setFrozenUrgent : setFrozenLater;
+    setList((prev) => prev.filter((r) => r.key !== row.key));
     const setCompleted = priority === "urgent" ? setCompletedUrgent : setCompletedLater;
     setCompleted((s) => (s.rows ? { ...s, rows: [row, ...s.rows] } : s));
   }

@@ -53,18 +53,16 @@ function pickRepresentative(
   return past[0] ?? null;
 }
 
-/** 予定に紐づかない項目（eventDate が無い）は先頭にまとめ、そのあと予定に紐づく行を
- * 従来どおり（未来は近い順、過去は新しい順）に並べる。 */
+/** 急ぎ/そのうちの通常一覧の並び順: 期限（予定日時）が早い順（ユーザー指定・
+ * 2026-10-24: 「急ぎ、そのうちリストは期限が早い順に上から表示して」）。過去・未来を
+ * 分けず、予定日時そのもので昇順に並べる（過去に残っている＝まだ完了していない項目は
+ * 「最も期限が早い＝最も遅れている」として最上段に出る）。予定に紐づかない項目
+ * （期限が無い）は、期限で比べられないため最後にまとめる。 */
 function sortRows(rows: PriorityHomeRow[]): PriorityHomeRow[] {
-  const standalone = rows.filter((r) => r.eventDate === null);
-  const linked = rows.filter((r) => r.eventDate !== null) as (PriorityHomeRow & { eventDate: Date })[];
-  const sortedLinked = [...linked].sort((a, b) => {
-    if (a.isPast !== b.isPast) return a.isPast ? 1 : -1;
-    return a.isPast
-      ? b.eventDate.getTime() - a.eventDate.getTime()
-      : a.eventDate.getTime() - b.eventDate.getTime();
-  });
-  return [...standalone, ...sortedLinked];
+  const dated = rows.filter((r) => r.eventDate !== null) as (PriorityHomeRow & { eventDate: Date })[];
+  const undated = rows.filter((r) => r.eventDate === null);
+  const sortedDated = [...dated].sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime());
+  return [...sortedDated, ...undated];
 }
 
 export async function loadPriorityHomeLists(
@@ -232,7 +230,11 @@ export async function loadCompletedPriorityItems(
   userId: string,
   priority: HomePriority,
 ): Promise<PriorityHomeRow[]> {
-  const rows: PriorityHomeRow[] = [];
+  // 行本体とは別に「終わった順」の並び替えキーを保持する（予定に紐づく行は、その
+  // 予定の日時＝「その予定がいつ終わったか」、予定に紐づかない項目は実際にチェックを
+  // 入れた時刻に最も近い StandalonePriorityItem.updatedAt を使う。どちらも
+  // PriorityHomeRow の型には持たせず、ここでの並び替え専用に使う）。
+  const entries: { row: PriorityHomeRow; finishedAt: Date }[] = [];
   const now = new Date();
 
   const itemTags = await prisma.checklistItemPriority.findMany({
@@ -284,16 +286,19 @@ export async function loadCompletedPriorityItems(
       if (g.candidates.some((c) => !c.isDone)) continue;
       const rep = pickRepresentative(g.candidates, (c) => c.isDone);
       if (!rep) continue;
-      rows.push({
-        key: `item:${groupKey}`,
-        title: g.title,
-        eventId: rep.eventId,
-        eventTitle: rep.eventTitle,
-        eventDate: rep.eventDatetime,
-        isPast: rep.isPast,
-        isMessage: false,
-        isStandalone: false,
-        toggleId: rep.toggleId,
+      entries.push({
+        row: {
+          key: `item:${groupKey}`,
+          title: g.title,
+          eventId: rep.eventId,
+          eventTitle: rep.eventTitle,
+          eventDate: rep.eventDatetime,
+          isPast: rep.isPast,
+          isMessage: false,
+          isStandalone: false,
+          toggleId: rep.toggleId,
+        },
+        finishedAt: rep.eventDatetime,
       });
     }
   }
@@ -328,37 +333,44 @@ export async function loadCompletedPriorityItems(
     if (g.candidates.some((c) => !c.isDone)) continue;
     const rep = pickRepresentative(g.candidates, (c) => c.isDone);
     if (!rep) continue;
-    rows.push({
-      key: `message:${groupKey}`,
-      title: g.title,
-      eventId: rep.eventId,
-      eventTitle: rep.eventTitle,
-      eventDate: rep.eventDatetime,
-      isPast: rep.isPast,
-      isMessage: true,
-      isStandalone: false,
-      toggleId: rep.toggleId,
+    entries.push({
+      row: {
+        key: `message:${groupKey}`,
+        title: g.title,
+        eventId: rep.eventId,
+        eventTitle: rep.eventTitle,
+        eventDate: rep.eventDatetime,
+        isPast: rep.isPast,
+        isMessage: true,
+        isStandalone: false,
+        toggleId: rep.toggleId,
+      },
+      finishedAt: rep.eventDatetime,
     });
   }
 
   const standaloneItems = await prisma.standalonePriorityItem.findMany({
     where: { userId, isDone: true, priority },
-    orderBy: { updatedAt: "desc" },
-    select: { id: true, title: true },
+    select: { id: true, title: true, updatedAt: true },
   });
   for (const s of standaloneItems) {
-    rows.push({
-      key: `standalone:${s.id}`,
-      title: s.title,
-      eventId: null,
-      eventTitle: null,
-      eventDate: null,
-      isPast: false,
-      isMessage: false,
-      isStandalone: true,
-      toggleId: s.id,
+    entries.push({
+      row: {
+        key: `standalone:${s.id}`,
+        title: s.title,
+        eventId: null,
+        eventTitle: null,
+        eventDate: null,
+        isPast: false,
+        isMessage: false,
+        isStandalone: true,
+        toggleId: s.id,
+      },
+      finishedAt: s.updatedAt,
     });
   }
 
-  return sortRows(rows);
+  // 「終わったのが遅い順に上から」＝ finishedAt の降順（ユーザー指定・2026-10-24）。
+  entries.sort((a, b) => b.finishedAt.getTime() - a.finishedAt.getTime());
+  return entries.map((e) => e.row);
 }

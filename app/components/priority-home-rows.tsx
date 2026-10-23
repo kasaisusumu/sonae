@@ -34,6 +34,15 @@ export interface HomePriorityRowData {
  * 外せば戻せるため、この一覧についてはその方針を外した（ユーザー指摘「完了した項目を
  * 見るコーナーができたから、完了した時にページを出るまでそのままにするやつ無くして
  * いいよ。すぐ完了コーナーに行っていいよ」、2026-10-24）。
+ *
+ * 完了した行を消すのは、このコンポーネント自身ではなく呼び出し元（`onComplete`を
+ * 受けた`PriorityHomeContainer`）が`rows`配列そのものから取り除く形にしている
+ * （ローカルに`removed[key]=true`のような形で隠すと、同じ名前グループ・同じidの
+ * 行が「完了した項目を見る」から復活して戻ってきたときに、その古い`removed`状態の
+ * せいで再び隠れてしまうバグになる。name-group の `key` は完了前後で同じ文字列の
+ * ため、特にこの問題が起きやすい。ユーザー指摘「完了した項目から完了を解除した時、
+ * すぐにリストに戻るようにして」で発覚、2026-10-24修正）。✕削除だけは元に戻る経路が
+ * 無いため、引き続きこのコンポーネント内のローカル`removed`で隠す。
  */
 export function HomePriorityRows({
   rows,
@@ -45,7 +54,6 @@ export function HomePriorityRows({
   const [removed, setRemoved] = useState<Record<string, boolean>>({});
 
   function complete(r: HomePriorityRowData) {
-    setRemoved((prev) => ({ ...prev, [r.key]: true }));
     onComplete(r);
     void trackFeatureUse("feature:home-item-check");
     if (r.isStandalone) {

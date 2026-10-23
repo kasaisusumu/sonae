@@ -14,7 +14,7 @@ import {
 import { ShortcutTokenPanel } from "@/app/components/shortcut-token-panel";
 import { LockScreenImagePanel } from "@/app/components/lock-screen-image-panel";
 import { ShortcutWallpaperGuide } from "@/app/components/shortcut-wallpaper-guide";
-import { listCalendars, type CalendarChoice } from "@/lib/google";
+import { appBaseUrl, listCalendars, type CalendarChoice } from "@/lib/google";
 import { formatDateOnly, formatDateTime, formatYen } from "@/lib/format";
 import { SubmitButton } from "@/app/components/submit-button";
 import { ConfirmLink } from "@/app/components/confirm-link";
@@ -212,7 +212,7 @@ export default async function SettingsPage() {
       </section>
 
       <section data-coach="settings-shortcut" className="rounded-2xl bg-surface p-5">
-        <ShortcutTokenPanel initial={shortcutTokens} />
+        <ShortcutTokenPanel initial={shortcutTokens} baseUrl={appBaseUrl()} />
       </section>
 
       <section data-coach="settings-lock-screen" className="rounded-2xl bg-surface p-5">

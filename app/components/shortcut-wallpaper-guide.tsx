@@ -24,8 +24,9 @@ export function ShortcutWallpaperGuide({ shareUrl }: { shareUrl: string }) {
           <p className="text-[13px] text-muted">
             共有ショートカットにトークンは含まれていません。取り込むときに
             ショートカットアプリが「このショートカットが必要とする情報」として
-            URLの入力を求めます（インポートの質問）。そこに、上の「このURLを
-            コピー」で控えた、トークン入りのURLをそのまま貼ってください。
+            トークンの入力を求めます（インポートの質問）。そこに、上の
+            「トークンをコピー」で控えたトークンをそのまま貼ってください
+            （URL自体は固定なので、ショートカット側に最初から組み込まれています）。
           </p>
         </InfoHint>
       </h2>
@@ -51,9 +52,8 @@ export function ShortcutWallpaperGuide({ shareUrl }: { shareUrl: string }) {
             2
           </span>
           <span>
-            「ショートカットを追加」を押すと、URLの入力を求められます。上の
-            「ショートカット用トークン」で発行した、トークン入りのURL
-            （「このURLをコピー」）を貼ってください。
+            「ショートカットを追加」を押すと、トークンの入力を求められます。上の
+            「ショートカット用トークン」で発行したトークンを貼ってください。
           </span>
         </li>
         <li className="flex items-start gap-2">

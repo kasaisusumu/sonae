@@ -72,6 +72,11 @@ export function PriorityHomeContainer({
     });
   }
 
+  function reviveToActive(priority: "urgent" | "later", row: HomePriorityRowData) {
+    const setList = priority === "urgent" ? setFrozenUrgent : setFrozenLater;
+    setList((prev) => (prev.some((r) => r.key === row.key) ? prev : [row, ...prev]));
+  }
+
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <section className="rounded-2xl border border-warn/30 bg-warn-soft p-4">
@@ -80,7 +85,10 @@ export function PriorityHomeContainer({
           <HomePriorityRows rows={frozenUrgent} />
         </div>
         <AddPriorityItemForm onAdd={(title) => addItem("urgent", title)} />
-        <CompletedPriorityItemsToggle priority="urgent" />
+        <CompletedPriorityItemsToggle
+          priority="urgent"
+          onRevive={(row) => reviveToActive("urgent", row)}
+        />
       </section>
       <section className="rounded-2xl border border-teal/30 bg-teal-soft p-4">
         <h2 className="text-sm font-semibold text-teal-dark">🕒 そのうち</h2>
@@ -88,7 +96,10 @@ export function PriorityHomeContainer({
           <HomePriorityRows rows={frozenLater} />
         </div>
         <AddPriorityItemForm onAdd={(title) => addItem("later", title)} />
-        <CompletedPriorityItemsToggle priority="later" />
+        <CompletedPriorityItemsToggle
+          priority="later"
+          onRevive={(row) => reviveToActive("later", row)}
+        />
       </section>
     </div>
   );
@@ -135,11 +146,21 @@ function AddPriorityItemForm({ onAdd }: { onAdd: (title: string) => void }) {
  * （`loadCompletedPriorityItemsAction` は初回展開時に1回だけ呼ぶ）。チェックは
  * 常に「オン」から始まり、外すと復活（予定に紐づく項目は toggleChecklistItemDone／
  * toggleFutureMessageDoneAction、予定に紐づかない項目は
- * toggleStandalonePriorityItemAction）してこの一覧から取り除く。ホームの通常一覧
- * （`frozenUrgent`／`frozenLater`）は次にホームを開くまで更新しない既存の仕様と
- * 同じく、復活した項目がこのページに居続けている間に通常一覧へ自動で戻ることはない。
+ * toggleStandalonePriorityItemAction。これらが実データ（ChecklistItem／
+ * EventFutureMessage／StandalonePriorityItem の isDone）を直接更新し、予定に紐づく
+ * 項目はカレンダー説明欄への反映も既存の仕組みでそのまま行われる）。
+ * 外した**その瞬間**に、この一覧から取り除くのと同時に、呼び出し元（親の
+ * `frozenUrgent`／`frozenLater`）へも`onRevive`で伝え、通常の急ぎ/そのうち一覧に
+ * 即座に戻す（ユーザー指摘「復活させたら、そのリストの中に復活して」
+ * 「それを、その瞬間にやって」、2026-10-24）。
  */
-function CompletedPriorityItemsToggle({ priority }: { priority: "urgent" | "later" }) {
+function CompletedPriorityItemsToggle({
+  priority,
+  onRevive,
+}: {
+  priority: "urgent" | "later";
+  onRevive: (row: CompletedPriorityRowData) => void;
+}) {
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<CompletedPriorityRowData[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -156,6 +177,7 @@ function CompletedPriorityItemsToggle({ priority }: { priority: "urgent" | "late
 
   function revive(r: CompletedPriorityRowData) {
     setRows((prev) => (prev ? prev.filter((x) => x.key !== r.key) : prev));
+    onRevive(r);
     if (r.isStandalone) {
       void toggleStandalonePriorityItemAction(r.toggleId, false);
     } else if (r.isMessage) {

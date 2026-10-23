@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -34,17 +34,33 @@ function isEditableElement(el: Element | null): boolean {
  * 原因の縮みでは隠さないようにし、かつ `focusout` の瞬間に即座に復帰できる
  * （ビューポートのリサイズイベントが遅れる端末があるため、フォーカス解除を
  * 復帰のトリガーとしても使う）。
+ *
+ * 2026-10-24: `window.innerHeight` との差分で縮みを判定していたが、iOSの
+ * ホーム画面追加（PWAスタンドアロン）では `window.innerHeight` 自体が
+ * キーボード表示にあわせて一緒に縮むことがあり、差分がほぼ0のまま
+ * （＝`shrunk` が立たない）ために下のバーが隠れず「せり上がって」見える
+ * 不具合があった（ユーザー指摘「キーボード出した時にメニューバーがその上に
+ * 上がってくる」）。`window.innerHeight` を使わず、`visualViewport.height`
+ * 自身の最大値（キーボードが無い状態の実測値）をベースラインとして記録し、
+ * そこからの縮みだけで判定するよう変更（ベースラインは、ツールバーが戻る等で
+ * 実測値がそれを上回ったら随時更新する）。
  */
 function useKeyboardOpen(): boolean {
   const [shrunk, setShrunk] = useState(false);
   const [focusedEditable, setFocusedEditable] = useState(false);
+  const baselineRef = useRef<number | null>(null);
 
   useEffect(() => {
     const vv = typeof window !== "undefined" ? window.visualViewport : null;
     if (!vv) return;
     const update = () => {
-      const hidden = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setShrunk(hidden > 150);
+      const baseline = baselineRef.current;
+      if (baseline === null || vv.height > baseline) {
+        baselineRef.current = vv.height;
+        setShrunk(false);
+        return;
+      }
+      setShrunk(baseline - vv.height > 150);
     };
     update();
     vv.addEventListener("resize", update);

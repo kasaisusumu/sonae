@@ -31,12 +31,17 @@ function formatPriorityLines(rows: PriorityHomeRow[]): string[] {
 
 /**
  * iPhoneショートカット用の読み取り専用API（2026-10-23追加）。
- * `Authorization: Bearer <トークン>` で認証し、常にそのトークンの持ち主のデータだけを
- * 返す（userId を全てのクエリに必ず入れる）。認証に失敗した理由（トークン無し／
- * 形式不正／無効化済み／該当無し）は区別せず、常に同じ401を返す。
+ * `Authorization: Bearer <トークン>` ヘッダー、または `?token=` クエリパラメータで
+ * 認証し、常にそのトークンの持ち主のデータだけを返す（userId を全てのクエリに
+ * 必ず入れる）。認証に失敗した理由（トークン無し／形式不正／無効化済み／該当無し）は
+ * 区別せず、常に同じ401を返す。
  */
 export async function GET(request: Request): Promise<NextResponse> {
-  const auth = await resolveShortcutToken(request.headers.get("authorization"));
+  const url = new URL(request.url);
+  const auth = await resolveShortcutToken(
+    request.headers.get("authorization"),
+    url.searchParams.get("token"),
+  );
   if (!auth) return unauthorized();
   const { userId } = auth;
 

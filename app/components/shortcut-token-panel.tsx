@@ -17,6 +17,7 @@ export function ShortcutTokenPanel({ initial }: { initial: ShortcutTokenRow[] })
   const [tokens, setTokens] = useState(initial);
   const [justIssued, setJustIssued] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [urlCopied, setUrlCopied] = useState(false);
   const [pending, startTransition] = useTransition();
 
   async function copyToken() {
@@ -26,6 +27,20 @@ export function ShortcutTokenPanel({ initial }: { initial: ShortcutTokenRow[] })
       setCopied(true);
     } catch {
       /* クリップボード権限が無い環境もある。コピー自体は失敗しても致命的ではない */
+    }
+  }
+
+  function wallpaperUrl(): string {
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    return `${origin}/api/shortcut/wallpaper.png?token=${justIssued}&w=1170&h=2532`;
+  }
+
+  async function copyUrl() {
+    try {
+      await navigator.clipboard.writeText(wallpaperUrl());
+      setUrlCopied(true);
+    } catch {
+      /* 同上 */
     }
   }
 
@@ -62,7 +77,12 @@ export function ShortcutTokenPanel({ initial }: { initial: ShortcutTokenRow[] })
         <InfoHint id="settings-shortcut-token">
           <p className="mb-2 text-sm">
             iPhoneの「ショートカット」アプリから、次の予定と準備リスト・「急ぎ」
-            「そのうち」をテキストで取得できるAPIのトークンです。
+            「そのうち」や、ロック画面の壁紙画像を取得できるAPIのトークンです。
+          </p>
+          <p className="mb-2 text-[13px] text-muted">
+            発行直後に、トークン入りのURLをそのまま表示します。ショートカットの
+            「URLの内容を取得」にそのURLを貼るだけで使えます（別途ヘッダーの設定は
+            不要です）。
           </p>
           <p className="text-[13px] text-muted">
             発行した直後だけ画面に表示します（以後は二度と表示できません。
@@ -85,13 +105,35 @@ export function ShortcutTokenPanel({ initial }: { initial: ShortcutTokenRow[] })
               onClick={copyToken}
               className="rounded-md border border-border px-2 py-1 text-[11px] text-foreground hover:border-teal hover:text-teal-dark"
             >
-              {copied ? "コピーしました" : "コピー"}
+              {copied ? "コピーしました" : "トークンだけコピー"}
+            </button>
+          </div>
+
+          <p className="mt-3 text-xs font-semibold text-teal-dark">
+            ロック画面壁紙用のURL（トークン入り。ショートカットの「URLの内容を取得」に
+            そのまま貼るだけで使えます）
+          </p>
+          <code className="mt-1.5 block break-all rounded bg-background px-2 py-1.5 text-xs">
+            {wallpaperUrl()}
+          </code>
+          <p className="mt-1 text-[11px] text-muted">
+            末尾の `w=1170&h=2532` はお使いの端末の画面サイズに合わせて変えられます
+            （省略しても既定の比率で描画されます）。
+          </p>
+          <div className="mt-1.5 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={copyUrl}
+              className="rounded-md border border-teal bg-teal-soft px-2 py-1 text-[11px] font-medium text-teal-dark hover:opacity-90"
+            >
+              {urlCopied ? "コピーしました" : "このURLをコピー"}
             </button>
             <button
               type="button"
               onClick={() => {
                 setJustIssued(null);
                 setCopied(false);
+                setUrlCopied(false);
               }}
               className="text-[11px] text-muted underline hover:text-foreground"
             >

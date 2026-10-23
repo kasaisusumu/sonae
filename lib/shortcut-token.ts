@@ -14,7 +14,12 @@ export function hashShortcutToken(raw: string): string {
 }
 
 /**
- * `Authorization: Bearer <token>` からユーザーIDを引く。
+ * `Authorization: Bearer <token>` ヘッダー、または `?token=` クエリパラメータから
+ * ユーザーIDを引く（ヘッダーを優先。どちらか一方があれば認証できる）。
+ * クエリパラメータ対応は、iPhoneショートカットの「URLの内容を取得」で毎回ヘッダーを
+ * 設定しなくても、トークン入りの1本のURLをそのまま貼るだけで使えるようにするため
+ * （ユーザー指定・2026-10-23）。URLにトークンが含まれる分、アクセスログ等に残る
+ * 可能性はヘッダー方式より高くなるが、ショートカット側の設定を単純にする利点を優先した。
  * 見つからない・形式不正・無効化済みは全て同じ null を返す（失敗理由を外に漏らさない）。
  * 生トークンはハッシュ化してからDBを完全一致（インデックス）で引くため、
  * 生の文字列を1文字ずつ比較することはない（タイミング攻撃を避ける）。
@@ -22,11 +27,12 @@ export function hashShortcutToken(raw: string): string {
  */
 export async function resolveShortcutToken(
   authorizationHeader: string | null,
+  queryToken?: string | null,
 ): Promise<{ userId: string; tokenId: string } | null> {
-  if (!authorizationHeader) return null;
-  const m = /^Bearer\s+(.+)$/i.exec(authorizationHeader.trim());
-  if (!m) return null;
-  const raw = m[1].trim();
+  const fromHeader = authorizationHeader
+    ? /^Bearer\s+(.+)$/i.exec(authorizationHeader.trim())?.[1]?.trim()
+    : null;
+  const raw = fromHeader || queryToken?.trim() || null;
   if (!raw) return null;
 
   const hash = hashShortcutToken(raw);

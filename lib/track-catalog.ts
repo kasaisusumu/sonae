@@ -51,6 +51,21 @@ export const FEATURE_KEYS: TrackedKey[] = [
   { key: "feature:future-message-remove", label: "予定詳細: 未来の自分へ行の✕この予定から外す" },
   { key: "feature:mode-switch-test", label: "設定: 機能モードをテスト版に切替" },
   { key: "feature:mode-switch-production", label: "設定: 機能モードを本番版に切替" },
+  { key: "feature:item-priority-set", label: "準備リスト: 急ぎ/そのうちタグを選ぶ" },
+  { key: "feature:message-priority-set", label: "未来の自分へ: 急ぎ/そのうちタグを選ぶ" },
+  { key: "feature:home-item-check", label: "ホーム: 急ぎ/そのうち一覧の✓完了チェック" },
+  { key: "feature:shortcut-token-issue", label: "設定: ショートカット用トークンを発行" },
+  { key: "feature:shortcut-token-revoke", label: "設定: ショートカット用トークンを無効化" },
+  { key: "feature:lock-screen-image-save", label: "設定: ロック画面の背景画像を登録" },
+  { key: "feature:lock-screen-image-delete", label: "設定: ロック画面の背景画像を削除" },
+  { key: "feature:lock-screen-wallpaper-fetch", label: "ショートカット: ロック画面壁紙を取得" },
+  { key: "feature:lock-screen-guide-open-share", label: "設定: 共有ショートカットを開く" },
+  { key: "feature:standalone-priority-add", label: "ホーム: 予定に紐づかない急ぎ/そのうち項目を追加" },
+  { key: "feature:standalone-priority-check", label: "ホーム: 予定に紐づかない項目の✓完了チェック" },
+  { key: "feature:standalone-priority-delete", label: "ホーム: 予定に紐づかない項目を削除" },
+  { key: "feature:home-completed-items-view", label: "ホーム: 急ぎ/そのうちの完了した項目を見る" },
+  { key: "feature:priority-extras-on", label: "設定: ver2.1をONにする" },
+  { key: "feature:priority-extras-off", label: "設定: ver2.1をOFFにする" },
 ];
 
 /** ⓘ（InfoHint）の説明ポップアップ。開かれた回数を数える。 */
@@ -65,6 +80,7 @@ export const INFOHINT_KEYS: TrackedKey[] = [
   { key: "infohint:settings-write-description", label: "設定: 説明欄への書き込み" },
   { key: "infohint:settings-notify", label: "設定: 通知" },
   { key: "infohint:feature-mode-toggle", label: "設定: 機能モードとは" },
+  { key: "infohint:priority-extras-toggle", label: "設定: ver2.1とは" },
   { key: "infohint:events-upcoming", label: "予定一覧: これからの予定" },
   { key: "infohint:event-checklist-heading", label: "予定詳細: 準備リストの見出し" },
   { key: "infohint:checklist-autosave", label: "予定詳細: 自動保存の説明" },
@@ -74,6 +90,9 @@ export const INFOHINT_KEYS: TrackedKey[] = [
   { key: "infohint:future-message-done-vs-remove", label: "予定詳細: 未来の自分への✓と✕の違い" },
   { key: "infohint:future-message-delete-vs-remove", label: "未来の自分へ: 削除と外すの違い" },
   { key: "infohint:scope-quick-toggle", label: "次回の出し方: 説明（ⓘ）" },
+  { key: "infohint:settings-shortcut-token", label: "設定: ショートカット用トークンの説明" },
+  { key: "infohint:settings-lock-screen-image", label: "設定: ロック画面の背景画像の説明" },
+  { key: "infohint:settings-lock-screen-shortcut-guide", label: "設定: ロック画面ショートカット導入ガイドの説明" },
 ];
 
 /**

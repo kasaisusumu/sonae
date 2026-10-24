@@ -10,6 +10,7 @@ import {
   parseSectionOrder,
   stringifySectionOrder,
 } from "@/lib/sections";
+import { renameItemPriorityKind, copyItemPriorityForNameGroup } from "@/lib/item-priority";
 
 export interface DraftItem {
   title: string;
@@ -261,6 +262,7 @@ export { normTitle } from "@/lib/text-norm";
 async function copyChecklistItems(
   fromEventId: string,
   toEventId: string,
+  opts: { syncPriority?: boolean } = {},
 ): Promise<void> {
   const [src, fromEvent, srcScopes] = await Promise.all([
     prisma.checklistItem.findMany({
@@ -366,6 +368,14 @@ async function copyChecklistItems(
         ]
       : []),
   ]);
+
+  // 既に項目を持っていた予定を、編集内容に合わせて更新し直す経路（opts.syncPriority）
+  // だけ優先度タグも追従させる。新しい予定に初めて項目を持たせる経路（この関数の
+  // 他の呼び出し元）では渡さないため、新しい予定は優先度タグを引き継がず未設定で
+  // 始まる（lib/item-priority.ts 冒頭コメント参照）。
+  if (opts.syncPriority) {
+    await copyItemPriorityForNameGroup(fromEventId, toEventId);
+  }
 }
 
 /**
@@ -390,7 +400,7 @@ export async function propagateListToNameGroup(
   const twins = candidates.filter((c) => normalizeMatchText(c.title) === srcNorm);
   for (const t of twins) {
     try {
-      await copyChecklistItems(sourceEventId, t.id);
+      await copyChecklistItems(sourceEventId, t.id, { syncPriority: true });
     } catch (e) {
       console.error("[propagate] コピー失敗 eventId=%s", t.id, e);
     }
@@ -600,6 +610,7 @@ export async function renameSectionKind(
       data: { sectionOrder: stringifySectionOrder(nextOrder) },
     }),
   ]);
+  await renameItemPriorityKind(eventId, oldKind, newKind);
 }
 
 /** 同名・未編集の予定が既にリストを持っていれば、そのイベント id を返す。 */

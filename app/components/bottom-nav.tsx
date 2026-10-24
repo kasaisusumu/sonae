@@ -11,49 +11,60 @@ const BASE_TABS = [
   { href: "/settings", label: "設定" },
 ];
 
+// ソフトキーボードを呼ばない input type（チェックボックス・ラジオ・ファイル選択等）。
+// これらにフォーカスしても下のバーを隠さない（2026-10-24: フォーカスだけで判定する
+// ように変更した直後、急ぎ/そのうちの完了チェックボックス・復活チェックボックスに
+// タップするたびにバーが消える不具合が見つかり修正）。
+const NON_KEYBOARD_INPUT_TYPES = new Set([
+  "checkbox",
+  "radio",
+  "range",
+  "color",
+  "file",
+  "button",
+  "submit",
+  "reset",
+  "image",
+  "hidden",
+]);
+
 function isEditableElement(el: Element | null): boolean {
   if (!el) return false;
   const tag = el.tagName;
-  return (
-    tag === "INPUT" ||
-    tag === "TEXTAREA" ||
-    (el as HTMLElement).isContentEditable
-  );
+  if (tag === "INPUT") {
+    const type = (el as HTMLInputElement).type || "text";
+    return !NON_KEYBOARD_INPUT_TYPES.has(type);
+  }
+  return tag === "TEXTAREA" || (el as HTMLElement).isContentEditable;
 }
 
 /**
  * スマホのキーボードが出ている間だけ true。
- * キーボードで visualViewport が縮むと、`position:fixed; bottom:0` のバーが
- * キーボードの上まで“せり上がって”画面中央に浮いてしまうため、その間は隠す。
- * URL バーの伸縮（〜100px）で誤検知しないよう、しきい値は大きめ（150px）。
+ * キーボードが出ると、`position:sticky; bottom:0` のバーがキーボードの上まで
+ * “せり上がって”画面中央に浮いてしまうため、その間は隠す。
  *
- * 2026-10〜: 入力欄にフォーカスが無いときはビューポートが縮んでいても隠さない
- * （`focusedEditable` を同時に見る）。ブラウザのアドレスバー／ツールバーの
- * 伸縮だけでも 150px を超えることがあり、それだけでバーが消えたまま戻らない
- * 不具合があった。フォーカスの有無も条件に加えることで、キーボード以外が
- * 原因の縮みでは隠さないようにし、かつ `focusout` の瞬間に即座に復帰できる
- * （ビューポートのリサイズイベントが遅れる端末があるため、フォーカス解除を
- * 復帰のトリガーとしても使う）。
+ * 2026-10〜: 以前は `visualViewport` の縮み幅（しきい値150px）と、入力欄への
+ * フォーカスの両方が true のときだけ隠す方式だった（ブラウザのアドレスバー／
+ * ツールバーの伸縮だけでも150pxを超えることがあり、縮み幅だけで判定すると
+ * キーボードと無関係にバーが消えたまま戻らない不具合があったため、フォーカスの
+ * 有無も条件に加えていた）。
+ *
+ * 2026-10-24: それでも「キーボードを出すとバーがせり上がって見える」との指摘が
+ * あった。原因は、iOSのホーム画面追加（PWAスタンドアロン）では、キーボード表示時に
+ * `visualViewport` の `resize` イベントが実際のキーボード表示より遅れて発火する、
+ * あるいは環境によってはほぼ発火しない（`window.innerHeight` もキーボードに
+ * あわせて縮んでしまい差分で判定できない、等）ことがあり、「縮み幅」の確認を
+ * 待っている間（あるいはいつまでも）隠れずに見えてしまうため。
+ * **判定を入力欄のフォーカス有無だけに一本化した**（`visualViewport` には一切
+ * 依存しない）。このバー自体 `sm:hidden` でスマホ幅でしか出ないため、この幅で
+ * 入力欄にフォーカスが入る＝ほぼ確実にソフトキーボードが出る、という前提に立つ
+ * （Bluetoothキーボード使用時など稀にキーボードが出ないままバーだけ隠れる
+ * ケースはあるが、フォーカスを外せば即座に戻るため実害は小さいと判断した）。
+ * 以前のビューポート縮み判定で防いでいた「ブラウザのツールバーの伸縮だけで誤って
+ * 隠れる」問題も、フォーカス前提にしたことで同時に解消される。
  */
 function useKeyboardOpen(): boolean {
-  const [shrunk, setShrunk] = useState(false);
   const [focusedEditable, setFocusedEditable] = useState(false);
-
-  useEffect(() => {
-    const vv = typeof window !== "undefined" ? window.visualViewport : null;
-    if (!vv) return;
-    const update = () => {
-      const hidden = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setShrunk(hidden > 150);
-    };
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
 
   useEffect(() => {
     const onFocusIn = (e: FocusEvent) =>
@@ -67,7 +78,7 @@ function useKeyboardOpen(): boolean {
     };
   }, []);
 
-  return shrunk && focusedEditable;
+  return focusedEditable;
 }
 
 export function BottomNav({

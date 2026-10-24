@@ -12,6 +12,7 @@ import {
   setItemNotifyLead,
   setItemScopeAction,
   setItemKeywordScopeAction,
+  setChecklistItemPriorityAction,
   toggleChecklistItemDone,
   trackFeatureUse,
 } from "@/app/actions";
@@ -26,6 +27,7 @@ import {
   KeywordSentenceField,
   type QuickScope,
 } from "@/app/components/scope-picker";
+import { PriorityToggle, type QuickPriority } from "@/app/components/priority-toggle";
 import type { ItemScope } from "@/lib/item-scope";
 
 /** 項目の「次回の出し方」（範囲）。予定ごとの指定（EventChecklistScope）から来る。 */
@@ -48,6 +50,11 @@ interface Item {
   notifyCustom: boolean; // カスタム入力（日・時・分）を出しているか（UIのみ）
   images: ItemImage[];
   scope: ScopeInfo | null;
+  priority: QuickPriority;
+  /** この行が読み込まれた時点の元タイトル（id が付いていた既存行だけ）。
+   * 保存時にこれと現在のタイトルを比べて「名前の書き換え」を検出する
+   * （2026-10-23追加・急ぎ/そのうちタグの付け替え用）。新規に追加した行は null。 */
+  originalTitle: string | null;
 }
 
 interface InitialItem {
@@ -59,6 +66,7 @@ interface InitialItem {
   notifyLeadMinutes: number | null;
   images?: ItemImage[];
   scope?: ScopeInfo | null;
+  priority?: QuickPriority;
 }
 
 const DEFAULT_LEAD = 180; // 3時間前
@@ -112,6 +120,7 @@ export function ChecklistEditor({
   pastEvents = [],
   allowImages = true,
   showScopeUi = true,
+  showPriorityUi = false,
 }: {
   eventId: string;
   kind?: string;
@@ -124,6 +133,8 @@ export function ChecklistEditor({
   allowImages?: boolean;
   /** 「次回の出し方」の絵文字ボタンを出すか（テスト版モードだけ。本番版は false）。 */
   showScopeUi?: boolean;
+  /** 急ぎ/そのうちタグのボタンを出すか（ver2.1だけ。既定false）。 */
+  showPriorityUi?: boolean;
 }) {
   const isBelonging = kind === "belonging";
   const kindLabel = label ?? (isBelonging ? "持ち物" : "準備すること");
@@ -142,6 +153,8 @@ export function ChecklistEditor({
           it.notifyLeadMinutes != null && !isLeadPreset(it.notifyLeadMinutes),
         images: it.images ?? [],
         scope: it.scope ?? null,
+        priority: it.priority ?? null,
+        originalTitle: it.id !== null ? it.title : null,
       })),
     [initialItems],
   );
@@ -333,6 +346,19 @@ export function ChecklistEditor({
       });
   }
 
+  function renamedPairs(list: Item[]) {
+    const pairs: { from: string; to: string }[] = [];
+    for (const it of list) {
+      const to = it.title.trim();
+      if (!it.originalTitle || !to) continue;
+      const from = it.originalTitle.trim();
+      if (from && from !== to && normTitle(from) !== normTitle(to)) {
+        pairs.push({ from, to });
+      }
+    }
+    return pairs;
+  }
+
   function persist(list: Item[], includeMemo = true) {
     startTransition(async () => {
       await saveChecklist({
@@ -340,9 +366,25 @@ export function ChecklistEditor({
         kind,
         items: toPayload(list, includeMemo),
         removedTitles,
+        renamedTitles: renamedPairs(list),
       });
       setRemovedTitles([]);
       setSaved(true);
+      // 保存できた題名を、その場で次回の改名検出の基準（originalTitle）にする。
+      // サーバーの initial（props）との再同期を待つと、再同期が来るタイミング次第で
+      // 直前の保存ぶんの originalTitle が古いまま残ることがあり、続けてもう一度
+      // 改名すると renameItemPriority が実際には既に変わった後の古い名前で呼ばれて
+      // 何も一致せず、急ぎ/そのうちタグが孤立して消えてしまう不具合があった
+      // （2026-10-24のバグレビューで発覚・修正）。
+      const savedTitleByKey = new Map(list.map((it) => [it.key, it.title]));
+      setItems((prev) =>
+        prev.map((it) => {
+          const savedTitle = savedTitleByKey.get(it.key);
+          return savedTitle !== undefined && savedTitle !== it.originalTitle
+            ? { ...it, originalTitle: savedTitle }
+            : it;
+        }),
+      );
     });
   }
 
@@ -447,6 +489,8 @@ export function ChecklistEditor({
         notifyCustom: false,
         images: [],
         scope: null,
+        priority: null,
+        originalTitle: null,
       },
     ]);
     setSaved(false);
@@ -491,6 +535,8 @@ export function ChecklistEditor({
         notifyCustom: false,
         images: [],
         scope: null,
+        priority: null,
+        originalTitle: null,
       })),
     ];
     setItems(merged);
@@ -593,9 +639,37 @@ export function ChecklistEditor({
         kind,
         items: toPayload(items, true),
         removedTitles,
+        renamedTitles: renamedPairs(items),
       });
       setRemovedTitles([]);
     }
+  }
+
+  const [priorityOverride, setPriorityOverride] = useState<
+    Record<string, QuickPriority>
+  >({});
+
+  /** 画面に出す優先度（選び直した直後の一時の値を優先）。 */
+  function shownPriority(it: Item): QuickPriority {
+    return it.key in priorityOverride ? priorityOverride[it.key] : it.priority;
+  }
+
+  /** 「急ぎ」「そのうち」を選ぶ・選び直す・外す。同名の既存項目全体に即反映される
+   * （lib/item-priority.ts の setItemPriority）。未保存の編集を先に保存してから送る。
+   * 軽い操作なので確認ポップアップは出さない（ユーザー指示）。 */
+  function choosePriority(it: Item, priority: QuickPriority) {
+    const next = shownPriority(it) === priority ? null : priority;
+    setPriorityOverride((prev) => ({ ...prev, [it.key]: next }));
+    startTransition(async () => {
+      await flushPending();
+      await setChecklistItemPriorityAction({
+        eventId,
+        kind,
+        title: it.title.trim(),
+        priority: next,
+      });
+      router.refresh();
+    });
   }
 
   function doSaveTemplate() {
@@ -873,6 +947,14 @@ export function ChecklistEditor({
                         />
                       )}
                     </>
+                  )}
+                  {/* 「急ぎ」「そのうち」タグ。ver2.1だけ（ver1/ver2のどちらでもON可）。
+                      同じ名前の既存項目すべてに即反映される（setChecklistItemPriorityAction）。 */}
+                  {showPriorityUi && (
+                    <PriorityToggle
+                      value={shownPriority(it)}
+                      onChange={(p) => choosePriority(it, p)}
+                    />
                   )}
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
                     <span className="shrink-0">通知</span>

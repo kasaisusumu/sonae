@@ -24,18 +24,18 @@ function escapeRe(s: string): string {
 }
 
 /** プレーンテキスト用: 改行を潰し、前後の空白を整える。 */
-function oneLine(s: string): string {
+export function oneLine(s: string): string {
   return s.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
-const CHECK_DONE = "☑";
+export const CHECK_DONE = "☑";
 // 未完了は「・」で表す（チェックボックス記号だと Google カレンダー上で
 // 追加の行が書きにくいため。「・」で始めて書けば新しい未完了項目として
 // パースされる＝表示と手入力の記法を揃えている。lib/description.ts の
 // BOX_OR_BULLET / parseSonaeBlock 参照）。
-const CHECK_TODO = "・";
+export const CHECK_TODO = "・";
 // コメント行の字下げ（半角スペース）。行頭が空白の行はコメントとして扱う。
-const COMMENT_INDENT = "    ";
+export const COMMENT_INDENT = "    ";
 
 /**
  * 既存の説明欄から自アプリのブロックを取り除く（ユーザーが書いた内容だけ残す）。
@@ -63,7 +63,10 @@ export interface DescItem {
   comment?: string | null;
 }
 
-function bullet(it: DescItem): string {
+/** カレンダー説明欄に書く1項目ぶんの行（☑/・＋本文＋リード時間、コメントは次行に字下げ）。
+ * ロック画面の壁紙（lib/wallpaper-render.tsx）が、説明欄の「リンク無しバージョン」を
+ * 忠実に再現するためにもそのまま使う（ユーザー指定・2026-10-23）。 */
+export function bullet(it: DescItem): string {
   const lead = formatLead(it.notifyLeadMinutes ?? null);
   const label = lead
     ? `${oneLine(it.title)}（${lead}）`
@@ -89,7 +92,7 @@ const UNREVIEWED_NOTE =
   "※ このリストはまだ確認されていません。アプリで「確認しました」を押すか、内容を編集すると消えます。";
 
 /** 「done/total」表記（total 0 なら空）。 */
-function progress(items: DescItem[]): string {
+export function progress(items: DescItem[]): string {
   if (items.length === 0) return "";
   const done = items.filter((i) => i.isDone).length;
   return ` ${done}/${items.length}`;

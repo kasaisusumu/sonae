@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { ensureChecklistForEvent, normTitle } from "@/lib/checklist";
 import { loadEventScopeMap, type EventScopeEntry } from "@/lib/item-scope";
+import { loadItemPriorityMap } from "@/lib/item-priority";
 import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
 import { getFeatureMode, isFailureLogEnabled } from "@/lib/feature-mode";
+import { isPriorityExtrasEnabled } from "@/lib/priority-mode";
 import { getWarningForEvent, ensureSuggestedFailures } from "@/lib/failures";
 import {
   ensureFutureMessageMatchesForEvent,
@@ -73,7 +75,9 @@ function KindBlock({
   pastEvents,
   imagesBySlot,
   scopes,
+  priorities,
   showScopeUi,
+  showPriorityUi,
 }: {
   eventId: string;
   kind: string;
@@ -83,8 +87,11 @@ function KindBlock({
   pastEvents: PastOpt[];
   imagesBySlot: Map<string, ItemImg[]>;
   scopes: Map<string, ScopeEntry>;
+  priorities: Map<string, "urgent" | "later">;
   /** 「次回の出し方」UI を出すか（テスト版モードだけ）。 */
   showScopeUi: boolean;
+  /** 急ぎ/そのうちタグUIを出すか（ver2.1だけ）。 */
+  showPriorityUi: boolean;
 }) {
   const mine = rows.filter((r) => r.kind === kind);
   const normal = mine.filter((r) => !r.isSuggested);
@@ -98,6 +105,7 @@ function KindBlock({
         templates={templates}
         pastEvents={pastEvents}
         showScopeUi={showScopeUi}
+        showPriorityUi={showPriorityUi}
         initialItems={normal.map((c) => ({
           id: c.id,
           title: c.title,
@@ -107,6 +115,7 @@ function KindBlock({
           notifyLeadMinutes: c.notifyLeadMinutes,
           images: imagesBySlot.get(normTitle(c.title)) ?? [],
           scope: scopes.get(`${kind}:${normTitle(c.title)}`) ?? null,
+          priority: priorities.get(`${kind}:${normTitle(c.title)}`) ?? null,
         }))}
       />
     </div>
@@ -143,6 +152,8 @@ export async function ChecklistSection({
   // 機能モード（§ lib/feature-mode.ts）。本番版=失敗ログ／テスト版=未来の自分へ・範囲ルール。
   const mode = await getFeatureMode(event.userId);
   const isProd = isFailureLogEnabled(mode);
+  // ver2.1（急ぎ/そのうちタグ等一式）。ver1/ver2とは独立したON/OFF。
+  const showPriorityUi = await isPriorityExtrasEnabled(event.userId);
 
   const itemsAndFlag = await Promise.all([
     prisma.checklistItem.findMany({
@@ -334,6 +345,7 @@ export async function ChecklistSection({
     <FutureMessageEditor
       eventId={event.id}
       retro={!isProd && eventIsPast}
+      showPriorityUi={showPriorityUi}
       initial={linkedMessages.map(
         (m): EMRow => ({
           id: m.id,
@@ -351,6 +363,7 @@ export async function ChecklistSection({
           confirmedCount: m.confirmedCount,
           eventEnded: m.eventEnded,
           isDone: m.isDone,
+          priority: m.priority,
         }),
       )}
     />
@@ -421,6 +434,10 @@ export async function ChecklistSection({
   const scopeMap = isProd
     ? new Map<string, ScopeEntry>()
     : await loadEventScopeMap(event.userId, event.id);
+  // 「急ぎ」「そのうち」タグ。ver2.1がONのときだけ（ver1/ver2のどちらでもON可）。
+  const priorityMap = showPriorityUi
+    ? await loadItemPriorityMap(event.id)
+    : new Map<string, "urgent" | "later">();
   const unreviewed =
     !!reviewState &&
     !reviewState.listReviewedAt &&
@@ -532,7 +549,9 @@ export async function ChecklistSection({
                   }
                   imagesBySlot={imagesByKind.get(key) ?? EMPTY_IMG_MAP}
                   scopes={scopeMap}
+                  priorities={priorityMap}
                   showScopeUi={!isProd}
+                  showPriorityUi={showPriorityUi}
                 />
               ),
             };

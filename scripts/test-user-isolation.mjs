@@ -18,6 +18,19 @@
  *      — lib/recall.ts の recallBaseChecklist
  *   ④ 準備リストの範囲つきルール（ChecklistScopeRule）の取得
  *      — lib/item-scope.ts の loadActiveScopeRules
+ *   ⑤ 「急ぎ」「そのうち」ホーム一覧（ChecklistItemPriority / EventFutureMessage.priority）
+ *      — lib/priority-home.ts の loadPriorityHomeLists（2026-10-23追加）
+ *   ⑥ ショートカット用トークン（ShortcutToken）の認証スコープ
+ *      — lib/shortcut-token.ts の resolveShortcutToken、
+ *        app/api/shortcut/summary/route.ts の以降の全クエリ（2026-10-23追加）
+ *   ⑦ ロック画面の背景画像（LockScreenImage）の分離
+ *      — lib/lock-screen-image.ts の loadLockScreenImage（2026-10-23追加）
+ *   ⑧ 予定に紐づかない急ぎ/そのうち項目（StandalonePriorityItem）の分離
+ *      — lib/priority-home.ts の loadPriorityHomeLists、
+ *        app/actions.ts の toggleStandalonePriorityItemAction/
+ *        deleteStandalonePriorityItemAction（2026-10-23追加）
+ *   ⑨ ホームの「完了した項目を見る」（loadCompletedPriorityItems）の分離
+ *      — lib/priority-home.ts の loadCompletedPriorityItems（2026-10-24追加）
  *
  * 安全装置:
  *   このスクリプトは書き込みを行うため、接続先が本番 DB でないことを
@@ -38,6 +51,7 @@
 
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { randomBytes, createHash } from "node:crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
@@ -251,6 +265,229 @@ async function main() {
       "④ （前提確認）userA 自身のルールは取得できる",
       rulesForA.length === 1,
       "テストデータの前提が崩れている可能性",
+    );
+
+    // ── ⑤ 「急ぎ」「そのうち」ホーム一覧（ChecklistItemPriority / EventFutureMessage.priority） ──
+    await prisma.checklistItemPriority.create({
+      data: {
+        userId: userA.id,
+        eventId: eventA.id,
+        kind: "task",
+        normTitle: "ぱすぽーとをかくにんする",
+        title: "パスポートを確認する",
+        priority: "urgent",
+      },
+    });
+    // lib/priority-home.ts: loadPriorityHomeLists(userId) の1つめのクエリと同じ where 条件
+    const priorityTagsForB = await prisma.checklistItemPriority.findMany({
+      where: { userId: userB.id },
+      select: { id: true },
+    });
+    check(
+      "⑤ userB の「急ぎ/そのうち」一覧に userA のタグが出ない",
+      priorityTagsForB.length === 0,
+      `${priorityTagsForB.length}件見えてしまっている`,
+    );
+    const priorityTagsForA = await prisma.checklistItemPriority.findMany({
+      where: { userId: userA.id },
+      select: { id: true },
+    });
+    check(
+      "⑤ （前提確認）userA 自身のタグは取得できる",
+      priorityTagsForA.length === 1,
+      "テストデータの前提が崩れている可能性",
+    );
+
+    const futureMsgA = await prisma.futureMessage.create({
+      data: {
+        userId: userA.id,
+        body: "急ぎの確認事項（分離テスト用）",
+        keywords: "[]",
+        genres: "[]",
+        genreKeywords: "[]",
+        categoryIds: "[]",
+      },
+    });
+    await prisma.eventFutureMessage.create({
+      data: {
+        userId: userA.id,
+        eventId: eventA.id,
+        messageId: futureMsgA.id,
+        status: "shown",
+        matchedBy: "manual",
+        priority: "later",
+      },
+    });
+    // 同じく loadPriorityHomeLists(userId) の2つめのクエリと同じ where 条件
+    const priorityLinksForB = await prisma.eventFutureMessage.findMany({
+      where: { userId: userB.id, priority: { not: null } },
+      select: { id: true },
+    });
+    check(
+      "⑤ userB の「急ぎ/そのうち」一覧に userA のメッセージが出ない",
+      priorityLinksForB.length === 0,
+      `${priorityLinksForB.length}件見えてしまっている`,
+    );
+
+    // ── ⑥ ショートカット用トークン（ShortcutToken）の認証スコープ ──
+    const rawTokenA = `smm_${randomBytes(24).toString("base64url")}`;
+    const tokenHashA = createHash("sha256").update(rawTokenA, "utf8").digest("hex");
+    await prisma.shortcutToken.create({
+      data: { userId: userA.id, tokenHash: tokenHashA, label: "分離テスト用" },
+    });
+    // lib/shortcut-token.ts: resolveShortcutToken と同じ、ハッシュの完全一致引き
+    const resolvedByHash = await prisma.shortcutToken.findUnique({
+      where: { tokenHash: tokenHashA },
+      select: { userId: true, revokedAt: true },
+    });
+    check(
+      "⑥ userA のトークンが userA 自身に解決される",
+      !!resolvedByHash && !resolvedByHash.revokedAt && resolvedByHash.userId === userA.id,
+      "トークンの解決結果が想定と異なる",
+    );
+    // 無効化すると、どの道解決してはいけない（app/api/shortcut/summary/route.ts の401扱い）
+    await prisma.shortcutToken.updateMany({
+      where: { tokenHash: tokenHashA },
+      data: { revokedAt: new Date() },
+    });
+    const resolvedAfterRevoke = await prisma.shortcutToken.findUnique({
+      where: { tokenHash: tokenHashA },
+      select: { revokedAt: true },
+    });
+    check(
+      "⑥ 無効化したトークンは revokedAt が立ち、以後認証に使えない扱いになる",
+      !!resolvedAfterRevoke?.revokedAt,
+      "無効化後も revokedAt が null のままになっている",
+    );
+    // 存在しないトークン（他人の生トークンを当てた想定）は何も解決しない
+    const resolvedForUnknown = await prisma.shortcutToken.findUnique({
+      where: { tokenHash: createHash("sha256").update("not-a-real-token").digest("hex") },
+      select: { userId: true },
+    });
+    check(
+      "⑥ 存在しないトークンのハッシュは何も解決しない",
+      resolvedForUnknown === null,
+      "存在しないはずのトークンが解決されてしまっている",
+    );
+    // route.ts 以降のクエリ（次の予定・準備リスト）は、解決した userId だけでスコープする
+    const nextEventForResolvedUserA = await prisma.event.findFirst({
+      where: { userId: userA.id, eventDatetime: { gte: new Date(0) } },
+      select: { id: true },
+    });
+    check(
+      "⑥ トークンから解決した userId で次の予定を引くと userA 自身の予定だけが対象になる",
+      nextEventForResolvedUserA?.id === eventA.id,
+      "想定した userA の予定が取得できていない（where 条件がズレている可能性）",
+    );
+
+    // ── ⑦ ロック画面の背景画像（LockScreenImage）の分離 ──
+    // lib/lock-screen-image.ts: loadLockScreenImage(userId) と同じ where 条件
+    await prisma.lockScreenImage.create({
+      data: {
+        userId: userA.id,
+        mime: "image/jpeg",
+        data: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+        width: 10,
+        height: 10,
+        bytes: 4,
+      },
+    });
+    const bgForB = await prisma.lockScreenImage.findUnique({ where: { userId: userB.id } });
+    check("⑦ userB からは userA の背景画像が取得できない", bgForB === null, `${JSON.stringify(bgForB)}`);
+    const bgForA = await prisma.lockScreenImage.findUnique({ where: { userId: userA.id } });
+    check(
+      "⑦ （前提確認）userA 自身の背景画像は取得できる",
+      !!bgForA && bgForA.bytes === 4,
+      "テストデータの前提が崩れている可能性",
+    );
+    // 壁紙API（app/api/shortcut/wallpaper.png/route.ts）はトークンから解決した userId
+    // だけで loadLockScreenImage を呼ぶため、上記と同じ where 条件がそのまま適用される
+    // （⑥で検証済みのトークン解決と組み合わせて、他ユーザーの背景画像を壁紙に使われない）。
+
+    // ── ⑧ 予定に紐づかない急ぎ/そのうち項目（StandalonePriorityItem）の分離 ──
+    // lib/priority-home.ts: loadPriorityHomeLists(userId) の standaloneItems クエリと同じ where 条件
+    const standaloneA = await prisma.standalonePriorityItem.create({
+      data: { userId: userA.id, title: "分離テスト用の項目", priority: "urgent" },
+    });
+    const standaloneForB = await prisma.standalonePriorityItem.findMany({
+      where: { userId: userB.id, isDone: false },
+      select: { id: true },
+    });
+    check(
+      "⑧ userB の一覧に userA の予定に紐づかない項目が出ない",
+      standaloneForB.length === 0,
+      `${standaloneForB.length}件見えてしまっている`,
+    );
+    const standaloneForA = await prisma.standalonePriorityItem.findMany({
+      where: { userId: userA.id, isDone: false },
+      select: { id: true },
+    });
+    check(
+      "⑧ （前提確認）userA 自身の項目は取得できる",
+      standaloneForA.length === 1,
+      "テストデータの前提が崩れている可能性",
+    );
+    // app/actions.ts: toggleStandalonePriorityItemAction/deleteStandalonePriorityItemAction と
+    // 同じ、id に加えて userId も条件に入れた updateMany/deleteMany（他人の id を自分の
+    // userId で操作しても0件のままで、何も変更・削除されないこと）
+    const toggleByB = await prisma.standalonePriorityItem.updateMany({
+      where: { id: standaloneA.id, userId: userB.id },
+      data: { isDone: true },
+    });
+    check(
+      "⑧ userB が userA の項目IDを指定しても完了にできない",
+      toggleByB.count === 0,
+      `${toggleByB.count}件更新できてしまった`,
+    );
+    const deleteByB = await prisma.standalonePriorityItem.deleteMany({
+      where: { id: standaloneA.id, userId: userB.id },
+    });
+    check(
+      "⑧ userB が userA の項目IDを指定しても削除できない",
+      deleteByB.count === 0,
+      `${deleteByB.count}件削除できてしまった`,
+    );
+    const standaloneStillThere = await prisma.standalonePriorityItem.findUnique({
+      where: { id: standaloneA.id },
+    });
+    check(
+      "⑧ （前提確認）上記の他人操作のあともuserAの項目は消えずに残っている",
+      !!standaloneStillThere,
+      "テストデータの前提が崩れている可能性",
+    );
+
+    // ── ⑨ ホームの「完了した項目を見る」（loadCompletedPriorityItems）の分離 ──
+    // lib/priority-home.ts: loadCompletedPriorityItems(userId, priority) の
+    // standaloneItems クエリ・itemTags クエリと同じ where 条件
+    await prisma.standalonePriorityItem.create({
+      data: { userId: userA.id, title: "分離テスト用の完了済み項目", priority: "urgent", isDone: true },
+    });
+    const completedStandaloneForB = await prisma.standalonePriorityItem.findMany({
+      where: { userId: userB.id, isDone: true, priority: "urgent" },
+      select: { id: true },
+    });
+    check(
+      "⑨ userB の「完了した項目」にuserAの予定に紐づかない項目が出ない",
+      completedStandaloneForB.length === 0,
+      `${completedStandaloneForB.length}件見えてしまっている`,
+    );
+    const completedStandaloneForA = await prisma.standalonePriorityItem.findMany({
+      where: { userId: userA.id, isDone: true, priority: "urgent" },
+      select: { id: true },
+    });
+    check(
+      "⑨ （前提確認）userA自身の「完了した項目」は取得できる",
+      completedStandaloneForA.length === 1,
+      "テストデータの前提が崩れている可能性",
+    );
+    const completedItemTagsForB = await prisma.checklistItemPriority.findMany({
+      where: { userId: userB.id, priority: "urgent" },
+      select: { id: true },
+    });
+    check(
+      "⑨ userB の「完了した項目」クエリの元になるタグ検索にuserAのタグが出ない",
+      completedItemTagsForB.length === 0,
+      `${completedItemTagsForB.length}件見えてしまっている`,
     );
 
     console.log(

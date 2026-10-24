@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
 import { clearSession, getSessionUserId } from "@/lib/session";
 import { syncEventDescription } from "@/lib/description-sync";
+import { loadCompletedPriorityItems, type PriorityHomeRow } from "@/lib/priority-home";
 import {
   getOrCreateCategory,
   resolveCategoryForEvent,
@@ -63,6 +64,21 @@ import {
 } from "@/lib/item-scope";
 import { APP_NAME } from "@/lib/app-info";
 import { trackEvent } from "@/lib/track";
+import {
+  setItemPriority,
+  renameItemPriority,
+  renameItemPriorityKind,
+  type ItemPriority,
+} from "@/lib/item-priority";
+import { isPriorityExtrasEnabled } from "@/lib/priority-mode";
+import { setMessagePriority } from "@/lib/future-messages";
+import { generateRawShortcutToken, hashShortcutToken } from "@/lib/shortcut-token";
+import {
+  saveLockScreenImage,
+  deleteLockScreenImage,
+  loadLockScreenImageMeta,
+  type LockScreenImageMeta,
+} from "@/lib/lock-screen-image";
 import {
   isBuiltinSection,
   parseSectionOrder,
@@ -585,6 +601,14 @@ interface SaveChecklistInput {
     notifyLeadMinutes: number | null;
   }[];
   removedTitles: string[];
+  /**
+   * この保存で名前が書き換わった行（元の名前→新しい名前）。2026-10-23追加。
+   * 「急ぎ/そのうち」タグ（ChecklistItemPriority）の紐づけを、この予定の中だけで
+   * 付け替えるために使う。クライアント側（checklist-editor.tsx）は、行が最初に
+   * 読み込まれたときの元タイトルを保持し、保存時に現在のタイトルと比較して作る
+   * （新規に追加した行は対象外）。
+   */
+  renamedTitles?: { from: string; to: string }[];
 }
 
 function cleanLead(v: unknown): number | null {
@@ -602,6 +626,15 @@ export async function saveChecklist(input: SaveChecklistInput): Promise<void> {
     include: { checklistItems: true },
   });
   if (!event) return;
+
+  // 「急ぎ/そのうち」タグの紐づけを、名前が変わった行だけ・この予定の中だけで
+  // 付け替える（他の予定の項目名・他の予定の紐づけには一切触れない）。
+  for (const r of input.renamedTitles ?? []) {
+    const from = r.from.trim();
+    const to = r.to.trim();
+    if (!from || !to) continue;
+    await renameItemPriority(input.eventId, kind, from, to).catch(() => {});
+  }
 
   const cleanItems = input.items
     .map((it) => ({
@@ -927,6 +960,10 @@ export async function clearChecklistSection(formData: FormData): Promise<void> {
       where: { eventId, isSuggested: false, kind },
     }),
     prisma.checklistItemImage.deleteMany({ where: { eventId, kind } }),
+    // この枠の急ぎ/そのうちタグも一緒に消す（2026-10-24のバグレビューで発覚・修正:
+    // ここを消さないと、同じ名前の項目を後で枠に足したとき、ユーザーが今回は
+    // 一切タグを付けていないのに前回のタグが無言で「復活」して見えてしまう）。
+    prisma.checklistItemPriority.deleteMany({ where: { eventId, kind } }),
   ]);
 
   const remaining = await prisma.checklistItem.count({
@@ -1035,6 +1072,10 @@ export async function renameChecklistSection(
       },
     }),
   ]);
+  // この枠の急ぎ/そのうちタグも新しいkindへ付け替える（2026-10-24のバグレビューで
+  // 発覚・修正: ここを呼ばないと、項目自体はちゃんと新しい枠名で表示される一方、
+  // タグだけ古いkindのまま行方不明になり、見た目上タグが消えてしまっていた）。
+  await renameItemPriorityKind(eventId, from, to);
   await propagateSectionChange(eventId);
 }
 
@@ -1055,6 +1096,9 @@ export async function removeChecklistSection(
   await prisma.$transaction([
     prisma.checklistItem.deleteMany({ where: { eventId, kind: key } }),
     prisma.checklistItemImage.deleteMany({ where: { eventId, kind: key } }),
+    // 枠ごと削除するので、その枠の急ぎ/そのうちタグも一緒に消す（clearChecklistSection
+    // と同じ理由。2026-10-24のバグレビューで発覚・修正）。
+    prisma.checklistItemPriority.deleteMany({ where: { eventId, kind: key } }),
     prisma.event.update({
       where: { id: eventId },
       data: {
@@ -1360,6 +1404,24 @@ export async function toggleFutureMessageDoneAction(
 }
 
 /**
+ * 💌未来の自分へのメッセージの「急ぎ」「そのうち」（2026-10-23追加）。項目の
+ * setChecklistItemPriorityAction と同じ位置づけ（軽いメタ情報・学習には流さない）。
+ * 同じメッセージに結びつく全ての予定の行へ連動する（lib/future-messages.ts 側）。
+ */
+export async function setMessagePriorityAction(
+  linkId: string,
+  priority: "urgent" | "later" | null,
+): Promise<void> {
+  const userId = await requireUserId();
+  if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
+  if (!(await isPriorityExtrasEnabled(userId))) return;
+  const cleaned = priority === "urgent" || priority === "later" ? priority : null;
+  await setMessagePriority(userId, linkId, cleaned);
+  trackEvent(userId, "feature:message-priority-set");
+  revalidateAppViews();
+}
+
+/**
  * 音声入力（スマホのマイクキーで話した自由文）を、AI で「本文・キーワード」
  * の配列に整える（まだ保存しない）。previewDictatedFailures と同じ2段階の作法。
  */
@@ -1479,6 +1541,46 @@ export async function setItemScopeAction(input: {
     title,
     chosen: scope,
   });
+  revalidateAppViews(event.id);
+  return { ok: true };
+}
+
+/**
+ * 準備リストの項目の「急ぎ」「そのうち」を選ぶ／選び直す／もう一度押して解除する
+ * （2026-10-23追加）。「次回の出し方」の3択（setItemScopeAction）と同じ、軽い
+ * メタ情報の切り替えという位置づけなので、`markAutoManaged`/`markChecklistTouched`
+ * は呼ばない（内容そのものは変わらないため「確認済み」にはしない。実装時の判断）。
+ * 学習（recordEdit・LearnedRule・ChecklistScopeRule・EventChecklistScope）にも流さない。
+ */
+export async function setChecklistItemPriorityAction(input: {
+  eventId: string;
+  kind: string;
+  title: string;
+  priority: ItemPriority | null;
+}): Promise<{ ok: boolean }> {
+  const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return { ok: false };
+  const title = String(input.title ?? "").trim();
+  if (!title) return { ok: false };
+  const priority =
+    input.priority === "urgent" || input.priority === "later"
+      ? input.priority
+      : null;
+
+  const event = await prisma.event.findFirst({
+    where: { id: input.eventId, userId },
+    select: { id: true },
+  });
+  if (!event) return { ok: false };
+
+  await setItemPriority({
+    userId,
+    eventId: event.id,
+    kind: String(input.kind || "task"),
+    title,
+    priority,
+  });
+  trackEvent(userId, "feature:item-priority-set");
   revalidateAppViews(event.id);
   return { ok: true };
 }
@@ -3086,4 +3188,181 @@ export async function getFeatureModeHistory(): Promise<
     take: 5,
   });
   return rows;
+}
+
+/**
+ * ver2.1（急ぎ/そのうち関連機能一式）のON/OFF切替（2026-10-24追加）。
+ * featureMode（ver1/ver2）とは独立の別スイッチで、変換処理は伴わない単純な真偽値。
+ */
+export async function setPriorityExtrasEnabledAction(enabled: boolean): Promise<void> {
+  const userId = await requireUserId();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { priorityExtrasEnabled: enabled },
+  });
+  trackEvent(userId, enabled ? "feature:priority-extras-on" : "feature:priority-extras-off");
+  revalidateAppViews();
+}
+
+export interface ShortcutTokenRow {
+  id: string;
+  label: string | null;
+  createdAt: Date;
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
+}
+
+/** /settings に出す、自分のショートカット用トークンの一覧（ハッシュ・生トークンは含まない）。 */
+export async function listShortcutTokens(): Promise<ShortcutTokenRow[]> {
+  const userId = await requireUserId();
+  return prisma.shortcutToken.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, label: true, createdAt: true, lastUsedAt: true, revokedAt: true },
+  });
+}
+
+/**
+ * ショートカット用トークンを新規発行する。生のトークンはこの戻り値でだけ見せ、
+ * 保存するのはハッシュだけ（lib/shortcut-token.ts）。再発行は「発行」をもう一度
+ * 押すだけ（古いトークンは別に「無効化」する）。
+ */
+export async function issueShortcutTokenAction(
+  label?: string,
+): Promise<{ id: string; token: string }> {
+  const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) throw new Error("not_enabled");
+  const raw = generateRawShortcutToken();
+  const tokenHash = hashShortcutToken(raw);
+  const cleanLabel = (label ?? "").trim().slice(0, 60) || null;
+  const row = await prisma.shortcutToken.create({
+    data: { userId, tokenHash, label: cleanLabel },
+    select: { id: true },
+  });
+  trackEvent(userId, "feature:shortcut-token-issue");
+  revalidateAppViews();
+  return { id: row.id, token: raw };
+}
+
+/** トークンを無効化する（取り消し。以後そのトークンでのAPI呼び出しは全て失敗する）。 */
+export async function revokeShortcutTokenAction(id: string): Promise<void> {
+  const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return;
+  await prisma.shortcutToken.updateMany({
+    where: { id, userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+  trackEvent(userId, "feature:shortcut-token-revoke");
+  revalidateAppViews();
+}
+
+/** /settings のロック画面背景画像欄の現在の状態（生データは返さない）。 */
+export async function getLockScreenImageMeta(): Promise<LockScreenImageMeta | null> {
+  const userId = await requireUserId();
+  return loadLockScreenImageMeta(userId);
+}
+
+/**
+ * ロック画面の背景画像を登録する。`image` は FormData の File（ブラウザ側で長辺2,800px・
+ * 2MB以内のJPEGに縮小済みの想定）。サーバー側でも種類・サイズ・寸法を検証し、
+ * 再エンコードしてEXIF等を除去してから保存する（lib/lock-screen-image.ts）。
+ */
+export async function saveLockScreenImageAction(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return { ok: false, error: "not_enabled" };
+  const file = formData.get("image");
+  if (!(file instanceof Blob)) return { ok: false, error: "invalid_image" };
+  const buf = Buffer.from(await file.arrayBuffer());
+  const res = await saveLockScreenImage(userId, buf);
+  if (!res.ok) return { ok: false, error: res.error };
+  trackEvent(userId, "feature:lock-screen-image-save");
+  revalidateAppViews();
+  return { ok: true };
+}
+
+/** 確認ポップアップ必須（削除は元に戻せない）。 */
+export async function deleteLockScreenImageAction(): Promise<void> {
+  const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return;
+  await deleteLockScreenImage(userId);
+  trackEvent(userId, "feature:lock-screen-image-delete");
+  revalidateAppViews();
+}
+
+/**
+ * ホームの「急ぎ」「そのうち」から、予定に紐づけず直接追加する項目（2026-10-23追加・
+ * ユーザー指定）。ChecklistItemPriorityとは別物（同名の既存項目への連動は無い、
+ * 単発のメモ的な項目）。
+ */
+export async function addStandalonePriorityItemAction(
+  title: string,
+  priority: "urgent" | "later",
+): Promise<{ ok: boolean; id?: string }> {
+  const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return { ok: false };
+  const t = title.trim().slice(0, 120);
+  if (!t) return { ok: false };
+  const row = await prisma.standalonePriorityItem.create({
+    data: { userId, title: t, priority },
+    select: { id: true },
+  });
+  trackEvent(userId, "feature:standalone-priority-add");
+  revalidateAppViews();
+  return { ok: true, id: row.id };
+}
+
+/** チェックで完了（一覧から外れる。予定に紐づく項目と同じ「軽いチェック」の扱い）。 */
+export async function toggleStandalonePriorityItemAction(
+  id: string,
+  isDone: boolean,
+): Promise<void> {
+  const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return;
+  await prisma.standalonePriorityItem.updateMany({
+    where: { id, userId },
+    data: { isDone },
+  });
+  trackEvent(userId, "feature:standalone-priority-check");
+  revalidateAppViews();
+}
+
+/** 完全な削除（元に戻せないため、呼び出し元のUIで確認ポップアップを出す）。 */
+export async function deleteStandalonePriorityItemAction(id: string): Promise<void> {
+  const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return;
+  await prisma.standalonePriorityItem.deleteMany({ where: { id, userId } });
+  trackEvent(userId, "feature:standalone-priority-delete");
+  revalidateAppViews();
+}
+
+export interface CompletedPriorityRowData {
+  key: string;
+  title: string;
+  eventId: string | null;
+  eventTitle: string | null;
+  eventDate: string | null; // ISO
+  isPast: boolean;
+  isMessage: boolean;
+  isStandalone: boolean;
+  toggleId: string;
+}
+
+function toCompletedRowData(r: PriorityHomeRow): CompletedPriorityRowData {
+  return { ...r, eventDate: r.eventDate ? r.eventDate.toISOString() : null };
+}
+
+/**
+ * ホームの「完了した項目を見る」ボタン（2026-10-24追加・ユーザー指定）。
+ * 押されたときだけ取得する（通常の一覧には含めない。常時は読み込まない）。
+ */
+export async function loadCompletedPriorityItemsAction(
+  priority: "urgent" | "later",
+): Promise<CompletedPriorityRowData[]> {
+  const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return [];
+  trackEvent(userId, "feature:home-completed-items-view");
+  const rows = await loadCompletedPriorityItems(userId, priority);
+  return rows.map(toCompletedRowData);
 }

@@ -1,0 +1,12 @@
+木漏れ日ゴシック（Komorebi Gothic）ver.1.02 / KomorebiGothic-P.ttf
+配布元: MODI工場 http://modi.jpn.org/font_komorebi-gothic.php
+ダウンロード元: http://modi.jpn.org/download/MODI_komorebi-gothic_2018_0501.zip
+
+梅フォント（梅ゴシック・梅Hyゴシック）を元にしたオリジナルかな組み合わせの派生フォント。
+梅フォントはフリー（自由な）ソフトウエアであり、改変の有無・商業的な利用であっても、
+自由に利用・複製・再配布できる（全て無保証）。
+
+梅フォントプロジェクト: https://ja.osdn.net/projects/ume-font/
+
+このアプリ（私のマネージャー）では、ロック画面用の壁紙画像（lib/wallpaper-render.tsx）の
+描画フォントとして同梱・利用している。

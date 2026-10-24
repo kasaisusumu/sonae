@@ -6,6 +6,7 @@ import {
   removeMessageFromEventAction,
   updateFutureMessageAction,
   toggleFutureMessageDoneAction,
+  setMessagePriorityAction,
 } from "@/app/actions";
 import { ConfirmButton } from "@/app/components/confirm-button";
 import { AutosaveIndicator } from "@/app/components/autosave-indicator";
@@ -15,6 +16,7 @@ import {
   MESSAGE_QUICK_SCOPES,
   type QuickScope,
 } from "@/app/components/scope-picker";
+import { PriorityToggle, type QuickPriority } from "@/app/components/priority-toggle";
 
 /**
  * 予定に結びついた「未来の自分へ」1 件ぶん。予定詳細・学習内容（マニュアル）の両方で
@@ -39,6 +41,8 @@ export type EMRow = {
   eventEnded: boolean;
   /** 準備リストの項目と同じ「チェックで完了」。次回の提案・一致判定には影響しない。 */
   isDone: boolean;
+  /** 「急ぎ」「そのうち」タグ。2026-10-23追加。 */
+  priority: QuickPriority;
 };
 
 /** FutureMessage.scope は "keyword"|"similar"|"once" を取りうるが、この枠では
@@ -81,11 +85,12 @@ function sortByDone(rows: EMRow[]): EMRow[] {
  * ∨ を押したときだけ編集状態にする（ユーザー指摘により2026-10-19:
  * 閉じている間から常に編集欄になっているのは分かりにくい）。
  */
-function RowEditForm({ r }: { r: EMRow }) {
+function RowEditForm({ r, showPriorityUi = false }: { r: EMRow; showPriorityUi?: boolean }) {
   const [body, setBody] = useState(r.body);
   const [scope, setScope] = useState<QuickScope>(toQuickScope(r.scope));
   const [keyword, setKeyword] = useState(r.keywords.join("、"));
   const [scopeHintOpen, setScopeHintOpen] = useState(false);
+  const [priority, setPriority] = useState<QuickPriority>(r.priority);
   const [pending, start] = useTransition();
 
   function buildFd(next: { body?: string; scope?: QuickScope; keywords?: string }): FormData {
@@ -113,6 +118,11 @@ function RowEditForm({ r }: { r: EMRow }) {
   function clearKeyword() {
     setKeyword("");
     start(() => updateFutureMessageAction(buildFd({ keywords: "" })));
+  }
+  function choosePriority(next: QuickPriority) {
+    const applied = priority === next ? null : next;
+    setPriority(applied);
+    start(() => setMessagePriorityAction(r.id, applied));
   }
 
   return (
@@ -142,12 +152,20 @@ function RowEditForm({ r }: { r: EMRow }) {
           pending={pending}
         />
       )}
+      {showPriorityUi && <PriorityToggle value={priority} onChange={choosePriority} />}
     </div>
   );
 }
 
-/** 予定に結びついたメッセージの一覧。1 件ずつ開いて、いつでも編集できる。 */
-export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
+/** 予定に結びついたメッセージの一覧。1 件ずつ開いて、いつでも編集できる。
+ * `showPriorityUi`: 急ぎ/そのうちタグ（ver2.1）を出すか。既定false（安全側）。 */
+export function FutureMessageRows({
+  rows,
+  showPriorityUi = false,
+}: {
+  rows: EMRow[];
+  showPriorityUi?: boolean;
+}) {
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
   const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
   const toggle = (id: string) =>
@@ -226,7 +244,7 @@ export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
                 {r.matchReason && (
                   <p className="text-[11px] text-muted">なぜ出ているか: {r.matchReason}</p>
                 )}
-                <RowEditForm key={r.id} r={r} />
+                <RowEditForm key={r.id} r={r} showPriorityUi={showPriorityUi} />
               </div>
             )}
           </li>

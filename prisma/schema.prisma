@@ -34,6 +34,12 @@ model User {
   // 節約額ダッシュボード）。既定は "test"（これまでの挙動を変えない）。
   // lib/feature-mode.ts の getFeatureMode が読む。
   featureMode String @default("production")
+  // ver2.1（2026-10-24追加、テスト環境のみ）。急ぎ/そのうちタグ・ホーム一覧・
+  // 予定に紐づかない項目・完了した項目コーナー・ショートカット連携（トークン・
+  // 概要API・ロック画面壁紙）をまとめて出すかどうか。featureMode（ver1/ver2）とは
+  // 独立した別軸のON/OFF（ver1のままでも ver2 にしてもどちらでも付けられる）。
+  // 既定は false（これまでの挙動を変えない）。lib/priority-mode.ts が読む。
+  priorityExtrasEnabled Boolean @default(false)
 
   googleAccount  UserGoogleAccount?
   categories     Category[]
@@ -53,6 +59,10 @@ model User {
   eventChecklistScopes EventChecklistScope[]
   aiUsageEvents      AiUsageEvent[]
   featureModeChanges FeatureModeChange[]
+  checklistItemPriorities ChecklistItemPriority[]
+  shortcutTokens     ShortcutToken[]
+  lockScreenImage    LockScreenImage?
+  standalonePriorityItems StandalonePriorityItem[]
 }
 
 // 機能モード切替の操作履歴（時刻・変更前後）。設定ページの切替操作ごとに1行。
@@ -206,6 +216,7 @@ model Event {
   futureMessageLinks EventFutureMessage[]
   messageProposalRecords MessageProposalRecord[]
   eventChecklistScopes EventChecklistScope[]
+  checklistItemPriorities ChecklistItemPriority[]
 
   @@index([userId, recurringEventId])
   // 招待・共有された予定は Google 側で複数ユーザーの予定に同じ googleEventId が
@@ -561,6 +572,10 @@ model EventFutureMessage {
   // 準備リストの項目と同じ「チェックで完了」。予定後の確定（status）とは別物
   // （振り返りの確定フローに割り込まない、ユーザー自身のチェックオフだけの軽い状態）。
   isDone      Boolean   @default(false)
+  // "urgent"（急ぎ）| "later"（そのうち）| null（未設定）。2026-10-23追加。
+  // 同じ FutureMessage に結びつく全ての EventFutureMessage へ連動して書き込む
+  // （lib/future-messages.ts の setMessagePriority。saveScopeForItem の連動方式と同じ考え方）。
+  priority    String?
   notifiedAt       DateTime? // 一致時のプッシュ（1予定1回）
   reviewNotifiedAt DateTime? // 予定後の確定うながしプッシュ（1予定1回）
   // 振り返りカードのAI提案のキャッシュ（2026-10-13〜）。ページ表示のたびにAIを呼び直さず、
@@ -661,5 +676,72 @@ model EventChecklistScope {
   updatedAt DateTime @updatedAt
 
   @@unique([eventId, kind, normTitle])
+  @@index([userId])
+}
+
+/// 準備リストの項目の「急ぎ」「そのうち」タグ（2026-10-23追加）。ChecklistItem には
+/// 持たせない（saveChecklist が保存のたびに項目行を作り直し id が変わるため）。
+/// ChecklistItemImage と同じ考え方で (eventId, kind, normTitle) に紐づく。
+/// priority: "urgent"（急ぎ）| "later"（そのうち）。行が無い = どちらも選んでいない
+/// （解除は行の削除で表現する。null 値は使わない）。
+model ChecklistItemPriority {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  kind      String
+  normTitle String
+  title     String   // 表示用（大文字小文字そのまま）。ホーム一覧の代表項目名に使う。
+  priority  String   // "urgent" | "later"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, kind, normTitle])
+  @@index([userId])
+}
+
+/// ショートカット用APIの認証トークン（2026-10-23追加）。生のトークンは発行時にしか
+/// 見せず、保存するのはハッシュだけ（lib/shortcut-token.ts の hashShortcutToken）。
+model ShortcutToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  label      String?   // 任意のメモ（複数発行時に見分ける用）
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([userId])
+}
+
+/// ロック画面の背景画像（1ユーザー1枚、2026-10-23追加）。ショートカット用APIの壁紙
+/// 生成（GET /api/shortcut/wallpaper.png）が合成の下地に使う。サーバー側で検証・
+/// EXIF除去済みのJPEGだけを保存する（lib/lock-screen-image.ts）。
+model LockScreenImage {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mime      String // 常に "image/jpeg"（検証・再エンコード後に保存するため）
+  data      Bytes
+  width     Int
+  height    Int
+  bytes     Int
+  updatedAt DateTime @updatedAt
+}
+
+/// ホームの「急ぎ」「そのうち」に、予定（Event）に紐づけず直接追加できる項目
+/// （2026-10-23追加、ユーザー指定）。ChecklistItemPriorityとは異なり、
+/// (eventId,kind,normTitle)で同名の既存項目へ連動することはない単発のメモ的な項目。
+model StandalonePriorityItem {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  priority  String   // "urgent" | "later"
+  isDone    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
 }

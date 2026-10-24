@@ -4,6 +4,7 @@ import { resolveShortcutToken } from "@/lib/shortcut-token";
 import { loadPriorityHomeLists, type PriorityHomeRow } from "@/lib/priority-home";
 import { appBaseUrl } from "@/lib/google";
 import { formatDateShort } from "@/lib/format";
+import { isPriorityExtrasEnabled } from "@/lib/priority-mode";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,9 @@ export async function GET(request: Request): Promise<NextResponse> {
   );
   if (!auth) return unauthorized();
   const { userId } = auth;
+  // ver2.1（急ぎ/そのうち関連機能一式）がOFFのユーザーは、トークン自体は有効でも
+  // 使わせない（同じ401で、理由は区別しない）。
+  if (!(await isPriorityExtrasEnabled(userId))) return unauthorized();
 
   const now = new Date();
 

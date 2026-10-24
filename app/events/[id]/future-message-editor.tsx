@@ -18,10 +18,12 @@ export function FutureMessageEditor({
   eventId,
   initial,
   retro = false,
+  showPriorityUi = false,
 }: {
   eventId: string;
   initial: EMRow[];
   retro?: boolean;
+  showPriorityUi?: boolean;
 }) {
   const [adding, setAdding] = useState(false);
 
@@ -84,7 +86,7 @@ export function FutureMessageEditor({
         </InfoHint>
       </div>
 
-      <FutureMessageRows rows={initial} />
+      <FutureMessageRows rows={initial} showPriorityUi={showPriorityUi} />
 
       {adding && (
         <form

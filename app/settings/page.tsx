@@ -21,8 +21,10 @@ import { ConfirmLink } from "@/app/components/confirm-link";
 import { PushControls } from "@/app/components/push-controls";
 import { InfoHint } from "@/app/components/info-hint";
 import { FeatureModeToggle } from "@/app/components/feature-mode-toggle";
+import { PriorityExtrasToggle } from "@/app/components/priority-extras-toggle";
 import { trackEvent } from "@/lib/track";
 import { featureModeOf } from "@/lib/feature-mode";
+import { priorityExtrasEnabledOf } from "@/lib/priority-mode";
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
@@ -30,14 +32,15 @@ export default async function SettingsPage() {
   trackEvent(user.id, "page:/settings");
 
   const account = user.googleAccount;
+  const priorityExtrasEnabled = priorityExtrasEnabledOf(user);
   const [feedback, shortcutTokens, lockScreenImageMeta] = await Promise.all([
     prisma.feedback.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
-    listShortcutTokens(),
-    getLockScreenImageMeta(),
+    priorityExtrasEnabled ? listShortcutTokens() : Promise.resolve([]),
+    priorityExtrasEnabled ? getLockScreenImageMeta() : Promise.resolve(null),
   ]);
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
   const shortcutShareUrl = process.env.SHORTCUT_SHARE_URL ?? null;
@@ -72,6 +75,9 @@ export default async function SettingsPage() {
         <div className="mt-3">
           <FeatureModeToggle current={featureModeOf(user)} />
         </div>
+        {/* ver2.1: 急ぎ/そのうちタグ・ホーム一覧・ショートカット連携一式のON/OFF
+            （2026-10-24追加）。ver1/ver2とは独立の別スイッチ（ユーザー指定）。 */}
+        <PriorityExtrasToggle current={priorityExtrasEnabled} />
       </section>
 
       <section data-coach="settings-google" className="rounded-2xl bg-surface p-5">
@@ -211,18 +217,22 @@ export default async function SettingsPage() {
         )}
       </section>
 
-      <section data-coach="settings-shortcut" className="rounded-2xl bg-surface p-5">
-        <ShortcutTokenPanel initial={shortcutTokens} baseUrl={appBaseUrl()} />
-      </section>
+      {priorityExtrasEnabled && (
+        <>
+          <section data-coach="settings-shortcut" className="rounded-2xl bg-surface p-5">
+            <ShortcutTokenPanel initial={shortcutTokens} baseUrl={appBaseUrl()} />
+          </section>
 
-      <section data-coach="settings-lock-screen" className="rounded-2xl bg-surface p-5">
-        <LockScreenImagePanel hasImage={!!lockScreenImageMeta} />
-      </section>
+          <section data-coach="settings-lock-screen" className="rounded-2xl bg-surface p-5">
+            <LockScreenImagePanel hasImage={!!lockScreenImageMeta} />
+          </section>
 
-      {shortcutShareUrl && (
-        <section data-coach="settings-lock-screen-guide" className="rounded-2xl bg-surface p-5">
-          <ShortcutWallpaperGuide shareUrl={shortcutShareUrl} />
-        </section>
+          {shortcutShareUrl && (
+            <section data-coach="settings-lock-screen-guide" className="rounded-2xl bg-surface p-5">
+              <ShortcutWallpaperGuide shareUrl={shortcutShareUrl} />
+            </section>
+          )}
+        </>
       )}
 
       <section className="rounded-2xl bg-surface p-5">

@@ -34,6 +34,12 @@ model User {
   // 節約額ダッシュボード）。既定は "test"（これまでの挙動を変えない）。
   // lib/feature-mode.ts の getFeatureMode が読む。
   featureMode String @default("production")
+  // ver2.1（2026-10-24追加、テスト環境のみ）。急ぎ/そのうちタグ・ホーム一覧・
+  // 予定に紐づかない項目・完了した項目コーナー・ショートカット連携（トークン・
+  // 概要API・ロック画面壁紙）をまとめて出すかどうか。featureMode（ver1/ver2）とは
+  // 独立した別軸のON/OFF（ver1のままでも ver2 にしてもどちらでも付けられる）。
+  // 既定は false（これまでの挙動を変えない）。lib/priority-mode.ts が読む。
+  priorityExtrasEnabled Boolean @default(false)
 
   googleAccount  UserGoogleAccount?
   categories     Category[]

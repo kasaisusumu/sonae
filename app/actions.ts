@@ -70,6 +70,7 @@ import {
   renameItemPriorityKind,
   type ItemPriority,
 } from "@/lib/item-priority";
+import { isPriorityExtrasEnabled } from "@/lib/priority-mode";
 import { setMessagePriority } from "@/lib/future-messages";
 import { generateRawShortcutToken, hashShortcutToken } from "@/lib/shortcut-token";
 import {
@@ -1413,6 +1414,7 @@ export async function setMessagePriorityAction(
 ): Promise<void> {
   const userId = await requireUserId();
   if (!isFutureMessageEnabled(await getFeatureMode(userId))) return;
+  if (!(await isPriorityExtrasEnabled(userId))) return;
   const cleaned = priority === "urgent" || priority === "later" ? priority : null;
   await setMessagePriority(userId, linkId, cleaned);
   trackEvent(userId, "feature:message-priority-set");
@@ -1557,6 +1559,7 @@ export async function setChecklistItemPriorityAction(input: {
   priority: ItemPriority | null;
 }): Promise<{ ok: boolean }> {
   const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return { ok: false };
   const title = String(input.title ?? "").trim();
   if (!title) return { ok: false };
   const priority =
@@ -3187,6 +3190,20 @@ export async function getFeatureModeHistory(): Promise<
   return rows;
 }
 
+/**
+ * ver2.1（急ぎ/そのうち関連機能一式）のON/OFF切替（2026-10-24追加）。
+ * featureMode（ver1/ver2）とは独立の別スイッチで、変換処理は伴わない単純な真偽値。
+ */
+export async function setPriorityExtrasEnabledAction(enabled: boolean): Promise<void> {
+  const userId = await requireUserId();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { priorityExtrasEnabled: enabled },
+  });
+  trackEvent(userId, enabled ? "feature:priority-extras-on" : "feature:priority-extras-off");
+  revalidateAppViews();
+}
+
 export interface ShortcutTokenRow {
   id: string;
   label: string | null;
@@ -3214,6 +3231,7 @@ export async function issueShortcutTokenAction(
   label?: string,
 ): Promise<{ id: string; token: string }> {
   const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) throw new Error("not_enabled");
   const raw = generateRawShortcutToken();
   const tokenHash = hashShortcutToken(raw);
   const cleanLabel = (label ?? "").trim().slice(0, 60) || null;
@@ -3229,6 +3247,7 @@ export async function issueShortcutTokenAction(
 /** トークンを無効化する（取り消し。以後そのトークンでのAPI呼び出しは全て失敗する）。 */
 export async function revokeShortcutTokenAction(id: string): Promise<void> {
   const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return;
   await prisma.shortcutToken.updateMany({
     where: { id, userId, revokedAt: null },
     data: { revokedAt: new Date() },
@@ -3252,6 +3271,7 @@ export async function saveLockScreenImageAction(
   formData: FormData,
 ): Promise<{ ok: boolean; error?: string }> {
   const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return { ok: false, error: "not_enabled" };
   const file = formData.get("image");
   if (!(file instanceof Blob)) return { ok: false, error: "invalid_image" };
   const buf = Buffer.from(await file.arrayBuffer());
@@ -3265,6 +3285,7 @@ export async function saveLockScreenImageAction(
 /** 確認ポップアップ必須（削除は元に戻せない）。 */
 export async function deleteLockScreenImageAction(): Promise<void> {
   const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return;
   await deleteLockScreenImage(userId);
   trackEvent(userId, "feature:lock-screen-image-delete");
   revalidateAppViews();
@@ -3280,6 +3301,7 @@ export async function addStandalonePriorityItemAction(
   priority: "urgent" | "later",
 ): Promise<{ ok: boolean; id?: string }> {
   const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return { ok: false };
   const t = title.trim().slice(0, 120);
   if (!t) return { ok: false };
   const row = await prisma.standalonePriorityItem.create({
@@ -3297,6 +3319,7 @@ export async function toggleStandalonePriorityItemAction(
   isDone: boolean,
 ): Promise<void> {
   const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return;
   await prisma.standalonePriorityItem.updateMany({
     where: { id, userId },
     data: { isDone },
@@ -3308,6 +3331,7 @@ export async function toggleStandalonePriorityItemAction(
 /** 完全な削除（元に戻せないため、呼び出し元のUIで確認ポップアップを出す）。 */
 export async function deleteStandalonePriorityItemAction(id: string): Promise<void> {
   const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return;
   await prisma.standalonePriorityItem.deleteMany({ where: { id, userId } });
   trackEvent(userId, "feature:standalone-priority-delete");
   revalidateAppViews();
@@ -3337,6 +3361,7 @@ export async function loadCompletedPriorityItemsAction(
   priority: "urgent" | "later",
 ): Promise<CompletedPriorityRowData[]> {
   const userId = await requireUserId();
+  if (!(await isPriorityExtrasEnabled(userId))) return [];
   trackEvent(userId, "feature:home-completed-items-view");
   const rows = await loadCompletedPriorityItems(userId, priority);
   return rows.map(toCompletedRowData);

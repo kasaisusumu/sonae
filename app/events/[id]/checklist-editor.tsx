@@ -120,6 +120,7 @@ export function ChecklistEditor({
   pastEvents = [],
   allowImages = true,
   showScopeUi = true,
+  showPriorityUi = false,
 }: {
   eventId: string;
   kind?: string;
@@ -132,6 +133,8 @@ export function ChecklistEditor({
   allowImages?: boolean;
   /** 「次回の出し方」の絵文字ボタンを出すか（テスト版モードだけ。本番版は false）。 */
   showScopeUi?: boolean;
+  /** 急ぎ/そのうちタグのボタンを出すか（ver2.1だけ。既定false）。 */
+  showPriorityUi?: boolean;
 }) {
   const isBelonging = kind === "belonging";
   const kindLabel = label ?? (isBelonging ? "持ち物" : "準備すること");
@@ -945,12 +948,14 @@ export function ChecklistEditor({
                       )}
                     </>
                   )}
-                  {/* 「急ぎ」「そのうち」タグ。ver1/ver2どちらでも出す（本番版・テスト版共通）。
+                  {/* 「急ぎ」「そのうち」タグ。ver2.1だけ（ver1/ver2のどちらでもON可）。
                       同じ名前の既存項目すべてに即反映される（setChecklistItemPriorityAction）。 */}
-                  <PriorityToggle
-                    value={shownPriority(it)}
-                    onChange={(p) => choosePriority(it, p)}
-                  />
+                  {showPriorityUi && (
+                    <PriorityToggle
+                      value={shownPriority(it)}
+                      onChange={(p) => choosePriority(it, p)}
+                    />
+                  )}
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
                     <span className="shrink-0">通知</span>
                     <select

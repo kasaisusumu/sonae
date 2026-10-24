@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUserId } from "@/lib/session";
 import { loadLockScreenImage } from "@/lib/lock-screen-image";
 import { renderWallpaper, resolveAspectRatio } from "@/lib/wallpaper-render";
+import { isPriorityExtrasEnabled } from "@/lib/priority-mode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request): Promise<Response> {
   const userId = await getSessionUserId();
   if (!userId) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  if (!(await isPriorityExtrasEnabled(userId))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

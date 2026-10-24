@@ -85,7 +85,7 @@ function sortByDone(rows: EMRow[]): EMRow[] {
  * ∨ を押したときだけ編集状態にする（ユーザー指摘により2026-10-19:
  * 閉じている間から常に編集欄になっているのは分かりにくい）。
  */
-function RowEditForm({ r }: { r: EMRow }) {
+function RowEditForm({ r, showPriorityUi = false }: { r: EMRow; showPriorityUi?: boolean }) {
   const [body, setBody] = useState(r.body);
   const [scope, setScope] = useState<QuickScope>(toQuickScope(r.scope));
   const [keyword, setKeyword] = useState(r.keywords.join("、"));
@@ -152,13 +152,20 @@ function RowEditForm({ r }: { r: EMRow }) {
           pending={pending}
         />
       )}
-      <PriorityToggle value={priority} onChange={choosePriority} />
+      {showPriorityUi && <PriorityToggle value={priority} onChange={choosePriority} />}
     </div>
   );
 }
 
-/** 予定に結びついたメッセージの一覧。1 件ずつ開いて、いつでも編集できる。 */
-export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
+/** 予定に結びついたメッセージの一覧。1 件ずつ開いて、いつでも編集できる。
+ * `showPriorityUi`: 急ぎ/そのうちタグ（ver2.1）を出すか。既定false（安全側）。 */
+export function FutureMessageRows({
+  rows,
+  showPriorityUi = false,
+}: {
+  rows: EMRow[];
+  showPriorityUi?: boolean;
+}) {
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set());
   const [doneOverride, setDoneOverride] = useState<Record<string, boolean>>({});
   const toggle = (id: string) =>
@@ -237,7 +244,7 @@ export function FutureMessageRows({ rows }: { rows: EMRow[] }) {
                 {r.matchReason && (
                   <p className="text-[11px] text-muted">なぜ出ているか: {r.matchReason}</p>
                 )}
-                <RowEditForm key={r.id} r={r} />
+                <RowEditForm key={r.id} r={r} showPriorityUi={showPriorityUi} />
               </div>
             )}
           </li>

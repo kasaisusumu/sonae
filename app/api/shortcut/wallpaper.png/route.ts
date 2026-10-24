@@ -3,6 +3,7 @@ import { resolveShortcutToken } from "@/lib/shortcut-token";
 import { loadLockScreenImage } from "@/lib/lock-screen-image";
 import { renderWallpaper, resolveAspectRatio } from "@/lib/wallpaper-render";
 import { trackEvent } from "@/lib/track";
+import { isPriorityExtrasEnabled } from "@/lib/priority-mode";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,9 @@ export async function GET(request: Request): Promise<Response> {
     url.searchParams.get("token"),
   );
   if (!auth) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  if (!(await isPriorityExtrasEnabled(auth.userId))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

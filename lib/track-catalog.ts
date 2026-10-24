@@ -64,6 +64,8 @@ export const FEATURE_KEYS: TrackedKey[] = [
   { key: "feature:standalone-priority-check", label: "ホーム: 予定に紐づかない項目の✓完了チェック" },
   { key: "feature:standalone-priority-delete", label: "ホーム: 予定に紐づかない項目を削除" },
   { key: "feature:home-completed-items-view", label: "ホーム: 急ぎ/そのうちの完了した項目を見る" },
+  { key: "feature:priority-extras-on", label: "設定: ver2.1をONにする" },
+  { key: "feature:priority-extras-off", label: "設定: ver2.1をOFFにする" },
 ];
 
 /** ⓘ（InfoHint）の説明ポップアップ。開かれた回数を数える。 */
@@ -78,6 +80,7 @@ export const INFOHINT_KEYS: TrackedKey[] = [
   { key: "infohint:settings-write-description", label: "設定: 説明欄への書き込み" },
   { key: "infohint:settings-notify", label: "設定: 通知" },
   { key: "infohint:feature-mode-toggle", label: "設定: 機能モードとは" },
+  { key: "infohint:priority-extras-toggle", label: "設定: ver2.1とは" },
   { key: "infohint:events-upcoming", label: "予定一覧: これからの予定" },
   { key: "infohint:event-checklist-heading", label: "予定詳細: 準備リストの見出し" },
   { key: "infohint:checklist-autosave", label: "予定詳細: 自動保存の説明" },

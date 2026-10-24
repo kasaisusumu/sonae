@@ -9,6 +9,7 @@ import { syncEventDescription } from "@/lib/description-sync";
 import { extractEventFeature } from "@/lib/features";
 import { getApplicableRules } from "@/lib/learning";
 import { getFeatureMode, isFailureLogEnabled } from "@/lib/feature-mode";
+import { isPriorityExtrasEnabled } from "@/lib/priority-mode";
 import { getWarningForEvent, ensureSuggestedFailures } from "@/lib/failures";
 import {
   ensureFutureMessageMatchesForEvent,
@@ -76,6 +77,7 @@ function KindBlock({
   scopes,
   priorities,
   showScopeUi,
+  showPriorityUi,
 }: {
   eventId: string;
   kind: string;
@@ -88,6 +90,8 @@ function KindBlock({
   priorities: Map<string, "urgent" | "later">;
   /** 「次回の出し方」UI を出すか（テスト版モードだけ）。 */
   showScopeUi: boolean;
+  /** 急ぎ/そのうちタグUIを出すか（ver2.1だけ）。 */
+  showPriorityUi: boolean;
 }) {
   const mine = rows.filter((r) => r.kind === kind);
   const normal = mine.filter((r) => !r.isSuggested);
@@ -101,6 +105,7 @@ function KindBlock({
         templates={templates}
         pastEvents={pastEvents}
         showScopeUi={showScopeUi}
+        showPriorityUi={showPriorityUi}
         initialItems={normal.map((c) => ({
           id: c.id,
           title: c.title,
@@ -147,6 +152,8 @@ export async function ChecklistSection({
   // 機能モード（§ lib/feature-mode.ts）。本番版=失敗ログ／テスト版=未来の自分へ・範囲ルール。
   const mode = await getFeatureMode(event.userId);
   const isProd = isFailureLogEnabled(mode);
+  // ver2.1（急ぎ/そのうちタグ等一式）。ver1/ver2とは独立したON/OFF。
+  const showPriorityUi = await isPriorityExtrasEnabled(event.userId);
 
   const itemsAndFlag = await Promise.all([
     prisma.checklistItem.findMany({
@@ -338,6 +345,7 @@ export async function ChecklistSection({
     <FutureMessageEditor
       eventId={event.id}
       retro={!isProd && eventIsPast}
+      showPriorityUi={showPriorityUi}
       initial={linkedMessages.map(
         (m): EMRow => ({
           id: m.id,
@@ -426,8 +434,10 @@ export async function ChecklistSection({
   const scopeMap = isProd
     ? new Map<string, ScopeEntry>()
     : await loadEventScopeMap(event.userId, event.id);
-  // 「急ぎ」「そのうち」タグ。ver1/ver2どちらでも出す（本番版・テスト版共通）。
-  const priorityMap = await loadItemPriorityMap(event.id);
+  // 「急ぎ」「そのうち」タグ。ver2.1がONのときだけ（ver1/ver2のどちらでもON可）。
+  const priorityMap = showPriorityUi
+    ? await loadItemPriorityMap(event.id)
+    : new Map<string, "urgent" | "later">();
   const unreviewed =
     !!reviewState &&
     !reviewState.listReviewedAt &&
@@ -541,6 +551,7 @@ export async function ChecklistSection({
                   scopes={scopeMap}
                   priorities={priorityMap}
                   showScopeUi={!isProd}
+                  showPriorityUi={showPriorityUi}
                 />
               ),
             };

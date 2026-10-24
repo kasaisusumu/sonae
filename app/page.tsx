@@ -6,6 +6,7 @@ import { listFutureMessages } from "@/lib/future-messages";
 import { getUpcomingWarnings } from "@/lib/failures";
 import { primeNotifiedChecklists } from "@/lib/checklist";
 import { loadPriorityHomeLists } from "@/lib/priority-home";
+import { priorityExtrasEnabledOf } from "@/lib/priority-mode";
 import { trackEvent } from "@/lib/track";
 import { prisma } from "@/lib/prisma";
 import { featureModeOf, isFailureLogEnabled } from "@/lib/feature-mode";
@@ -91,12 +92,15 @@ export default async function HomePage({
 
   const mode = featureModeOf(user);
   const isProd = isFailureLogEnabled(mode);
+  const priorityExtrasEnabled = priorityExtrasEnabledOf(user);
 
   const [warnings, pushCount, futureMessages, priorityLists] = await Promise.all([
     isProd ? getUpcomingWarnings(user.id) : Promise.resolve([]),
     prisma.pushSubscription.count({ where: { userId: user.id } }),
     isProd ? Promise.resolve([]) : listFutureMessages(user.id),
-    loadPriorityHomeLists(user.id),
+    priorityExtrasEnabled
+      ? loadPriorityHomeLists(user.id)
+      : Promise.resolve({ urgent: [], later: [] }),
   ]);
   const vapidPublicKey = process.env.VAPID_PUBLIC_KEY ?? null;
 
@@ -111,20 +115,24 @@ export default async function HomePage({
       {/* はじめかたが済んだあとに通知だけオフへ戻った人にも気づかせる、常時表示の警告。 */}
       {pushCount === 0 && <NotifyOffBanner publicKey={vapidPublicKey} />}
 
-      {/* 「急ぎ」「そのうち」一覧。本番版・テスト版どちらでも出す（2026-10-23追加）。
+      {/* 「急ぎ」「そのうち」一覧。ver2.1（priorityExtrasEnabled）がONのときだけ出す
+          （2026-10-23追加、2026-10-24にver2.1として独立したスイッチの対象にした）。
+          本番版・テスト版（ver1/ver2）どちらでも、ver2.1さえONなら出す。
           同じ名前の項目・メッセージは1行にまとめ、直近の予定を代表として出す。
           表示するかどうか・内容は PriorityHomeContainer がマウント時の値で固定する
           （チェックした瞬間にセクションごと消えるのを防ぐ）。 */}
-      <PriorityHomeContainer
-        urgent={priorityLists.urgent.map((r) => ({
-          ...r,
-          eventDate: r.eventDate ? r.eventDate.toISOString() : null,
-        }))}
-        later={priorityLists.later.map((r) => ({
-          ...r,
-          eventDate: r.eventDate ? r.eventDate.toISOString() : null,
-        }))}
-      />
+      {priorityExtrasEnabled && (
+        <PriorityHomeContainer
+          urgent={priorityLists.urgent.map((r) => ({
+            ...r,
+            eventDate: r.eventDate ? r.eventDate.toISOString() : null,
+          }))}
+          later={priorityLists.later.map((r) => ({
+            ...r,
+            eventDate: r.eventDate ? r.eventDate.toISOString() : null,
+          }))}
+        />
+      )}
 
       {isProd ? (
         <>

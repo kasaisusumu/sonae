@@ -105,6 +105,33 @@ function textHeight(text: string, fontSizePx: number, usableWidthPx: number): nu
   return fontSizePx * LINE_HEIGHT * estimateLineCount(text, fontSizePx, usableWidthPx);
 }
 
+/** 1文字の概算幅（em単位）。estimateLineCount と同じ基準。 */
+function emWidthOf(ch: string): number {
+  return /[\x00-\xFF]/.test(ch) ? 0.55 : 1;
+}
+
+/** 1行に収まらない文字列は末尾を「…」で切り詰めて1行に収める（ユーザー指摘:
+ * 「ロック画面に出す予定名のタイトルが長くて1行で収まんなかったら、…にして
+ * 1行で収めるのにして」、2026-10-24）。収まる場合はそのまま返す。 */
+function truncateToOneLine(text: string, fontSizePx: number, usableWidthPx: number): string {
+  const maxEm = Math.max(1, usableWidthPx / fontSizePx);
+  let total = 0;
+  for (const ch of text) total += emWidthOf(ch);
+  if (total <= maxEm) return text;
+
+  const ellipsis = "…";
+  const ellipsisEm = emWidthOf(ellipsis);
+  let used = 0;
+  let out = "";
+  for (const ch of text) {
+    const w = emWidthOf(ch);
+    if (used + w + ellipsisEm > maxEm) break;
+    out += ch;
+    used += w;
+  }
+  return out.trimEnd() + ellipsis;
+}
+
 interface LeftLine {
   kind: "header" | "item" | "comment" | "more";
   text: string;
@@ -317,7 +344,12 @@ export async function renderWallpaper(
   // 左パネルの、タイトル・日付を除いた「項目一覧」に使える高さ・幅
   const leftPanelPadding = 30;
   const leftUsableWidth = halfWidth - leftPanelPadding * 2;
-  const leftTitleH = nextEvent ? textHeight(nextEvent.title, 65, leftUsableWidth) : 0;
+  const LEFT_TITLE_SIZE = 65;
+  // 予定名は1行に収め、収まらなければ「…」で切り詰める（ユーザー指摘・2026-10-24）。
+  const leftTitleText = nextEvent
+    ? truncateToOneLine(nextEvent.title, LEFT_TITLE_SIZE, leftUsableWidth)
+    : "";
+  const leftTitleH = nextEvent ? LEFT_TITLE_SIZE * LINE_HEIGHT : 0;
   const leftDateH = nextEvent ? 32 * LINE_HEIGHT + 20 : 0;
   const leftLinesBudget = contentHeight - leftPanelPadding * 2 - leftTitleH - leftDateH;
 
@@ -483,16 +515,18 @@ export async function renderWallpaper(
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 <div
                   style={{
-                    fontSize: 65,
+                    fontSize: LEFT_TITLE_SIZE,
                     lineHeight: 1.22,
                     fontWeight: 700,
                     color: TEXT_MAIN,
                     width: "100%",
                     display: "flex",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
                     ...BOLD_STROKE,
                   }}
                 >
-                  {nextEvent.title}
+                  {leftTitleText}
                 </div>
                 <div
                   style={{

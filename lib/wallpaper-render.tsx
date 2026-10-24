@@ -105,6 +105,7 @@ function textHeight(text: string, fontSizePx: number, usableWidthPx: number): nu
   return fontSizePx * LINE_HEIGHT * estimateLineCount(text, fontSizePx, usableWidthPx);
 }
 
+
 interface LeftLine {
   kind: "header" | "item" | "comment" | "more";
   text: string;
@@ -317,7 +318,8 @@ export async function renderWallpaper(
   // 左パネルの、タイトル・日付を除いた「項目一覧」に使える高さ・幅
   const leftPanelPadding = 30;
   const leftUsableWidth = halfWidth - leftPanelPadding * 2;
-  const leftTitleH = nextEvent ? textHeight(nextEvent.title, 65, leftUsableWidth) : 0;
+  const LEFT_TITLE_SIZE = 65;
+  const leftTitleH = nextEvent ? LEFT_TITLE_SIZE * LINE_HEIGHT : 0;
   const leftDateH = nextEvent ? 32 * LINE_HEIGHT + 20 : 0;
   const leftLinesBudget = contentHeight - leftPanelPadding * 2 - leftTitleH - leftDateH;
 
@@ -483,12 +485,16 @@ export async function renderWallpaper(
               <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                 <div
                   style={{
-                    fontSize: 65,
+                    fontSize: LEFT_TITLE_SIZE,
                     lineHeight: 1.22,
                     fontWeight: 700,
                     color: TEXT_MAIN,
                     width: "100%",
+                    maxWidth: leftUsableWidth,
                     display: "flex",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                     ...BOLD_STROKE,
                   }}
                 >

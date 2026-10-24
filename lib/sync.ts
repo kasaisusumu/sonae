@@ -93,7 +93,7 @@ export async function syncUserCalendar(
   const ids = upserts.map((e) => e.googleEventId);
   const existingRows = await prisma.event.findMany({
     where: { userId, googleEventId: { in: ids } },
-    select: { id: true, googleEventId: true, lastWrittenHash: true },
+    select: { id: true, googleEventId: true, lastWrittenHash: true, eventDatetime: true },
   });
   const existingByGid = new Map(
     existingRows.map((r) => [r.googleEventId as string, r]),
@@ -104,12 +104,25 @@ export async function syncUserCalendar(
   let updatedCount = 0;
   let aiBudget = AI_CATEGORY_BUDGET;
 
-  // 既存の更新: スカラー項目はまとめて並列更新（クリティカルパスを短く）
-  const existingChanged = upserts.filter(
-    (ev) => existingByGid.get(ev.googleEventId) && inWindow(ev),
-  );
-  await Promise.all(
-    existingChanged.map((ev) =>
+  // 既存の更新: スカラー項目はまとめて並列更新（クリティカルパスを短く）。
+  // ウィンドウ（`inWindow`）はここでは見ない。これは「新規に取り込むかどうか」の
+  // 上限であって、既にこのアプリで管理している予定の話ではない。ウィンドウで
+  // 絞ると、すでに取り込み済みの予定を大きく先・大きく過去へ動かしたときに
+  // 新しい開始時刻がウィンドウ外になり、DB側の時刻が古いまま更新されなくなる
+  // 不具合があった（ユーザー指摘「予定の変更による時間の移動も検知してアプリに
+  // 反映してくれ」、2026-10-24）。既に取り込み済みの予定は、どこへ動いても
+  // 常に最新の時刻に追従させる。
+  const existingChanged = upserts.filter((ev) => existingByGid.get(ev.googleEventId));
+  // 開始時刻が実際に動いた予定（移動元の時刻と比べて差がある）だけ、準備リスト
+  // 項目の通知済みフラグ（`ChecklistItem.notifiedAt`）をリセットする。既に「○分前」の
+  // 通知を古い時刻基準で送り終えている項目が、新しい時刻に対して再送されなくなる
+  // （＝予定を動かしたのに通知だけ古いまま）のを防ぐ（リード時間を変えたときに
+  // 同じ列をリセットしている既存の扱いと揃えた。2026-10-24・ユーザー指摘）。
+  const timeChangedEventIds = existingChanged
+    .filter((ev) => existingByGid.get(ev.googleEventId)!.eventDatetime.getTime() !== ev.start.getTime())
+    .map((ev) => existingByGid.get(ev.googleEventId)!.id);
+  await Promise.all([
+    ...existingChanged.map((ev) =>
       prisma.event.update({
         where: { id: existingByGid.get(ev.googleEventId)!.id },
         data: {
@@ -120,7 +133,15 @@ export async function syncUserCalendar(
         },
       }),
     ),
-  );
+    ...(timeChangedEventIds.length > 0
+      ? [
+          prisma.checklistItem.updateMany({
+            where: { eventId: { in: timeChangedEventIds }, notifiedAt: { not: null } },
+            data: { notifiedAt: null },
+          }),
+        ]
+      : []),
+  ]);
   updatedCount += existingChanged.length;
 
   // 説明欄の直接編集の取り込み。deferInbound なら後回し（通知を先に出すため）。
@@ -300,6 +321,7 @@ export async function refreshEventFromGoogle(
       googleEventId: true,
       lastWrittenHash: true,
       autoManaged: true,
+      eventDatetime: true,
     },
   });
   if (!event || event.source !== "google" || !event.googleEventId) return false;
@@ -327,6 +349,14 @@ export async function refreshEventFromGoogle(
         recurringEventId: item.recurringEventId ?? null,
       },
     });
+    // syncUserCalendar と同じ理由で、開始時刻が実際に動いていたら準備リスト項目の
+    // 通知済みフラグをリセットする（2026-10-24）。
+    if (event.eventDatetime.getTime() !== start.getTime()) {
+      await prisma.checklistItem.updateMany({
+        where: { eventId: event.id, notifiedAt: { not: null } },
+        data: { notifiedAt: null },
+      });
+    }
 
     const echo =
       !!description &&

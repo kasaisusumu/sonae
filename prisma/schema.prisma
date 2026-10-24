@@ -427,6 +427,7 @@ model ActivityMinute {
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   minuteAt DateTime // その分の開始時刻（UTC・秒以下は切り捨て）
   dayKey   String   // JST 日付 "YYYY-MM-DD"（管理画面の日別集計を軽くする非正規化）
+  device   String   @default("unknown") // "pc" | "mobile" | "unknown"（User-Agentからの簡易判定。追加前の行はunknown）
 
   @@unique([userId, minuteAt])
   @@index([userId, dayKey])

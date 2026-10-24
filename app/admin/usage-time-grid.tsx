@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { X, Monitor, Smartphone } from "lucide-react";
+
+type DeviceKind = "pc" | "mobile" | "unknown";
 
 export interface UsageGridRow {
   id: string;
@@ -16,8 +18,23 @@ export interface UsageGridRow {
     costYen: number;
     mode: "ver1" | "ver2";
   }[][];
+  devicesByDay: DeviceKind[][];
+  deviceMinutes: Record<DeviceKind, number>;
   totalMinutes: number;
   aiCostYen: number;
+}
+
+/** その日使われた機種の集合から、表示するアイコンだけを並べる（unknownは出さない）。 */
+function DeviceIcons({ devices }: { devices: DeviceKind[] }) {
+  const usedPc = devices.includes("pc");
+  const usedMobile = devices.includes("mobile");
+  if (!usedPc && !usedMobile) return null;
+  return (
+    <span className="mt-0.5 flex items-center justify-center gap-0.5 text-muted">
+      {usedPc && <Monitor aria-label="PC" className="h-2.5 w-2.5" />}
+      {usedMobile && <Smartphone aria-label="スマホ" className="h-2.5 w-2.5" />}
+    </span>
+  );
 }
 
 function formatMinutes(min: number): string {
@@ -38,9 +55,13 @@ function formatYenApprox(n: number): string {
 
 /**
  * 利用者別・日付別の利用時間カレンダー。マスには利用時間に加えて、その日の
- * AI利用金額（概算）も出す。マスをタップすると、その日の操作別の内訳を見られる
+ * AI利用金額（概算）と使用機種（PC/スマホ、Monitor/Smartphoneアイコン）も出す。
+ * マスをタップすると、その日の操作別の内訳を見られる
  * （ユーザー指摘により2026-10-19: 「カレンダーのますに今の使用時間数に加えて
- * 金額を出して、それをタップしたら詳細が見られるようにして」）。
+ * 金額を出して、それをタップしたら詳細が見られるようにして」。
+ * 機種の区別は2026-10-24追加:「使用時間のところで、ユーザがpcで使ったのか
+ * スマホで使ったのかわかるようにして」。User-AgentからPC/スマホを簡易判定した
+ * もので、その日その機種で何分使ったかまでは出さない＝「その日使ったか」のみ）。
  */
 export function UsageTimeGrid({
   days,
@@ -91,6 +112,7 @@ export function UsageTimeGrid({
                 {r.byDay.map((min, i) => {
                   const cost = r.costByDay[i] ?? 0;
                   const hasDetail = (r.detailByDay[i]?.length ?? 0) > 0;
+                  const devices = r.devicesByDay[i] ?? [];
                   return (
                     <td
                       key={days[i].key}
@@ -105,6 +127,7 @@ export function UsageTimeGrid({
                           <span className="block">
                             {min > 0 ? formatMinutes(min) : "・"}
                           </span>
+                          <DeviceIcons devices={devices} />
                           <span className="block text-[10px] text-teal-dark underline">
                             {formatYenApprox(cost)}
                           </span>
@@ -112,6 +135,7 @@ export function UsageTimeGrid({
                       ) : (
                         <span className="block px-1 py-1">
                           {min > 0 ? formatMinutes(min) : "・"}
+                          <DeviceIcons devices={devices} />
                         </span>
                       )}
                     </td>
@@ -121,6 +145,16 @@ export function UsageTimeGrid({
                   {formatMinutes(r.totalMinutes)}
                   <span className="ml-1.5 font-normal text-teal-dark">
                     {formatYenApprox(r.aiCostYen)}
+                  </span>
+                  <span className="mt-0.5 flex items-center justify-end gap-2 text-[10px] font-normal text-muted">
+                    <span className="inline-flex items-center gap-0.5">
+                      <Monitor aria-hidden className="h-2.5 w-2.5" />
+                      {formatMinutes(r.deviceMinutes.pc)}
+                    </span>
+                    <span className="inline-flex items-center gap-0.5">
+                      <Smartphone aria-hidden className="h-2.5 w-2.5" />
+                      {formatMinutes(r.deviceMinutes.mobile)}
+                    </span>
                   </span>
                 </td>
               </tr>

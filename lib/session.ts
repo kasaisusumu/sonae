@@ -1,8 +1,8 @@
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import crypto from "node:crypto";
 import { prisma } from "@/lib/prisma";
-import { recordActivity } from "@/lib/activity";
+import { recordActivity, detectDevice } from "@/lib/activity";
 
 export const COOKIE_NAME = "sonae_session";
 export const SESSION_MAX_AGE = 60 * 60 * 24 * 180; // 180 日（middleware でアクセスのたびに延長）
@@ -74,6 +74,9 @@ export const getCurrentUser = cache(async () => {
     include: { googleAccount: true },
   });
   // 管理画面の「利用時間」用。1 リクエストにつき最大 1 回（React cache）。
-  if (user) recordActivity(user.id);
+  if (user) {
+    const ua = (await headers()).get("user-agent");
+    recordActivity(user.id, detectDevice(ua));
+  }
   return user;
 });

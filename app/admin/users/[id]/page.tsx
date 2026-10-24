@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Monitor, Smartphone } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { jstDayKey } from "@/lib/activity";
 import { requireAdminVerified } from "@/lib/require-admin";
@@ -156,7 +157,7 @@ export default async function AdminUserDetailPage({
   });
   if (!user) notFound();
 
-  const [dayRows, totalAgg, feedbackRows] = await Promise.all([
+  const [dayRows, totalAgg, deviceRows, feedbackRows] = await Promise.all([
     prisma.activityMinute.groupBy({
       by: ["dayKey"],
       where: { userId: id },
@@ -167,6 +168,12 @@ export default async function AdminUserDetailPage({
       _count: { _all: true },
       _max: { minuteAt: true },
     }),
+    // PC/スマホの区別（ユーザー指摘により2026-10-24追加）。
+    prisma.activityMinute.groupBy({
+      by: ["device"],
+      where: { userId: id },
+      _count: { _all: true },
+    }),
     prisma.feedback.findMany({
       where: { userId: id },
       orderBy: { createdAt: "desc" },
@@ -175,6 +182,11 @@ export default async function AdminUserDetailPage({
   ]);
 
   const dayMinutes = new Map(dayRows.map((r) => [r.dayKey, r._count._all]));
+  const deviceMinutes = {
+    pc: deviceRows.find((r) => r.device === "pc")?._count._all ?? 0,
+    mobile: deviceRows.find((r) => r.device === "mobile")?._count._all ?? 0,
+    unknown: deviceRows.find((r) => r.device === "unknown")?._count._all ?? 0,
+  };
   const now = new Date();
   const startMonthKey = jstMonthKey(user.createdAt);
   const endMonthKey = jstMonthKey(now);
@@ -207,6 +219,16 @@ export default async function AdminUserDetailPage({
           </p>
           <p className="text-[11px] text-muted">
             {totalAgg._max.minuteAt ? fmtDateTime(totalAgg._max.minuteAt) : "—"}
+          </p>
+          <p className="mt-1 flex items-center gap-3 text-[11px] text-muted">
+            <span className="inline-flex items-center gap-0.5">
+              <Monitor aria-hidden className="h-3 w-3" />
+              {formatMinutes(deviceMinutes.pc)}
+            </span>
+            <span className="inline-flex items-center gap-0.5">
+              <Smartphone aria-hidden className="h-3 w-3" />
+              {formatMinutes(deviceMinutes.mobile)}
+            </span>
           </p>
         </div>
         <div className="rounded-xl border border-border bg-surface p-4 shadow-sm">

@@ -240,6 +240,7 @@ export default async function AdminPage({
     confirmedByUser,
     activityByUser,
     activityByUserDay,
+    activityByUserDayDevice,
     usageByKeyUser,
     aiUsageEvents,
     modeChanges,
@@ -292,6 +293,12 @@ export default async function AdminPage({
     // 日別の利用時間（1行=1分）。全期間ぶん取って「アクティブ日数」も同じ結果から出す。
     prisma.activityMinute.groupBy({
       by: ["userId", "dayKey"],
+      _count: { _all: true },
+    }),
+    // 日別×PC/スマホの利用時間（ユーザー指摘により2026-10-24:「使用時間のところで、
+    // ユーザがpcで使ったのかスマホで使ったのかわかるようにして」）。
+    prisma.activityMinute.groupBy({
+      by: ["userId", "dayKey", "device"],
       _count: { _all: true },
     }),
     // ページ・機能・ⓘ・案内ポップアップの利用状況（すべて FeatureEvent に集約）。
@@ -369,6 +376,28 @@ export default async function AdminPage({
     }
     m.set(row.dayKey, row._count._all);
     activeDaysByUser.set(row.userId, (activeDaysByUser.get(row.userId) ?? 0) + 1);
+  }
+
+  // PC/スマホの区別（ユーザー指摘により2026-10-24追加）。日別にはその日使われた
+  // 機種の集合（両方使っていれば両方出す）、利用者別には機種ごとの累計分数を持つ。
+  type DeviceKind = "pc" | "mobile" | "unknown";
+  const devicesByUserDay = new Map<string, Map<string, DeviceKind[]>>();
+  const deviceMinutesByUser = new Map<string, Record<DeviceKind, number>>();
+  for (const row of activityByUserDayDevice) {
+    const device = row.device as DeviceKind;
+    let m = devicesByUserDay.get(row.userId);
+    if (!m) {
+      m = new Map();
+      devicesByUserDay.set(row.userId, m);
+    }
+    const list = m.get(row.dayKey) ?? [];
+    list.push(device);
+    m.set(row.dayKey, list);
+
+    const totals =
+      deviceMinutesByUser.get(row.userId) ?? { pc: 0, mobile: 0, unknown: 0 };
+    totals[device] += row._count._all;
+    deviceMinutesByUser.set(row.userId, totals);
   }
   const feedbackByUser = new Map<string, typeof feedback>();
   for (const f of feedback) {
@@ -553,6 +582,9 @@ export default async function AdminPage({
       byDay: days.map((d) => byDay?.get(d.key) ?? 0),
       costByDay: days.map((d) => aiCostByUserDay.get(u.id)?.get(d.key) ?? 0),
       detailByDay: days.map((d) => aiDetailByUserDay.get(u.id)?.get(d.key) ?? []),
+      devicesByDay: days.map((d) => devicesByUserDay.get(u.id)?.get(d.key) ?? []),
+      deviceMinutes:
+        deviceMinutesByUser.get(u.id) ?? { pc: 0, mobile: 0, unknown: 0 },
       syncBroken: !!u.googleAccount?.syncError,
       syncErrorAt: u.googleAccount?.syncErrorAt ?? null,
       aiCostYen: aiCostByUser.get(u.id) ?? 0,

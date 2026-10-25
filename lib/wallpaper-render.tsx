@@ -77,6 +77,35 @@ function compactDate(d: Date): string {
   });
 }
 
+function compactTime(d: Date): string {
+  return d.toLocaleString("ja-JP", {
+    timeZone: JST,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function sameJstDay(a: Date, b: Date): boolean {
+  const key = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: JST,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(d);
+  return key(a) === key(b);
+}
+
+/** 次の予定の日時表示。終了時刻があれば「開始〜終了」にする（ユーザー指摘「ロック画面の
+ * 次の予定の時間は終わりの時間も書いて」。日をまたぐ終了時刻は終了側も日付から出す）。 */
+function compactDateRange(start: Date, end: Date | null): string {
+  const startStr = compactDate(start);
+  if (!end) return startStr;
+  return sameJstDay(start, end)
+    ? `${startStr}〜${compactTime(end)}`
+    : `${startStr}〜${compactDate(end)}`;
+}
+
 /** 壁紙の描き下ろし時刻（JST）。下部の余白に「最終更新」として小さく表示する。 */
 function formatUpdatedAt(d: Date): string {
   return d.toLocaleString("ja-JP", {
@@ -282,6 +311,7 @@ export async function renderWallpaper(
         id: true,
         title: true,
         eventDatetime: true,
+        endDatetime: true,
         sectionOrder: true,
         checklistItems: {
           where: { isSuggested: false },
@@ -506,11 +536,15 @@ export async function renderWallpaper(
                     lineHeight: 1.22,
                     color: TEXT_SUB,
                     width: "100%",
+                    maxWidth: leftUsableWidth,
                     marginBottom: 20,
                     display: "flex",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
                   }}
                 >
-                  {compactDate(nextEvent.eventDatetime)}
+                  {compactDateRange(nextEvent.eventDatetime, nextEvent.endDatetime)}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", width: "100%" }}>
                   {leftLines.map((l, i) => {

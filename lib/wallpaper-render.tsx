@@ -228,7 +228,7 @@ function buildLeftLines(
     addGroup(
       `${sectionLabel(key)}${progress(group)}`,
       group.map((it) => {
-        const text = bullet(it);
+        const text = bullet(it, { includeLead: false });
         const [main, comment] = text.split("\n");
         return { text: main, done: !!it.isDone, commentText: comment?.trim() || null };
       }),

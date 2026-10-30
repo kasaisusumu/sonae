@@ -65,9 +65,12 @@ export interface DescItem {
 
 /** カレンダー説明欄に書く1項目ぶんの行（☑/・＋本文＋リード時間、コメントは次行に字下げ）。
  * ロック画面の壁紙（lib/wallpaper-render.tsx）が、説明欄の「リンク無しバージョン」を
- * 忠実に再現するためにもそのまま使う（ユーザー指定・2026-10-23）。 */
-export function bullet(it: DescItem): string {
-  const lead = formatLead(it.notifyLeadMinutes ?? null);
+ * 忠実に再現するためにもそのまま使う（ユーザー指定・2026-10-23）。ただし壁紙では
+ * リード時間（「（1時間前）」等）は出さない（ユーザー指摘「ロック画面に書かなくていい」
+ * 2026-10-30）ため、`includeLead: false` で呼ぶ。 */
+export function bullet(it: DescItem, opts?: { includeLead?: boolean }): string {
+  const includeLead = opts?.includeLead ?? true;
+  const lead = includeLead ? formatLead(it.notifyLeadMinutes ?? null) : null;
   const label = lead
     ? `${oneLine(it.title)}（${lead}）`
     : oneLine(it.title);
@@ -235,7 +238,7 @@ export function buildSonaeBlock(
     // 中身が無い枠は、見出しごと説明欄に出さない（「準備すること」等も同じ）。
     if (group.length === 0) continue;
     lines.push("", `【${sectionLabel(key)}】${progress(group)}`);
-    lines.push(...group.map(bullet));
+    lines.push(...group.map((it) => bullet(it)));
   }
 
   // 最終更新時刻は末尾の行に書く（ユーザー指摘により2026-10-19。先頭だと

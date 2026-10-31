@@ -923,38 +923,49 @@ export function ChecklistEditor({
 
               {/* 詳細（チップを押したときだけ）：通知タイミング・メモ・削除 */}
               {open && (
-                <div className="ml-6 mt-1.5 space-y-2 rounded-lg bg-background/60 p-2">
-                  {/* 次回の出し方（範囲）。絵文字ボタンは行に常時表示済み（タップでポップアップ）。
-                      ここでは大きい3択を出す。「この名前」を選んでいるときだけ、その下に
-                      キーワードを直す欄も出す（他の2択ではキーワードを持たないため無意味）。
-                      テスト版モードだけ。「提案」「選んだ」の違いやキーワードの説明は、
-                      3択の隣のⓘ（ScopeHintBody）にまとめている（ユーザー指摘により
-                      2026-10-19: 行ごとの説明文を減らしⓘに集約）。 */}
-                  {showScopeUi && (
-                    <>
-                      <ScopeQuickToggle
-                        value={shownScope(it)}
-                        onChange={(sc) => chooseScope(it, sc)}
-                        hintOpen={scopeHintOpen}
-                        onHintOpenChange={setScopeHintOpen}
-                      />
-                      {shownScope(it) === "keyword" && (
-                        <KeywordSentenceField
-                          compact
-                          initialKeyword={it.scope?.keyword ?? ""}
-                          onCommit={(kw) => chooseKeyword(it, kw)}
-                          onClear={() => chooseKeyword(it, "")}
+                <div className="ml-6 mt-1.5 space-y-3 rounded-lg bg-background/60 p-2">
+                  {/* 次回の出し方（範囲）＋優先度タグは、どちらも軽いワンタップ切替の
+                      ボタン群なのでひとまとめにする（gap-1.5で密に、通知・メモ・写真の
+                      各セクションとは space-y-3 で区切って見分けやすくする）。 */}
+                  {(showScopeUi || showPriorityUi) && (
+                    <div className="space-y-1.5">
+                      {/* 次回の出し方（範囲）。絵文字ボタンは行に常時表示済み（タップでポップアップ）。
+                          ここでは大きい3択を出す。「この名前」を選んでいるときだけ、その下に
+                          キーワードを直す欄も出す（他の2択ではキーワードを持たないため無意味）。
+                          テスト版モードだけ。「提案」「選んだ」の違いやキーワードの説明は、
+                          3択の隣のⓘ（ScopeHintBody）にまとめている（ユーザー指摘により
+                          2026-10-19: 行ごとの説明文を減らしⓘに集約）。 */}
+                      {showScopeUi && (
+                        <>
+                          <ScopeQuickToggle
+                            value={shownScope(it)}
+                            onChange={(sc) => chooseScope(it, sc)}
+                            hintOpen={scopeHintOpen}
+                            onHintOpenChange={setScopeHintOpen}
+                          />
+                          {shownScope(it) === "keyword" && (
+                            // キーワード欄は「この名前」の子設定なので少し字下げして
+                            // 3択の下にぶら下がっていることが見た目で分かるようにする。
+                            <div className="ml-1">
+                              <KeywordSentenceField
+                                compact
+                                initialKeyword={it.scope?.keyword ?? ""}
+                                onCommit={(kw) => chooseKeyword(it, kw)}
+                                onClear={() => chooseKeyword(it, "")}
+                              />
+                            </div>
+                          )}
+                        </>
+                      )}
+                      {/* 「急ぎ」「そのうち」タグ。ver2.1だけ（ver1/ver2のどちらでもON可）。
+                          同じ名前の既存項目すべてに即反映される（setChecklistItemPriorityAction）。 */}
+                      {showPriorityUi && (
+                        <PriorityToggle
+                          value={shownPriority(it)}
+                          onChange={(p) => choosePriority(it, p)}
                         />
                       )}
-                    </>
-                  )}
-                  {/* 「急ぎ」「そのうち」タグ。ver2.1だけ（ver1/ver2のどちらでもON可）。
-                      同じ名前の既存項目すべてに即反映される（setChecklistItemPriorityAction）。 */}
-                  {showPriorityUi && (
-                    <PriorityToggle
-                      value={shownPriority(it)}
-                      onChange={(p) => choosePriority(it, p)}
-                    />
+                    </div>
                   )}
                   <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted">
                     <span className="shrink-0">通知</span>
@@ -1010,25 +1021,30 @@ export function ChecklistEditor({
                     )}
                   </div>
 
-                  <textarea
-                    value={it.comment}
-                    onChange={(e) => update(it.key, { comment: e.target.value })}
-                    rows={3}
-                    placeholder="メモ・リンク（任意・学習しません）。改行できます。"
-                    className="w-full resize-y rounded-md border border-border bg-background px-2 py-1 text-xs text-muted"
-                  />
-                  <span className="text-[11px] text-muted">
-                    {pending && rowCommentDirty(it)
-                      ? "保存中…"
-                      : rowCommentDirty(it)
-                        ? "変更あり（自動保存）"
-                        : ""}
-                  </span>
-                  {it.comment.trim() && (
-                    <p className="whitespace-pre-wrap break-words text-[11px] text-muted">
-                      <Linkify text={it.comment} />
-                    </p>
-                  )}
+                  <div className="space-y-1">
+                    <textarea
+                      value={it.comment}
+                      onChange={(e) => update(it.key, { comment: e.target.value })}
+                      rows={3}
+                      placeholder="メモ・リンク（任意・学習しません）。改行できます。"
+                      className="w-full resize-y rounded-md border border-border bg-background px-2 py-1 text-xs text-muted"
+                    />
+                    <span className="text-[11px] text-muted">
+                      {pending && rowCommentDirty(it)
+                        ? "保存中…"
+                        : rowCommentDirty(it)
+                          ? "変更あり（自動保存）"
+                          : ""}
+                    </span>
+                    {/* メモの中に URL があるときだけ、タップできるリンクとして
+                        下に出す（textarea 自体はリンクを押せないため）。URL が無ければ
+                        textarea とまったく同じ文面がもう一度並ぶだけになるので出さない。 */}
+                    {/https?:\/\//.test(it.comment) && (
+                      <p className="whitespace-pre-wrap break-words text-[11px] text-muted">
+                        <Linkify text={it.comment} />
+                      </p>
+                    )}
+                  </div>
 
                   {/* 写真（項目ごとのメモに添付。Google カレンダーには出ない） */}
                   {allowImages && (

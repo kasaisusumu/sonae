@@ -368,6 +368,11 @@ export function ChecklistEditor({
         removedTitles,
         renamedTitles: renamedPairs(list),
       });
+      // 項目の追加・削除で枠名が「〇〇（編集済み）」に改名されることがある
+      // （saveChecklist 側）。この枠の見出し（kind/label）はサーバーの props から
+      // 来ているので、router.refresh() しないと改名後も画面には古い枠名が残り続ける
+      // （ユーザー指摘により2026-11-01追加）。
+      router.refresh();
       setRemovedTitles([]);
       setSaved(true);
       // 保存できた題名を、その場で次回の改名検出の基準（originalTitle）にする。
